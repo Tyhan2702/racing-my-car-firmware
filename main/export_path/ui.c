@@ -10,6 +10,7 @@
 #include "ui_theme.h"
 #include "theme_engine/theme_interface.h"
 #include "app_obd_dsp/app_event.h"
+#include "app_obd_dsp/obd_data_cache.h"
 #include <driver/gpio.h>
 #include "bsp_obd_dsp/bsp_board.h"
 #include "bsp_obd_dsp/nvs_storage.h"
@@ -492,6 +493,10 @@ static void ui_build_theme_snapshot(obd_snapshot_t *out,
     out->oil_temp = (oil < 0) ? 0 : (oil > 255 ? 255 : (uint8_t)oil);
     out->afr = (afr_x100 < 0) ? 0 : (uint16_t)afr_x100;
     out->throttle = (tps < 0) ? 0 : (tps > 100 ? 100 : (uint8_t)tps);
+
+    // Read IAT from OBD data cache
+    int16_t iat = obd_data_get_intake_temp();
+    out->intake_temp = (iat < 0) ? 0 : (iat > 255 ? 255 : (uint8_t)iat);
 }
 
 void my_timerMain(lv_timer_t * timer)
