@@ -30,7 +30,13 @@ typedef enum {
     BINDING_KIND_LABEL,   // lv_label_set_text_fmt with printf-style format + divisor
     BINDING_KIND_ARC,     // lv_arc_set_value, raw value clamped to [range_min, range_max]
     BINDING_KIND_BAR,     // lv_bar_set_value, raw value clamped to [range_min, range_max]
+    BINDING_KIND_IMAGE,   // lv_img_set_src, one of up to THEME_MAX_IMAGE_FRAMES frames picked by value
 } theme_binding_kind_t;
+
+// An "image" element with a data_source and a "frames" list switches between those
+// assets as the value moves through [range_min, range_max] (e.g. a face that gets
+// angrier with the revs). Firmware without this support shows the "asset" frame.
+#define THEME_MAX_IMAGE_FRAMES 12
 
 typedef struct {
     lv_obj_t *widget;
@@ -44,6 +50,9 @@ typedef struct {
                                 // text update since center/right alignment depends on
                                 // the newly rendered width, not the "--" placeholder's
     uint8_t align;              // label only: 0=left, 1=center, 2=right
+    const lv_img_dsc_t *frames[THEME_MAX_IMAGE_FRAMES];  // image only
+    uint8_t frame_count;        // image only
+    int8_t frame;               // image only: frame shown now, -1 before the first update
 } theme_binding_t;
 
 // A single named, memory-mapped image asset from the manifest's "assets"
@@ -442,6 +451,21 @@ void theme_update_data(const obd_snapshot_t *obd) {
             if (clamped < bind->range_min) clamped = bind->range_min;
             if (clamped > bind->range_max) clamped = bind->range_max;
             lv_bar_set_value(bind->widget, clamped, LV_ANIM_OFF);
+            break;
+        }
+        case BINDING_KIND_IMAGE: {
+            if (bind->frame_count == 0 || bind->range_max <= bind->range_min) break;
+            int32_t clamped = value;
+            if (clamped < bind->range_min) clamped = bind->range_min;
+            if (clamped > bind->range_max) clamped = bind->range_max;
+            // Equal-width steps across the range; the top value maps to the last frame.
+            int32_t idx = (int32_t)((int64_t)(clamped - bind->range_min) * bind->frame_count /
+                                    ((int64_t)bind->range_max - bind->range_min + 1));
+            if (idx >= bind->frame_count) idx = bind->frame_count - 1;
+            if (idx != bind->frame) {
+                lv_img_set_src(bind->widget, bind->frames[idx]);
+                bind->frame = (int8_t)idx;
+            }
             break;
         }
         case BINDING_KIND_LABEL: {
@@ -1129,6 +1153,33 @@ static void theme_build_image_element(lv_obj_t *parent, cJSON *elem) {
     }
 
     (void)height;  // zoom is uniform (single scale factor), height is derived from width's ratio
+
+    // Optional value-driven frames: "data_source" + "frames": ["asset", ...] + range_min/range_max.
+    cJSON *frames = cJSON_GetObjectItem(elem, "frames");
+    if (frames && cJSON_IsArray(frames) && theme_json_str(elem, "data_source", NULL)) {
+        int before = s_ctx.binding_count;
+        theme_add_binding(elem, img_obj, BINDING_KIND_IMAGE,
+                          theme_json_int(elem, "range_min", 0), theme_json_int(elem, "range_max", 100));
+        if (s_ctx.binding_count > before) {
+            theme_binding_t *bind = &s_ctx.bindings[s_ctx.binding_count - 1];
+            bind->frame_count = 0;
+            bind->frame = -1;
+            cJSON *f = NULL;
+            cJSON_ArrayForEach(f, frames) {
+                if (bind->frame_count >= THEME_MAX_IMAGE_FRAMES) {
+                    ESP_LOGW(TAG, "Image '%s' has more than %d frames, ignoring the rest", asset_name, THEME_MAX_IMAGE_FRAMES);
+                    break;
+                }
+                const lv_img_dsc_t *frame = cJSON_IsString(f) ? theme_find_named_asset(f->valuestring) : NULL;
+                if (!frame) {
+                    ESP_LOGW(TAG, "Image '%s': frame '%s' not found, skipping it", asset_name, cJSON_IsString(f) ? f->valuestring : "?");
+                    continue;
+                }
+                bind->frames[bind->frame_count++] = frame;
+            }
+            if (bind->frame_count == 0) bind->widget = NULL;  // nothing to switch; keep the static asset
+        }
+    }
 }
 
 static lv_obj_t* theme_create_custom_page(const char *page_id) {

@@ -1,0 +1,30 @@
+# Builds the firmware with ESP-IDF v5.5.3 for the ESP32-S3 and keeps the flashable images as an artifact.
+name: Build firmware
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: idf.py build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.3
+          target: esp32s3
+          # build/ in git holds a macOS build tree; start from a clean one
+          command: rm -rf build && idf.py build && cd build && esptool.py --chip esp32s3 merge_bin -o merged-firmware.bin @flash_args
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: |
+            build/merged-firmware.bin
+            build/obd_brz_gauge.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/ota_data_initial.bin
+            build/flash_args
