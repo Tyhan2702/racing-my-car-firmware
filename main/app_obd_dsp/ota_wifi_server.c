@@ -40,6 +40,7 @@
 
 #include "mbedtls/sha256.h"
 #include "mbedtls/base64.h"
+#include "nvs_flash.h"
 
 #include "app_obd_dsp/boot_media_mount.h"
 #include "app_obd_dsp/theme_mount.h"
@@ -960,6 +961,47 @@ static esp_err_t theme_erase_handler(httpd_req_t *req)
     return send_json_response(req, 200, "{\"ok\":true}");
 }
 
+// POST /ota/factory-reset — Racing My Car "restore default settings": erases the NVS partition (vehicle,
+// pairing, display and boot options; theme and boot animation are separate and untouched) and reboots, so
+// every setting starts from its default. The reboot is delayed so the JSON reply reaches the app first.
+static void factory_reset_restart_cb(void *arg)
+{
+    (void)arg;
+    esp_restart();
+}
+
+static esp_err_t factory_reset_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) {
+        return send_err(req, "unauthorized");
+    }
+    char discard[32];
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        int received = httpd_req_recv(req, discard, remaining > (int)sizeof(discard) ? (int)sizeof(discard) : remaining);
+        if (received <= 0) {
+            break;
+        }
+        remaining -= received;
+    }
+    esp_err_t err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "factory reset: nvs_flash_erase failed: %s", esp_err_to_name(err));
+        return send_err(req, "erase failed");
+    }
+    ESP_LOGW(TAG, "factory reset: settings erased, rebooting");
+    esp_err_t sent = send_json_response(req, 200, "{\"ok\":true,\"reboot\":true}");
+    static esp_timer_handle_t s_reset_timer = NULL;
+    if (!s_reset_timer) {
+        const esp_timer_create_args_t args = {.callback = factory_reset_restart_cb, .name = "factory_reset"};
+        if (esp_timer_create(&args, &s_reset_timer) != ESP_OK) {
+            esp_restart();
+        }
+    }
+    esp_timer_start_once(s_reset_timer, 800 * 1000);
+    return sent;
+}
+
 // POST /ota/theme — 分块上传 theme.bin (一个自包含的 4MB blob，和 firmware 一样
 // 没有 manifest/media 分段，写入前整块擦除 theme_0，再一次性写入)。
 // 分块协议与 firmware_handler 完全一致：X-OTA-SHA256/X-OTA-Size/X-Offset/X-Last。
@@ -1733,7 +1775,7 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     config.recv_wait_timeout = 2;                  // 2s per recv call, Content-Length模式下不应该超时
     config.send_wait_timeout = 300;
     // Reduce httpd memory usage
-    config.max_uri_handlers = 20;                    // 18 handlers (incl. OPTIONS preflight for POST routes), +2 headroom
+    config.max_uri_handlers = 24;                    // 20 handlers (incl. OPTIONS preflight for POST routes), +4 headroom
     config.max_resp_headers = 4;                     // minimal headers
     config.max_open_sockets = 7;                     // max allowed by LWIP_MAX_SOCKETS (10 - 3 internal)
     config.backlog_conn = 5;                         // accept队列长度
@@ -1867,6 +1909,20 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
         .handler = options_handler,
     };
     httpd_register_uri_handler(s_httpd, &theme_erase_opt_uri);
+
+    httpd_uri_t factory_reset_uri = {
+        .uri = "/ota/factory-reset",
+        .method = HTTP_POST,
+        .handler = factory_reset_handler,
+    };
+    httpd_register_uri_handler(s_httpd, &factory_reset_uri);
+
+    httpd_uri_t factory_reset_opt_uri = {
+        .uri = "/ota/factory-reset",
+        .method = HTTP_OPTIONS,
+        .handler = options_handler,
+    };
+    httpd_register_uri_handler(s_httpd, &factory_reset_opt_uri);
 
     httpd_uri_t theme_uri = {
         .uri = "/ota/theme",

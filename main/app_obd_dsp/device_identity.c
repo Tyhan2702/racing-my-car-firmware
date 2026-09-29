@@ -45,7 +45,7 @@ static const device_identity_t s_identity = {
 
 // /ota/info 只返回手机 App 实际会用到的字段（硬件兼容性校验 + build_tag/branch/count），
 // 其余字段（project/version/git/built/idf/slot/theme）App 端未读取，删掉以保证 512 字节内不截断。
-static char s_manifest_json[512];
+static char s_manifest_json[640];
 
 const device_identity_t *device_identity_get(void)
 {
@@ -74,7 +74,8 @@ const char *device_identity_manifest_json(void)
              "\"firmware\":{"
              "\"build_tag\":\"%s\","
              "\"branch\":\"%s\","
-             "\"count\":%u"
+             "\"count\":%u,"
+             "\"features\":[\"factory_reset\",\"locked_boot\"]"
              "}"
              "}",
              s_identity.board_name,
