@@ -210,6 +210,15 @@ static bool prepare_edges(uint16_t **out, uint16_t canvas_size, uint16_t grid_si
     return true;
 }
 
+// The canvas lives on a screen the player does not own (Logo screen, boot video screen). If that screen is deleted
+// while the player still holds the canvas, forget it and stop, so nothing later draws to or deletes a freed object.
+static void canvas_deleted_cb(lv_event_t *e) {
+    if (lv_event_get_target(e) == s_state.canvas_obj) {
+        s_state.canvas_obj = NULL;
+        s_state.finished = true;
+    }
+}
+
 static bool prepare_canvas(lv_obj_t *parent, const boot_block_manifest_t *m) {
     size_t buf_size = LV_CANVAS_BUF_SIZE_TRUE_COLOR(m->canvas_width, m->canvas_height);
     s_state.canvas_buf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -219,6 +228,7 @@ static bool prepare_canvas(lv_obj_t *parent, const boot_block_manifest_t *m) {
     memset(s_state.canvas_buf, 0, buf_size);
     s_state.canvas_obj = lv_canvas_create(parent);
     if (!s_state.canvas_obj) return false;
+    lv_obj_add_event_cb(s_state.canvas_obj, canvas_deleted_cb, LV_EVENT_DELETE, NULL);
 
     lv_canvas_set_buffer(s_state.canvas_obj, s_state.canvas_buf,
                          m->canvas_width, m->canvas_height, LV_IMG_CF_TRUE_COLOR);

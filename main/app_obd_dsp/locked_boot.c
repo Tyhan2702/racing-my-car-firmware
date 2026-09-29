@@ -21,7 +21,11 @@ static void locked_boot_timer_cb(lv_timer_t *t) {
     if (boot_block_player_is_finished()) {
         lv_timer_del(s_timer);
         s_timer = NULL;
-        s_done = true;  // the last frame stays on the Logo screen until the next screen loads
+        // Release the player now: the canvas goes (the static logo underneath shows through) and its buffer is freed,
+        // so the owner's boot animation or showroom video starts from a clean player. If the Logo screen was already
+        // deleted (e.g. a double tap opened another page), the player has forgotten the canvas and only frees memory.
+        boot_block_player_destroy();
+        s_done = true;
         ESP_LOGI(TAG, "locked boot animation finished after %u ms", (unsigned)elapsed_ms);
     }
 }
@@ -45,5 +49,6 @@ void locked_boot_start(lv_obj_t *parent) {
 }
 
 bool locked_boot_done(void) {
-    return s_done;
+    // Never hold up the boot flow if the Logo screen (and so the animation) was never started.
+    return s_done || !s_started;
 }
