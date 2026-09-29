@@ -37,7 +37,20 @@ typedef struct {
     uint16_t *x_edges;
     uint16_t *y_edges;
     boot_block_manifest_t manifest;
+    bool stream_owned;          // false when stream_data points at an embedded (flash) animation
 } boot_block_player_state_t;
+
+// Embedded source (boot_block_player_set_embedded): manifest text and stream compiled into the firmware,
+// used instead of the bootmedia partition by the next boot_block_player_create().
+static const char *s_embedded_manifest = NULL;
+static const uint8_t *s_embedded_data = NULL;
+static size_t s_embedded_size = 0;
+
+void boot_block_player_set_embedded(const char *manifest, const uint8_t *data, size_t size) {
+    s_embedded_manifest = manifest;
+    s_embedded_data = data;
+    s_embedded_size = size;
+}
 
 static const char *TAG = "boot_block";
 
@@ -72,7 +85,8 @@ static void release_canvas(void) {
 }
 
 static void close_stream(void) {
-    free(s_state.stream_data); s_state.stream_data = NULL;
+    if (s_state.stream_owned) free(s_state.stream_data);
+    s_state.stream_data = NULL; s_state.stream_owned = false;
     s_state.stream_size = 0; s_state.stream_offset = 0;
 }
 
@@ -87,12 +101,18 @@ static bool parse_u32(const char *value, uint32_t *out) {
 static bool manifest_load(boot_block_manifest_t *out) {
     // Read the manifest text straight from the raw partition.
     char raw[1024];
-    size_t manifest_max = boot_media_raw_manifest_max();
-    if (manifest_max > sizeof(raw)) manifest_max = sizeof(raw);
-    esp_err_t rerr = boot_media_raw_read_manifest((uint8_t *)raw, manifest_max);
-    if (rerr != ESP_OK) {
-        ESP_LOGE(TAG, "boot_media_raw_read_manifest failed: %s", esp_err_to_name(rerr));
-        return false;
+    size_t manifest_max = sizeof(raw);
+    if (s_embedded_manifest) {
+        strncpy(raw, s_embedded_manifest, sizeof(raw) - 1);
+        raw[sizeof(raw) - 1] = '\0';
+    } else {
+        manifest_max = boot_media_raw_manifest_max();
+        if (manifest_max > sizeof(raw)) manifest_max = sizeof(raw);
+        esp_err_t rerr = boot_media_raw_read_manifest((uint8_t *)raw, manifest_max);
+        if (rerr != ESP_OK) {
+            ESP_LOGE(TAG, "boot_media_raw_read_manifest failed: %s", esp_err_to_name(rerr));
+            return false;
+        }
     }
     raw[manifest_max - 1] = '\0';
     ESP_LOGI(TAG, "Raw manifest first 64 bytes: %.64s", raw);
@@ -210,6 +230,18 @@ static bool prepare_canvas(lv_obj_t *parent, const boot_block_manifest_t *m) {
 }
 
 static bool load_stream(void) {
+    if (s_embedded_data) {
+        // Embedded animation: play straight from flash, nothing to allocate or free.
+        if (s_state.manifest.binary_size && s_state.manifest.binary_size != s_embedded_size) {
+            ESP_LOGW(TAG, "embedded stream size %u does not match manifest %u", (unsigned)s_embedded_size, (unsigned)s_state.manifest.binary_size);
+            return false;
+        }
+        s_state.stream_data = (uint8_t *)s_embedded_data;
+        s_state.stream_size = s_embedded_size;
+        s_state.stream_offset = 0;
+        s_state.stream_owned = false;
+        return true;
+    }
     size_t file_size = s_state.manifest.binary_size;
     if (file_size == 0) {
         // Fallback: read whatever the partition holds (capped by partition size).
@@ -228,6 +260,7 @@ static bool load_stream(void) {
     if (rerr != ESP_OK || got != file_size) { free(data); ESP_LOGW(TAG, "read bin failed: %s", esp_err_to_name(rerr)); return false; }
 
     s_state.stream_data = data;
+    s_state.stream_owned = true;
     s_state.stream_size = file_size;
     s_state.stream_offset = 0;
     return true;

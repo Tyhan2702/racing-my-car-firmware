@@ -4,6 +4,7 @@
 // Project name: SquareLine_Project
 
 #include "../ui.h"
+#include "app_obd_dsp/locked_boot.h"
 
 void ui_ScreenPageLogo_screen_init(void)
 {
@@ -47,5 +48,8 @@ void ui_ScreenPageLogo_screen_init(void)
     lv_obj_t *spinnerLogo = ui_helpers_create_ring(ui_ScreenPageLogo, 10);   // white ring: static circular border, replaces the rotating spinner, removes the arc seam gap
 #endif
     lv_obj_add_event_cb(ui_ScreenPageLogo, ui_event_logo_background, LV_EVENT_ALL, NULL);
+
+    // Racing My Car locked boot animation plays on top of the logo at every power-on (see locked_boot.h).
+    locked_boot_start(ui_ScreenPageLogo);
 }
 

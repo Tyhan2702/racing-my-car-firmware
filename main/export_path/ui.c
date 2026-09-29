@@ -21,6 +21,7 @@
 #include "app_obd_dsp/vehicle_profiles.h"
 #include "app_obd_dsp/boot_block_player.h"
 #include "app_obd_dsp/boot_media_mount.h"
+#include "app_obd_dsp/locked_boot.h"
 #include "app_obd_dsp/ota_wifi_server.h"
 #include "esp_system.h"
 #include "esp_random.h"
@@ -851,6 +852,9 @@ void my_timerMain(lv_timer_t * timer)
 
     /* ===== Video boot mode (INTRO == 2: VIDEO, the boot_block flashed via the phone app) ===== */
     // Moved to ui_ext.c; returns true while the Logo/video is still showing, so my_timerMain returns early.
+    // Racing My Car locked boot animation first (compiled into the firmware, not replaceable); the rest of the
+    // boot flow — including the owner's boot animation from the app — only starts once it has finished.
+    if (!locked_boot_done()) return;
     if (ui_ext_boot_video_tick()) return;
 
     /* ===== Boot flow / Showroom Intro playback (moved to ui_ext.c) ===== */

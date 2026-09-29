@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "lvgl.h"
@@ -24,5 +25,8 @@ void boot_block_player_update(uint32_t elapsed_ms);
 // Get the total animation duration (ms)
 uint32_t boot_block_player_get_duration_ms(void);
 
+// Play an animation compiled into the firmware instead of the bootmedia partition on the next create()
+// (manifest = boot_block.txt text, data = boot_block.bin). Pass NULLs to go back to the partition.
+void boot_block_player_set_embedded(const char *manifest, const uint8_t *data, size_t size);
 // Set the manifest and data file paths (call before create)
 void boot_block_player_set_paths(const char *manifest, const char *data);
