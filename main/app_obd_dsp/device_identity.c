@@ -5,6 +5,7 @@
 
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 
 static const char *TAG = "device_identity";
 
@@ -58,9 +59,15 @@ const char *device_identity_manifest_json(void)
         return s_manifest_json;
     }
 
+    // Factory (eFuse) base MAC: the Racing My Car platform registers genuine gauges by it. It is the same value
+    // esptool reads over USB, so a gauge flashed and registered by the owner is recognised by the app later.
+    uint8_t mac[6] = {0};
+    esp_efuse_mac_get_default(mac);
+
     int written = snprintf(s_manifest_json, sizeof(s_manifest_json),
              "{"
              "\"device\":{"
+             "\"mac\":\"%02x%02x%02x%02x%02x%02x\","
              "\"board\":\"%s\","
              "\"variant\":\"%s\","
              "\"lcd\":\"%s\","
@@ -78,6 +85,7 @@ const char *device_identity_manifest_json(void)
              "\"features\":[\"factory_reset\",\"locked_boot\"]"
              "}"
              "}",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
              s_identity.board_name,
              s_identity.board_variant,
              s_identity.lcd_name,
