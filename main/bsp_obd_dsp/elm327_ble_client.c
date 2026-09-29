@@ -1155,18 +1155,30 @@ static void obd_poll_task(void *arg) {
                     }
                 }
                 break;
-            case 11:// Transmission gear (Mode 22 DID, per-profile: D031=BMW ZF 8HP) — EGS functional header, only for OBD-gear profiles
+            case 11:// Transmission gear (Mode 22 DID, per-profile: DA2E=BMW EGS) — only for OBD-gear profiles
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
                     if (vp && vp->obd_gear_did != 0) {
                         const vehicle_override_t *ov = vehicle_profile_get_override();
                         const char *gear_hdr = (ov && ov->obd_gear_header_cmd) ? ov->obd_gear_header_cmd
                                              : ((ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r");
-                        char cmd[16];
+                        const char *rx_filter = ov ? ov->obd_gear_rx_filter_cmd : NULL;
+                        const char *raw_frame = ov ? ov->obd_gear_raw_frame : NULL;
                         elm327_ble_send_ascii_blocking(gear_hdr);
-                        snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
-                                 (vp->obd_gear_did >> 8) & 0xFF, vp->obd_gear_did & 0xFF);
-                        elm327_ble_send_ascii_blocking(cmd);
+                        if (rx_filter) elm327_ble_send_ascii_blocking(rx_filter);
+                        if (raw_frame) {
+                            // CAF0: ELM327 sends the bytes verbatim (no PCI added) and prints the raw reply,
+                            // which still contains "62 HH LL <data>" for the Mode 22 parser.
+                            elm327_ble_send_ascii_blocking("ATCAF0\r");
+                            elm327_ble_send_ascii_blocking(raw_frame);
+                            elm327_ble_send_ascii_blocking("ATCAF1\r");
+                        } else {
+                            char cmd[16];
+                            snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
+                                     (vp->obd_gear_did >> 8) & 0xFF, vp->obd_gear_did & 0xFF);
+                            elm327_ble_send_ascii_blocking(cmd);
+                        }
+                        if (rx_filter) elm327_ble_send_ascii_blocking("ATCRA\r");
                         elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
                     }
                 }
@@ -2039,7 +2051,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                     }
                 }
 
-                // ---- Transmission gear (Mode 22 DID, per-profile: D031=BMW ZF 8HP; single byte 0=N,1..8=forward) ----
+                // ---- Transmission gear (Mode 22 DID, per-profile: DA2E=BMW EGS; single byte 0=N,1..8=forward) ----
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
                     if (vp && vp->obd_gear_did != 0 && pid16 == vp->obd_gear_did) {
