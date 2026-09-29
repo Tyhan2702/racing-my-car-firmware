@@ -1,0 +1,7 @@
+# Wokwi simulation of the Racing My Car firmware (ESP32-S3, 16 MB flash, 8 MB octal PSRAM).
+# The ST77916 display, touch, BLE and ESP-NOW are not simulated: this checks that a fresh gauge boots, plays the
+# locked boot animation from flash and carries on into the gauge UI without crashing or rebooting.
+[wokwi]
+version = 1
+firmware = '../../build/flasher_args.json'
+elf = '../../build/obd_brz_gauge.elf'

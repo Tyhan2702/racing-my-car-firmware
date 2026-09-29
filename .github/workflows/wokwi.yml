@@ -1,0 +1,50 @@
+# Boots the firmware in the Wokwi ESP32-S3 simulator on every push to image-frames (and on demand):
+# a fresh gauge must play the locked boot animation from flash and continue without a crash or reboot loop.
+# Needs the repository secret WOKWI_CLI_TOKEN (wokwi.com/dashboard/ci). Hardware tests are still needed for the
+# display, touch, BLE/OBD and ESP-NOW, which Wokwi does not simulate.
+name: Wokwi boot test
+
+on:
+  push:
+    branches: [image-frames, wokwi-ci]
+  workflow_dispatch:
+
+jobs:
+  boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: idf.py build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.3
+          target: esp32s3
+          command: rm -rf build && idf.py build
+      - name: Token check
+        if: env.WOKWI_CLI_TOKEN == ''
+        run: echo "::warning::WOKWI_CLI_TOKEN is not set; skipping the simulation" && exit 0
+      - name: Boot in Wokwi
+        if: env.WOKWI_CLI_TOKEN != ''
+        uses: wokwi/wokwi-ci-action@v1
+        with:
+          token: ${{ secrets.WOKWI_CLI_TOKEN }}
+          path: test/wokwi
+          timeout: 30000
+          expect_text: 'locked boot animation finished'
+          fail_text: 'Guru Meditation'
+          serial_log_file: wokwi-serial.log
+      - name: No reboot loop, no abort
+        if: env.WOKWI_CLI_TOKEN != ''
+        run: |
+          boots=$(grep -c "rst:0x" wokwi-serial.log || true); echo "boots: $boots"
+          grep -nE "abort\(\)|assert failed|Task watchdog got triggered|stack overflow" wokwi-serial.log && exit 1 || true
+          [ "$boots" -le 1 ] || { echo "The firmware restarted during boot"; exit 1; }
+          grep -E "locked_boot|Created custom page|theme" wokwi-serial.log | head -20
+      - uses: actions/upload-artifact@v4
+        if: always() && env.WOKWI_CLI_TOKEN != ''
+        with:
+          name: wokwi-serial-log
+          path: wokwi-serial.log
