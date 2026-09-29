@@ -32,7 +32,7 @@ void ui_ScreenPageEasterEgg_screen_init(void)
        Layout on the 360x360 round panel: title y=88..124, info block centered,
        OTA button y=288..320. */
     lv_obj_t *label_title = lv_label_create(ui_ScreenPageEasterEgg);
-    lv_label_set_text(label_title, "SKY GAUGE");
+    lv_label_set_text(label_title, "RMC GAUGE");
     lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize36, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 88);

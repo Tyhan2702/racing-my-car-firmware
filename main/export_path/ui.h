@@ -23,7 +23,7 @@ extern "C" {
 #define USE_GIF_EASTER_EGG  0
 // Custom boot logo switch: 1=use the customer's custom image (imgBootLogoCustom) as the boot animation; 0=use the default SKY GAUGE
 // Before setting 1, convert the customer PNG to an LVGL C array (variable name imgBootLogoCustom) in the images/ directory
-#define USE_CUSTOM_BOOT_LOGO 0
+#define USE_CUSTOM_BOOT_LOGO 1
 // Custom RPM-warning flash images: 1=flash 3 images in a loop (replacing red/black); 0=default red/black flash
 // Before setting 1, convert the 3 PNGs to LVGL C arrays in the images/ directory
 #define USE_CUSTOM_RPM_FLASH 0
