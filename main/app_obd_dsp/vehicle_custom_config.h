@@ -67,6 +67,8 @@ typedef struct {
     uint8_t              poll_gap_ms;    // poll interval (0=default)
     const char          *uds_header_cmd; // ATSH header temporarily switched to before querying UDS oil temp (e.g. FCA extended addressing "ATSH18DA10F1\r"), the standard header is restored after the query; NULL=default behavior
     const char          *obd_gear_header_cmd; // ATSH header temporarily switched to before querying the gear DID (e.g. BMW "ATSH6F1\r" for the EGS), restored afterwards; NULL=fall back to uds_header_cmd then 7E0 physical
+    const char          *obd_gear_rx_filter_cmd; // receive filter set for the gear query (e.g. BMW EGS replies on 0x618: "ATCRA618\r"), reset with ATCRA afterwards; NULL=ELM327 default filter
+    const char          *obd_gear_raw_frame;  // raw CAN payload sent with ATCAF0 instead of "22 HH LL", for extended addressing (BMW: target byte 0x18 + ISO-TP PCI); NULL=normal auto-formatted request
 } vehicle_override_t;
 
 // ================================================================
@@ -207,7 +209,11 @@ static const vehicle_override_t s_vehicle_overrides[] = {
         .obd_timeout     = 0x0F,
         .poll_gap_ms     = 1,                 // BRZ PID-style 1ms slot gap for faster RPM refresh
         .has_boost       = true,
-        .obd_gear_header_cmd = "ATSH6F1\r",   // gear DID lives on the EGS (transmission ECU), queried over 6F1 functional
+        // Gear lives on the EGS (address 0x18). BMW uses extended addressing: request ID 6F1 with the target
+        // address as data byte 0, reply on 0x600+0x18 = 0x618 as "F1 04 62 DA 2E <gear>".
+        .obd_gear_header_cmd    = "ATSH6F1\r",
+        .obd_gear_rx_filter_cmd = "ATCRA618\r",
+        .obd_gear_raw_frame     = "18 03 22 DA 2E\r",
     },
     {
         // BMW E-series (E9x M3 S65 / E87 130i N52 / E9x N54 N55): standard PIDs via 7DF functional addressing.

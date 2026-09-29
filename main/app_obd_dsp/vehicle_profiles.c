@@ -139,7 +139,7 @@ static const vehicle_profile_t s_profiles[] = {
             .quaternary = OIL_TEMP_MODE_NONE,
         },
         .has_boost = true,
-        .obd_gear_did = 0xD031,   // Mode 22 DID D031 = ZF 8HP current gear (BMW_GEAR_V2); read over the 6F1 EGS header
+        .obd_gear_did = 0xDA2E,   // Mode 22 DID DA2E = EGS current gear; raw extended-address frame, see the "BMW F/G" override
         .forced_protocol = 6,
         .obd_functional_addr = true,
         .obd_timeout = 0x0F,
