@@ -495,7 +495,6 @@ static void ui_build_theme_snapshot(obd_snapshot_t *out,
     out->afr = (afr_x100 < 0) ? 0 : (uint16_t)afr_x100;
     out->throttle = (tps < 0) ? 0 : (tps > 100 ? 100 : (uint8_t)tps);
 
-    // Read IAT from OBD data cache
     int16_t iat = obd_data_get_intake_temp();
     out->intake_temp = (iat < 0) ? 0 : (iat > 255 ? 255 : (uint8_t)iat);
 }
@@ -623,9 +622,12 @@ void my_timerMain(lv_timer_t * timer)
             s_last_gear_unknown = s_gear_unknown;
             s_last_gear_disp = g;
             if (s_gear_unknown) {
+                // The 140px gear font only contains "0123456789NR"; '-' would render as tofu boxes.
+                lv_obj_set_style_text_font(ui_GearPageArcLabelGearNumText, &ui_font_FontTypoderSize56, LV_PART_MAIN | LV_STATE_DEFAULT);
                 lv_label_set_text(ui_GearPageArcLabelGearNumText, "--");
                 lv_arc_set_value(ui_GearPageArcGearNumBack, 0);
             } else {
+                lv_obj_set_style_text_font(ui_GearPageArcLabelGearNumText, &ui_font_FontTypoderSize140, LV_PART_MAIN | LV_STATE_DEFAULT);
                 lv_label_set_text(ui_GearPageArcLabelGearNumText, pGearNum[g]);
                 lv_arc_set_value(ui_GearPageArcGearNumBack, (uint16_t)g * 100 / gc);
             }

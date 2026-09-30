@@ -1,5 +1,4 @@
 #include "theme_interface.h"
-#include "theme_rules.h"
 #include "esp_log.h"
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
@@ -497,9 +496,6 @@ void theme_update_data(const obd_snapshot_t *obd) {
         }
         }
     }
-
-    // Evaluate rules after bindings update
-    theme_rules_evaluate(obd);
 }
 
 lv_color_t theme_get_color(uint8_t role) {
@@ -1024,12 +1020,6 @@ static void theme_build_arc_element(lv_obj_t *parent, cJSON *elem) {
     lv_obj_set_pos(arc, x, y);
 
     theme_add_binding(elem, arc, BINDING_KIND_ARC, range_min, range_max);
-
-    // Register element for rules engine
-    const char *elem_id = theme_json_str(elem, "id", NULL);
-    if (elem_id) {
-        theme_rules_register_element(elem_id, arc, NULL);
-    }
 }
 
 static void theme_build_bar_element(lv_obj_t *parent, cJSON *elem) {
@@ -1065,12 +1055,6 @@ static void theme_build_bar_element(lv_obj_t *parent, cJSON *elem) {
     // needs a custom draw event, left for a follow-up.
 
     theme_add_binding(elem, bar, BINDING_KIND_BAR, range_min, range_max);
-
-    // Register element for rules engine
-    const char *elem_id = theme_json_str(elem, "id", NULL);
-    if (elem_id) {
-        theme_rules_register_element(elem_id, bar, NULL);
-    }
 }
 
 static void theme_build_label_element(lv_obj_t *parent, cJSON *elem) {
@@ -1130,12 +1114,6 @@ static void theme_build_label_element(lv_obj_t *parent, cJSON *elem) {
     } else {
         lv_obj_set_pos(label, x, y);
     }
-
-    // Register element for rules engine
-    const char *elem_id = theme_json_str(elem, "id", NULL);
-    if (elem_id) {
-        theme_rules_register_element(elem_id, label, NULL);
-    }
 }
 
 // "image" element: places a named, packer-imported asset at x/y sized to
@@ -1176,12 +1154,6 @@ static void theme_build_image_element(lv_obj_t *parent, cJSON *elem) {
         lv_img_set_angle(img_obj, rotation * 10);
     }
 
-    // Register element for rules engine
-    const char *elem_id = theme_json_str(elem, "id", NULL);
-    if (elem_id) {
-        theme_rules_register_element(elem_id, img_obj, asset_name);
-    }
-
     (void)height;  // zoom is uniform (single scale factor), height is derived from width's ratio
 
     // Optional value-driven frames: "data_source" + "frames": ["asset", ...] + range_min/range_max.
@@ -1213,10 +1185,10 @@ static void theme_build_image_element(lv_obj_t *parent, cJSON *elem) {
 }
 
 static lv_obj_t* theme_create_custom_page(const char *page_id) {
-    // Clear old bindings and rules before creating new page
+    // Clear old bindings before creating new page to prevent use-after-free
+    // when theme_update_data() timer fires after the old page is deleted
     s_ctx.binding_count = 0;
     memset(s_ctx.bindings, 0, sizeof(s_ctx.bindings));
-    theme_rules_reset();
 
     lv_obj_t *page = lv_obj_create(NULL);
     lv_obj_set_size(page, 360, 360);
@@ -1297,12 +1269,6 @@ static lv_obj_t* theme_create_custom_page(const char *page_id) {
         lv_obj_set_style_bg_color(page, lv_color_hex(strtoul(bg_color->valuestring, NULL, 16)), 0);
     }
 
-    // Parse rules before building elements
-    esp_err_t rules_ret = theme_rules_parse(layout);
-    if (rules_ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to parse rules: %s", esp_err_to_name(rules_ret));
-    }
-
     cJSON *elements = cJSON_GetObjectItem(layout, "elements");
     cJSON *elem = NULL;
     int elem_count = 0;
@@ -1328,8 +1294,8 @@ static lv_obj_t* theme_create_custom_page(const char *page_id) {
 
     cJSON_Delete(layout);
 
-    ESP_LOGI(TAG, "Created custom page '%s' with %d elements, %d live bindings, %d rules",
-             page_id, elem_count, s_ctx.binding_count, theme_rules_count());
+    ESP_LOGI(TAG, "Created custom page '%s' with %d elements, %d live bindings",
+             page_id, elem_count, s_ctx.binding_count);
 
     return page;
 }
