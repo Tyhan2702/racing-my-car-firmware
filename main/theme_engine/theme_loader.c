@@ -407,6 +407,8 @@ static bool theme_resolve_data_source(const obd_snapshot_t *obd, const char *src
         *out_value = obd->afr;
     } else if (strcmp(src, "obd.throttle") == 0) {
         *out_value = obd->throttle;
+    } else if (strcmp(src, "obd.intake_temp") == 0) {
+        *out_value = obd->intake_temp;
     } else {
         return false;
     }

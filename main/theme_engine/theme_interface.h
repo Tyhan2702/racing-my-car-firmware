@@ -35,7 +35,8 @@ typedef struct __attribute__((packed)) {
     uint8_t  oil_temp;         // 0-255°C
     uint16_t afr;              // Air-fuel ratio * 100 (e.g. 1470 = 14.70)
     uint8_t  throttle;         // 0-100%
-    uint8_t  _reserved[4];     // padding to 16 bytes
+    uint8_t  intake_temp;      // 0-255°C (IAT)
+    uint8_t  _reserved[3];     // padding to 16 bytes
 } obd_snapshot_t;  // 16 bytes total
 
 // ============================================================
