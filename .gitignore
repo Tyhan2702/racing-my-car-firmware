@@ -15,3 +15,4 @@ tools/probe_log
 tools/elm_pids
 tools/pids_full.csv
 .mimosa
+.zcode
