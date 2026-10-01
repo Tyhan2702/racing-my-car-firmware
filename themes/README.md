@@ -1,5 +1,7 @@
 # 主题源文件
 
+[English](README.en.md) | 简体中文
+
 这里放**编译期主题**（TOML 清单 + 素材）的源文件。完整文档 ——
 制作教程、颜色角色、素材规格、registry 规则，以及另一套运行时主题
 （theme_0 分区）的说明 —— 全部在 **[docs/THEMES.md](../docs/THEMES.md)**。

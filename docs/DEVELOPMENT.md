@@ -1,5 +1,7 @@
 # 开发指南
 
+[English](DEVELOPMENT.en.md) | 简体中文
+
 改车型看 [VEHICLES.md](VEHICLES.md)，改主题看 [THEMES.md](THEMES.md)，
 烧录升级看 [FLASH.md](FLASH.md)，App 对接协议看 [APP_PROTOCOL.md](APP_PROTOCOL.md)。
 
@@ -159,3 +161,13 @@ release 二进制有变动时要重跑 `gen_release.py` 更新 `latest.json`，
 - 行为变化与烧录方式变化要记 [CHANGELOG.md](../CHANGELOG.md)
 - NVS `nvs_user_cfg_t` / 主题结构体新字段**只能追加到末尾**（老设备 NVS 兼容）
 - 主题相关提交别动 `ui_theme_generated.c` / `theme_assets/`（生成物）
+
+### 双语文档维护规则
+
+- 文档成对维护：`X.md`（中文，**事实源**）↔ `X.en.md`（英文译文）。
+  事实改动先改中文，英文在**同一个提交**里跟上
+- 结构 1:1 镜像（章节、表格、代码块一一对应），方便对照排查漂移；
+  命令、代码、JSON、日志输出、表格数据一律不翻译
+- 英文文档内部互链指向对应的 `.en.md` 版本；链到代码和分区文件的路径不变
+- 每份成对文档标题下都有语言切换行（`[English](X.en.md) | 简体中文`）；
+  新增文档时中英两份一起建

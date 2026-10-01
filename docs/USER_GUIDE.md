@@ -1,5 +1,7 @@
 # 使用指南
 
+[English](USER_GUIDE.en.md) | 简体中文
+
 编译烧录见 [FLASH.md](FLASH.md)，连不上先看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
 
 ## 首次开机

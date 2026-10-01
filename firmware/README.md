@@ -1,5 +1,7 @@
 # 预编译固件
 
+[English](README.en.md) | 简体中文
+
 可直接烧录的固件二进制。完整烧录说明见
 [docs/FLASH.md](../docs/FLASH.md)；分区权威来源是
 [partitions.csv](../partitions.csv)。

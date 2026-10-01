@@ -1,8 +1,6 @@
 # OBD BRZ Gauge
 
-> An open-source round car gauge: an ESP32-S3 board + a BLE ELM327 adapter,
-> LVGL touch UI, 17 built-in vehicle profiles, ESP-NOW linked triple gauges
-> and a data-driven theme system. GPLv3.
+[English](README.en.md) | 简体中文
 
 基于 ESP-IDF 的圆形车载仪表。硬件为微雪 Waveshare ESP32-S3-Touch-LCD-1.85，
 通过 BLE 连接兼容 ELM327 的 OBD 适配器读取车辆数据，用 LVGL 渲染触控界面。
