@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-analyze_probe.py — 把 fake_elm327.py 注入的已知信号，和 Car Scanner 录出来的
+analyze_proble.py — 把 fake_elm327.py 注入的已知信号，和 Car Scanner 录出来的
 传感器数据对上号，反推 "哪个 PID 驱动哪个仪表" 以及 "解码公式是什么"。
 
 关键点：探测日志里每一条注入，都对应 app 的一次真实请求。所以两边的序列
@@ -12,11 +12,11 @@ SECONDS 是设备开机秒数，本来也没法直接和电脑时钟比。）
   1) 识别
        python3 fake_elm327.py --probe prbs --tick 2
        # Car Scanner: 选车型 profile → 打开所有仪表页 → 开始记录 → 至少 10 分钟
-       python3 analyze_probe.py identify --probe probe_log_*.csv --app scanner01.csv
+       python3 analyze_proble.py identify --probe probe_log_*.csv --app scanner01.csv
 
   2) 解公式
        python3 fake_elm327.py --probe basis --dwell 8
-       python3 analyze_probe.py formula --probe probe_log_*.csv --app scanner02.csv \
+       python3 analyze_proble.py formula --probe probe_log_*.csv --app scanner02.csv \
               --map mapping.csv
 
 只依赖标准库。

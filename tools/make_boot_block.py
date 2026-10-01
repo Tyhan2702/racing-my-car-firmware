@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Encode a video into boot_block.bin + boot_block.txt for the ESP32 boot_block_player.
-Format: delta_varint_rgb565_black_v1 (same as hokori_vehicle_gauge).
+Format: delta_varint_rgb565_black_v1 (same as hokori_vehicle_gauge); automatically
+switches to _v2 (u32 frame-delta count) when grid^2 > 65535, e.g. --grid 256 full-res.
 
 Usage:
     python3 tools/make_boot_block.py <input_video> [--canvas 360] [--grid 240] [--fps 15] [--output bootmedia/slot_a]

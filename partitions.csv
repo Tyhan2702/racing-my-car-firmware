@@ -8,7 +8,7 @@
 # second slot for A/B rollback isn't needed. Revisit if OTA theme delivery ever needs it.
 # Sized at 4MB even though a full theme (manifest + dial + ring + layout.json) is
 # well under 1MB today — headroom for larger/animated assets later; bootmedia has
-# ample spare space to give up (actual usage today is ~312KB of 7.875MB).
+# ample spare space to give up (actual usage today is ~312KB of 5.875MB).
 nvs,        data, nvs,      0x9000,    0x6000,
 otadata,    data, ota,      0xF000,    0x2000,
 phy_init,   data, phy,      0x11000,   0x1000,
