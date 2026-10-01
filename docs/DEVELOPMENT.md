@@ -1,7 +1,7 @@
 # 开发指南
 
-代码架构、编译配置、工具脚本。改车型看 [VEHICLES.md](VEHICLES.md)，改主题看
-[THEMES.md](THEMES.md)，烧录看 [OTA_APP.md](OTA_APP.md)。
+改车型看 [VEHICLES.md](VEHICLES.md)，改主题看 [THEMES.md](THEMES.md)，
+烧录升级看 [FLASH.md](FLASH.md)，App 对接协议看 [APP_PROTOCOL.md](APP_PROTOCOL.md)。
 
 ## 代码架构
 
@@ -90,7 +90,7 @@ idf.py -p PORT flash monitor
 
 构建系统在 CMake configure 阶段自动运行 `tools/gen_themes.py` 生成主题表，
 并把 git 分支 / 提交数 / 短哈希注入 `OBD_GAUGE_BUILD_TAG`（设备清单和版本页显示的
-build tag 就是它，所以发版前必须先 commit —— 见 [OTA_APP.md](OTA_APP.md#发布流程固件维护者)）。
+build tag 就是它，所以发版前必须先 commit，见[发布流程](#发布流程)）。
 
 ## 适配新开发板
 
@@ -134,6 +134,25 @@ python3 tools/one_shot.py
 里的私有 PID 问全），每条注入信号对应 App 的一次真实请求，**按顺序配对即可反推
 哪个 PID 驱动哪个仪表、解码公式是什么**。挖到的结果按
 [VEHICLES.md](VEHICLES.md#新增车型) 加进车型配置。
+
+## 发布流程
+
+`tools/release.sh` 一键发版：激活 ESP-IDF 环境（eim）→ 提交源码（**必须先提交**，
+`count` 取 git 提交数）→ `idf.py build` → `tools/gen_release.py` 把
+`build/` 产物拷进 `firmware/release/` 并重写 `latest.json`（每个文件记 sha256/size）→
+提交并推送。
+
+App 侧发布目录最小布局：
+
+```text
+/releases/
+  latest.json
+  firmware/    obd_brz_gauge.bin · partition-table.bin · bootloader.bin · ota_data_initial.bin
+  bootmedia/   bootmedia.bin
+```
+
+release 二进制有变动时要重跑 `gen_release.py` 更新 `latest.json`，
+否则 App 会拿旧 manifest 比对新固件。
 
 ## 提交约定
 

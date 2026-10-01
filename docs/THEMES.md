@@ -247,7 +247,7 @@ esptool.py --chip esp32s3 -p PORT write_flash 0x620000 my_theme.bin
 ```
 
 **WiFi OTA 推送**（设备进 OTA 模式后，App 或 curl 调用，协议见
-[OTA_APP.md](OTA_APP.md#wifi-ota-http-api)）：
+[APP_PROTOCOL.md](APP_PROTOCOL.md#wifi-ota-http-api)）：
 
 - `POST /ota/theme/prepare` — 预检并返回挂载状态（不擦除）
 - `POST /ota/theme` — 分块上传（`X-OTA-SHA256` / `X-OTA-Size` / `X-OTA-Offset` / `X-Last` 头）

@@ -1,7 +1,6 @@
 # 使用指南
 
-面向刷好固件的用户：怎么连接车辆、每块屏幕怎么用、三连表怎么配对、怎么升级。
-编译烧录见 [OTA_APP.md](OTA_APP.md)，连不上先看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
+编译烧录见 [FLASH.md](FLASH.md)，连不上先看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
 
 ## 首次开机
 
@@ -41,7 +40,7 @@
 
 - **上滑** → BLE SCAN（连接 OBD 适配器；从表角色时兼作 FIND MASTER 扫描）
 - **下滑** → 设置页
-- **OTA 按钮** → OTA 升级模式（App 对接，见 [OTA_APP.md](OTA_APP.md)）
+- **OTA 按钮** → OTA 升级模式（见 [FLASH.md](FLASH.md#app-ota-升级双槽回滚)）
 - 左右滑 → 回到仪表环
 
 **隐藏入口**：
@@ -91,7 +90,7 @@
 |------|------|
 | OFF | 跳过动画直接进仪表 |
 | RACE | 内置 "RACE AS ONE" 动画（三连表同步）|
-| VIDEO | 播放 `bootmedia` 分区里的自制动画（用手机 App 上传，见 [OTA_APP.md](OTA_APP.md)）|
+| VIDEO | 播放 `bootmedia` 分区里的自制动画（用手机 App 上传，见 [FLASH.md](FLASH.md#app-ota-升级双槽回滚)）|
 
 自制动画要求：360×360 画布、1:1 比例、注意圆屏四角裁切；设备端更新是事务式的，
 上传中断不会破坏现有动画。
@@ -104,10 +103,10 @@
 - **固件升级**：BLE 握手 → WiFi 热点（`OBD-Gauge-OTA-XXXX`，密码 `obd2024`）高速传输，
   写入备用 OTA 槽；新固件启动 15 秒自检通过才标记有效，失败自动回滚
 - **开机动画**：App 内裁切视频、编码后上传
-- **主题包**：推送运行时主题到 theme_0 分区（见 [THEMES.md](THEMES.md#运行时主题theme_0-分区)）
+- **主题包**：推送运行时主题到 theme_0 分区（见 [THEMES.md](THEMES.md)）
 
 设备会通过 BLE 只读清单服务（`0x1FFA`）暴露硬件 / 构建信息，App 刷写前自动做兼容校验，
-硬件不匹配会拒绝刷写。协议细节见 [OTA_APP.md](OTA_APP.md)。
+硬件不匹配会拒绝刷写。协议细节见 [APP_PROTOCOL.md](APP_PROTOCOL.md)。
 
 ## 外接传感器（可选）
 

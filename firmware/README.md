@@ -1,7 +1,7 @@
 # 预编译固件
 
-可直接烧录的固件二进制。完整烧录说明、OTA 协议与发布流程见
-[docs/OTA_APP.md](../docs/OTA_APP.md)；分区权威来源是
+可直接烧录的固件二进制。完整烧录说明见
+[docs/FLASH.md](../docs/FLASH.md)；分区权威来源是
 [partitions.csv](../partitions.csv)。
 
 | 文件 | 说明 |

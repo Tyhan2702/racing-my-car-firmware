@@ -21,5 +21,6 @@ python3 tools/theme_packer/pack_theme.py themes/<id> theme_store/<id>/theme.bin
 python3 tools/gen_theme_store.py   # 重新生成 catalog.json（只校验与算哈希，不重打包）
 ```
 
-`theme.bin` 推送到设备走 WiFi OTA（`/ota/theme` 端点）或 USB 烧到 `0x620000`，
-见 [docs/OTA_APP.md](../docs/OTA_APP.md)。
+`theme.bin` 推送到设备走 WiFi OTA（`/ota/theme` 端点，协议见
+[docs/APP_PROTOCOL.md](../docs/APP_PROTOCOL.md)）或 USB 烧到 `0x620000`
+（见 [docs/FLASH.md](../docs/FLASH.md)）。

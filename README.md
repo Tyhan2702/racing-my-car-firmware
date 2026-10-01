@@ -20,7 +20,8 @@
 | 文档 | 内容 |
 |------|------|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | **使用指南** —— 页面导航、设置、三连表配对、开机动画、App 升级 |
-| [docs/OTA_APP.md](docs/OTA_APP.md) | **烧录与升级** —— 分区表、烧录地址、BLE/WiFi OTA 协议、App 对接 |
+| [docs/FLASH.md](docs/FLASH.md) | **烧录与升级** —— 分区表、USB 烧录、App OTA 与回滚 |
+| [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— BLE 服务与 WiFi HTTP API |
 | [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— 17 个内置车型、新增车型教程 |
 | [docs/THEMES.md](docs/THEMES.md) | **主题制作** —— 两套主题系统、素材规格、主题商店 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | **故障排查** —— 连不上 / 没数据、协议自动检测 |
@@ -39,7 +40,9 @@
 
 ## 内置车型（17 个）
 
-完整能力表见 [docs/VEHICLES.md](docs/VEHICLES.md)，设置页可切换：
+在**设置页 → VEHICLE** 滚轮里选择你的车型（立即生效，不用重启）。
+各车型的协议锁定、油温读取、挡位来源等完整对比见
+[docs/VEHICLES.md](docs/VEHICLES.md)：
 
 `OBD2 Generic` · `ZN/C6 CAN` · `ZN/C6 PID` · `ZD8 OBD` · `ZD8` · `MX-5 ND` ·
 `BMW F/G` · `Supra A90` · `BMW G OBD` · `BMW E` · `JCW F56` · `MINI R55` ·
@@ -79,7 +82,7 @@ esptool.py --chip esp32s3 -p PORT -b 460800 --before default_reset --after hard_
 - `PORT` 换成你的串口（Windows `COM3`，Linux `/dev/ttyUSB0`，macOS `/dev/cu.usbserial-*`）
 - 首次烧录会擦除全部数据（含 NVS 设置）
 - `bootmedia.bin`（开机动画）和可选的主题分区 `0x620000` 不烧也能正常开机
-- 完整分区布局见 [docs/OTA_APP.md](docs/OTA_APP.md)，烧录地址以 [partitions.csv](partitions.csv) 为准
+- 完整分区布局见 [docs/FLASH.md](docs/FLASH.md)，烧录地址以 [partitions.csv](partitions.csv) 为准
 
 ### 方式二：源码编译
 
