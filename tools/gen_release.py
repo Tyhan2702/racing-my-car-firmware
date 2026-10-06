@@ -16,7 +16,7 @@ It does two things:
 The companion app compares `firmware.count` here against the device's own
 manifest to decide whether an update is available. `count` comes from the
 current git HEAD, so remember to `git commit` your code *before* building
-(see docs/APP_INTEGRATION.md).
+(see docs/DEVELOPMENT.md).
 """
 
 import hashlib

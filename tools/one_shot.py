@@ -10,7 +10,7 @@ one_shot.py —— 一键全流程：起伪 ELM327 服务器 → 你录一遍 �
   2. 打印手机 Car Scanner 的操作指引
   3. 等你录完、导出 CSV，回来粘贴路径（或直接回车自动找）；中途 Ctrl+C 也会停服务器并尝试分析
   4. 停掉服务器（触发它导出 probe_log / elm_pids）
-  5. 调 analyze_probe.py auto 一条命令出 pids_full.csv
+  5. 调 analyze_proble.py auto 一条命令出 pids_full.csv
 """
 
 import glob
