@@ -5,7 +5,7 @@
 //  Developers only need to edit this single file to add a new vehicle.
 //  A vehicle not declared here = pure OBD2 standard protocol, zero-config and ready to use.
 //
-//  See docs/VEHICLE_CONFIG.md for details
+//  See docs/VEHICLES.md for details
 // ================================================================
 
 #include <stdint.h>

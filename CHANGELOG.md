@@ -1,185 +1,90 @@
-# Changelog / 更新日志
+# 更新日志
 
-Newest first. Entries cover behaviour and flashing changes; pure refactors and
-comment cleanups are left to the git history.
-最新的在最上面。这里只记录行为变化和烧录方式变化，纯重构和注释整理请查 git 历史。
+[English](CHANGELOG.en.md) | 简体中文
 
----
-
-## English
-
-### On-device OTA: BLE service + WiFi transfer
-
-- A new **OTA Mode** screen (reached from the device-info page) turns the gauge into an update target: it publishes the OTA BLE service (`0x1FFB`) and starts a WiFi SoftAP (`OBD-Gauge-OTA-XXXX`) whose HTTP endpoint accepts SHA256-verified firmware and boot-animation uploads.
-- Firmware is written to the inactive OTA slot and marked valid only after a 15 s post-boot self-check, so a crash during early boot rolls back to the previous build automatically.
-- Boot animation now updates transactionally: the incoming `boot_block` pair is staged, committed, and the previous animation recovered if an update is interrupted. RS485 and ESP-NOW are paused during the transfer to free the CPU.
-- The device-info page now shows the firmware build tag instead of the ESP-IDF/LVGL version numbers.
-
-### RaceChrono toggle and boot-animation modes
-
-- New **RACECHRONO** toggle in Settings: off leaves the device in a minimal BLE mode (Info + OTA services only, no advertising), on restores the full RaceChrono + pairing + OTA service set.
-- Boot-animation modes simplified to **OFF / RACE / VIDEO**; VIDEO plays the `boot_block` flashed from the phone app (replacing the old REI/SHINJI/ASUKA slots).
-
-### UI consistency fixes
-
-- A white ring border and rounded roller/slider corners are now applied consistently across the config pages.
-- Removed the redundant titles on the INFO CUSTOM / TEMP CUSTOM pages and fixed the settings-page title overlapping the notch image.
-
-### OBD data fixes
-
-- The ELM327 client now runs single-threaded, ZC6 CAN debug logging was removed, and brake/oil warning alerts are throttled.
-
-### OTA-ready layout and device manifest
-
-- Partition layout now uses `ota_0` + `ota_1` + `bootmedia`, so the firmware can roll back after a bad update.
-- The bootmedia partition is back at `0x620000` in the current layout.
-- A read-only BLE device-manifest service (`0x1FFA`) now exposes board/build info for the companion app's hardware compatibility check.
-- Build metadata now includes git branch, commit count, and short hash so release manifests can compare versions by build number.
-
-### Themes are now data, not code
-
-Adding a UI theme no longer touches a single C file. A theme is a folder under `themes/` holding a `theme.toml` manifest — eight decorative colors plus optional artwork — and one appended line in `themes/registry.txt`. `tools/gen_themes.py` runs at CMake configure time: it validates every manifest, converts PNG artwork into LVGL image arrays, and emits `ui_theme_generated.c`.
-
-- **Artwork.** `ring` (360x360, alpha) replaces the drawn bezel, `needle` replaces the drawn meter needle (LVGL rotates it around a pivot declared in the manifest; art must point right), and `dial` (360x360) becomes the page background. Anything omitted falls back to the drawn shape and its color role, so a colour-only theme is still a single file.
-- **Slot stability.** `themes/registry.txt` pins slot -> id and is append-only. NVS stores the slot number, so reordering it would silently re-skin every existing device on the next OTA — invisible in local testing. The generator hard-fails on reordering, gaps, a non-`default` slot 0, or a registry line whose folder is missing.
-- **Build-time validation** covers artwork dimensions, needle pivot bounds, missing files, duplicate roller names, unknown keys, and a total artwork budget (1536 KB, since every registered theme's art is linked in unconditionally). Every failure points at a file and line.
-- Artwork conversion needs Pillow only when a PNG's SHA-256 changes; the generated C is checked in, so an ordinary build has no third-party Python dependency. `--check` verifies freshness for CI.
-- **Fixed:** the Settings theme roller built its option list in a fixed 96-byte buffer and silently truncated once enough themes were registered. It now uses an exactly sized buffer, so truncation is structurally impossible.
-- **Fixed:** leaving the RPM warning restored a hardcoded black background, which would permanently blank a themed dial face. All three restore paths now reapply the theme background.
-
-Authoring guide: [themes/README.md](themes/README.md) (bilingual). Framework internals: [docs/THEMING.md](docs/THEMING.md).
-
-### Multi-gauge linked RPM warning
-
-Three gauges can now light up in sequence as revs climb, instead of all strobing at once. The 1000 rpm below the warning threshold is split into thirds; each gauge ramps black to red across its own third according to its configured position, and at the threshold all three strobe together. Every unit derives its own segment from the same ESP-NOW-synced RPM, so no extra inter-gauge messaging is needed and they stay in sync naturally.
-
-- New LINKED toggle on the RPM warning page, mutually exclusive with the existing single-gauge flash.
-- Changing the threshold on one gauge broadcasts it to the others (new ESP-NOW control packet).
-- The test button drives a synthetic RPM ramp across all gauges (5 s rise, 0.8 s hold, 2.5 s fall).
-- NVS config version 1 -> 2: adds `rpm_warn_linked_en`, and migrates the default theme index 1 -> 0 so existing devices keep their current look.
-- RPM strobe redraw interval was 1 ms; it is now 25 ms.
-
-### Partition layout and boot animation
-
-- App partition shrunk 6 MB -> 4 MB; the bootmedia SPIFFS partition grew 9.8 MB -> 11.9 MB.
-- **Flashing change: bootmedia moves from `0x620000` to `0x420000`.** Update your flash command and scripts.
-- Boot animation re-encoded on a 300x300 grid (was 240x240) with a new `delta_varint_rgb565_black_v2` stream format.
-
-
-### Multi-gauge: real BLE pairing replaces the MAC-bind button
-
-The old "BIND MASTER" button worked by grabbing whichever master's ESP-NOW broadcast the slave happened to be receiving at the moment — with no way to pick a specific one when multiple masters are nearby (e.g. a track day with several cars running the same product). The master now advertises a real BLE peripheral (`SkyGauge-XXYY`); the slave discovers and binds to it through the existing BLE scan page (now doubling as a "FIND MASTER" screen when the device role is SLAVE), and reconnects automatically on every following boot.
-
-- New `gauge_pair_ble_client.c/h` (slave-side one-shot BLE pairing client) and `ble_adv_util.c/h` (shared BLE advertisement-name parsing, deduplicated out of the OBD BLE client).
-- `racechrono_ble_diy.c` gained an independent pairing GATT service alongside the existing RaceChrono service, sharing one BLE advertisement.
-- `ui_ScreenPageMultiGauge.c` no longer has BIND MASTER / UNBIND buttons.
-- Boot flow: an unbound slave lands on the pairing screen; a bound slave skips straight to its gauge display.
-
-### Fixed: master watchdog reboot during OBD protocol detection
-
-Root-caused a board reboot seen during testing: the blocking wait for an ELM327 response could sit for up to 3 seconds without feeding the task watchdog. A run of consecutive protocol auto-detect timeouts could add up past the 5 s TWDT window and reboot the board mid-poll. Fixed by resetting the watchdog inside that wait loop.
-
-### Other fixes
-
-- Slave-side BLE scan state could get stuck once its 15 s scan window elapsed, silently blocking retry/rescan.
-- Leaving the pairing screen in slave mode stopped the wrong BLE scan API, leaving a scan running in the background.
-- I2C device cache could read out of bounds once more than 8 addresses were queried (latent crash, not yet hit in practice).
-- LCD init could read an uninitialized register value if the QSPI probe failed.
-
-### Improvements
-
-- "NO SIGNAL" indicator on the gauge pages when BLE/ESP-NOW data goes stale.
-- Gear display now prefers the CAN-decoded precise gear over the RPM/speed estimate when a vehicle profile provides one.
-- Mileage/trip statistics are runtime-only now (no longer written to flash every 30 s) — nothing displayed them, so it was pure flash wear.
-- Removed unused `fsm.h` state-machine scaffolding and an unused OBD-data "dirty flag" tracking layer — neither was ever wired up to anything.
-- De-duplicated a shared BLE-advertisement-name parser, a screen ring border, and a dark roller LVGL style across ~18 screens; throttled a full chart redraw and a few gauge pages to only refresh when actually visible or actually changed.
+最新的在最上面。只记录行为变化和烧录方式变化；纯重构和注释整理请查 git 历史。
 
 ---
 
-## 中文
+## 文档体系重建（中英双语）
 
-### 设备端 OTA：BLE 服务 + WiFi 传输
+本分支相对 main 的全部改动汇总为一次文档重建，不涉及任何固件行为：
 
-- 新增 **OTA Mode** 页面（从设备信息页进入），把仪表切换为升级目标：发布 OTA BLE 服务（`0x1FFB`）并启动 WiFi SoftAP（`OBD-Gauge-OTA-XXXX`），其 HTTP 端点接收带 SHA256 校验的固件与开机动画上传。
-- 固件写入未运行的 OTA 槽位，且开机 15 秒自检通过后才标记有效；早期启动崩溃会自动回滚到上一个版本。
-- 开机动画改为事务式更新：先把 `boot_block` 暂存、再提交，更新中断时自动恢复上一次的动画。传输期间暂停 RS485 与 ESP-NOW 以释放 CPU。
-- 设备信息页现在显示固件 build tag，取代原来的 ESP-IDF/LVGL 版本号。
+- **重构**：根 README 只做入口（定位、快速开始、索引、3D 模型、许可证），细节按受众拆成七份主题文档——`USER_GUIDE`（使用）、`FLASH`（烧录与升级，用户向）、`APP_PROTOCOL`（App 对接协议，开发者向）、`VEHICLES`（车型适配）、`THEMES`（主题，四份旧文档合并）、`TROUBLESHOOTING`（排障，三份旧文档合并）、`DEVELOPMENT`（开发指南，含发布流程）；`firmware/`、`themes/`、`theme_store/` 三个目录 README 精简为指引页。删除 12 份过时文档，包括描述已不存在的双分支世界的 `docs/BRANCH_COMPARISON.md`
+- **修正危险的过时信息**：旧文档的部分表格仍把 bootmedia 烧到 `0x620000`——该地址现在是 theme_0 主题分区，照旧文档操作会毁掉主题分区；统一为 bootmedia `0xA20000` / 主题 `0x620000`，以 `partitions.csv` 为准。同时修正车型数量（12 → **17**）、`model/Subaru/brz_zc6/` 路径、"app 分区 4MB"（实为 3MB）等过期信息
+- **双语**：11 份文档各配 1:1 镜像英文版（`X.md` ↔ `X.en.md`），标题下带语言切换行，英文版内部互链走 `.en.md`；中文为事实源，双语维护规则见 `DEVELOPMENT.md`
+- **文档性代码注释修正**：`partitions.csv` bootmedia 容量注释 7.875MB → 5.875MB；`ads1115_oil_pressure.h` 头注释由"直连 ESP32 ADC"改为 ADS1115 I2C ADC；`make_boot_block.py` docstring 补 v2 格式；`one_shot.py` / `analyze_proble.py` 修正错误文件名 `analyze_probe.py`
 
-### RaceChrono 开关与开机动画模式
+## 主题引擎修复与 BMW 挡位直读
 
-- 设置页新增 **RACECHRONO** 开关：关闭时设备进入最小 BLE 模式（仅 Info + OTA 服务，不广播），打开时恢复完整的 RaceChrono + 配对 + OTA 服务集。
-- 开机动画模式简化为 **OFF / RACE / VIDEO**；VIDEO 播放手机 App 刷入的 `boot_block`（取代原来的 REI/SHINJI/ASUKA 槽位）。
+- BMW F/G 车型通过 EGS 扩展寻址 DID `DA2E` 直读当前挡位
+  （请求头 `ATSH6F1`、接收过滤 `ATCRA618`），替代传动比估算
+- 主题数据快照加入进气温度（IAT），修复 OBD 挡位页在无数据时显示 "--" 的问题
+- 主题引擎回滚到 build 118（条件规则引擎引入的回归）
+- 修正 CST816 触摸 I2C 引脚，触摸走独立总线
 
-### 界面一致性修复
+## 三连表联动转速报警同步
 
-- 白色圆环边框和圆角滚轮/滑杆在各配置页统一应用。
-- 移除 INFO CUSTOM / TEMP CUSTOM 页多余的标题，并修复设置页标题与顶部缺口图重叠的问题。
+- 主表把 `rpm_warn_linked_en` 配置随广播同步给从表，三块表无需逐块设置
+- 联动模式下三表按表位依次亮起、到阈值全体闪烁
 
-### OBD 数据修复
+## 新增车型（内置 17 个）
 
-- ELM327 客户端改为单线程，移除 ZC6 CAN 调试日志，并对刹车/机油报警进行节流。
+- 新增 `Supra A90`（B58，OBD 油压 DID `4436` 替代 ADS1115）、`BMW E`
+  （N55 油温 `4402`/`5822` 与油压 `586F` 走 `6F1` 头）、`MINI R55`、`jeep`、
+  `Honda Integra`（29 位功能寻址 `18DB33F1`，CVT 禁用挡位估算）
+- 完整能力表见 `docs/VEHICLES.md`
 
-### OTA 就绪分区与设备清单
+## V2/V3 硬件变体（tai_ji_xiao_pai 24/25）
 
-- 分区布局已改为 `ota_0` + `ota_1` + `bootmedia`，坏包后可由 bootloader 自动回滚。
-- 当前布局下 bootmedia 分区地址回到了 `0x620000`。
-- 新增只读 BLE 设备清单服务（`0x1FFA`），供配套 App 在刷写前做硬件兼容性校验。
-- 构建信息现在包含 git 分支、提交数和短 hash，release 清单可以按 build number 做版本比较。
+- 新增编译期硬件版本选择（menuconfig → OBD DSP Configuration）：
+  V1 微雪板（默认）/ V2 新板 A（ST77916 v1 初始化序列）/ V3 新板 B（v2 序列），
+  V2/V3 为直连 GPIO、无 TCA9554 / ADS1115
 
-### 主题变成配置，不再是代码
+## 主题分区系统（theme_0）
 
-加一套 UI 主题现在不用碰任何 C 文件。一个主题就是 `themes/` 下的一个文件夹，里面放一份 `theme.toml` 清单（8 个装饰色 + 可选的美术素材），再往 `themes/registry.txt` 末尾追加一行。`tools/gen_themes.py` 在 CMake configure 阶段自动运行：校验清单、把 PNG 素材转成 LVGL 图片数组、生成 `ui_theme_generated.c`。
+- 新增 4MB `theme_0` 分区（`0x620000`）承载运行时主题：manifest + layout.json +
+  360×360 表盘/表环素材，开机由 `theme_engine` 加载，损坏自动回退内置默认主题
+- **bootmedia 从 `0x620000` 移到 `0xA20000`，容量 9.875MB → 5.875MB**（实际用量约 312KB）
+- WiFi OTA 新增 `/ota/theme`、`/ota/theme/prepare`、`/ota/theme/erase` 端点；
+  BLE 侧主题传输暂未实现
+- 主题声明的页面替换内置表盘页进入轮播环（省 40–60 KB RAM）；
+  `logo` / `intro` / `boot_video` 为受保护页，永不主题化
+- ⚠️ 老分区表设备升级必须**一次性 USB 全量重刷**，OTA 无法改写分区表
 
-- **美术素材**：`ring`（360x360，带透明通道）替换代码画的表框，`needle` 替换指针（LVGL 绕清单里声明的 pivot 旋转，素材必须画成朝右），`dial`（360x360）作为所有页面的背景。没声明的项自动回退到代码绘制 + 对应颜色角色，所以纯配色主题依然只要一个文件。
-- **槽位稳定性**：`themes/registry.txt` 固定 槽位 -> id 的映射，且只能追加。NVS 存的是槽位号，一旦调序，所有已有设备在下次 OTA 后会被静默换成另一个主题 —— 而且本地测试根本发现不了。生成器对调序、跳号、槽位 0 不是 `default`、以及登记了却找不到文件夹的情况一律构建失败。
-- **构建期校验**覆盖素材尺寸、指针 pivot 越界、文件缺失、滚轮重名、未知字段，以及素材总预算（1536 KB —— 因为所有已注册主题的素材都会被无条件链接进固件）。每条报错都精确到文件和行号。
-- 素材转换只在 PNG 的 SHA-256 变化时才需要 Pillow；转换出来的 C 文件是入库的，所以常规编译不依赖任何第三方 Python 包。`--check` 模式供 CI 校验是否过期。
-- **修复**：设置页的主题滚轮原来用一个固定 96 字节缓冲区拼选项，主题一多就会静默截断。现在按实际长度精确分配，结构上不可能再截断。
-- **修复**：转速报警结束时会把背景恢复成硬编码的黑色，有表盘背景图的话会被永久抹掉。三条恢复路径现在都改为重新应用主题背景。
+## 设备端 OTA：BLE 服务 + WiFi 传输
 
-编写指南：[themes/README.md](themes/README.md)（中英双语）。框架内部实现：[docs/THEMING.md](docs/THEMING.md)。
+- 新增 **OTA 模式页**（**版本页 OTA 按钮进入**）：发布 OTA BLE 服务（`0x1FFB`）并启动
+  WiFi SoftAP（`OBD-Gauge-OTA-XXXX`，密码 `obd2024`），HTTP 端点接收
+  SHA256 校验的固件与开机动画
+- 固件写入备用 OTA 槽，启动 15 秒自检通过才标记有效，早期崩溃由 bootloader 回滚
+- 开机动画更新事务化：`boot_block.txt.new`/`bin.new` 暂存后原子提交，中断可恢复；
+  传输期间 RS485 与 ESP-NOW 暂停
+- 版本页显示固件 build tag（分支-提交数-短哈希，编译时注入）
 
-### 三连表联动转速报警
+## RaceChrono 开关与开机动画模式简化
 
-三块表现在可以随转速上升**依次**亮起，而不是同时闪。报警阈值往下 1000 转被分成三段，每块表按自己配置的位置在自己那一段里由黑渐变到红，到阈值时三块一起闪。每块表都用同一份 ESP-NOW 同步过来的转速自行计算自己的区间，所以不需要额外的表间通信，天然同步。
+- 设置页新增 **RACECHRONO** 开关：关闭时进入最小 BLE 模式（仅 Info + OTA 服务，
+  不广播），开启恢复完整 RaceChrono + 配对 + OTA 服务
+- 开机动画模式简化为 **OFF / RACE / VIDEO**；VIDEO 播放手机 App 刷入的自制动画
+  （替代旧的 REI/SHINJI/ASUKA 三个槽位，旧值自动迁移到 VIDEO）
 
-- 转速报警页新增 LINKED 开关，与原有的单表闪烁互斥。
-- 在任一块表上改阈值会广播同步给其它表（新增 ESP-NOW 控制包）。
-- 测试按钮会在所有表上跑一段模拟转速曲线（5 秒上升、0.8 秒保持、2.5 秒回落）。
-- NVS 配置版本 1 -> 2：新增 `rpm_warn_linked_en` 字段；默认主题索引从 1 改为 0，并带迁移逻辑，保证老设备升级后外观不变。
-- 转速闪烁的重绘间隔原来是 1 毫秒，现在改为 25 毫秒。
+## OBD 数据链路修复
 
-### 分区调整与开机动画
+- ELM327 客户端改为**单线程轮询**，不再混跑 OBD/CAN 并行请求
+- 刹车温度 / 油压报警节流为 30 秒一次
+- 数据中断自愈：重初始化 + 自动重连，上车通电无需手动重连
 
-- app 分区从 6 MB 缩到 4 MB，bootmedia SPIFFS 分区从 9.8 MB 扩到 11.9 MB。
-- **烧录方式变更：bootmedia 的地址从 `0x620000` 变为 `0x420000`。** 请同步更新你的烧录命令和脚本。
-- 开机动画按 300x300 网格重新编码（原来是 240x240），并改用新的 `delta_varint_rgb565_black_v2` 流格式。
+## OTA 双槽布局与设备清单
 
+- 分区表改为 `ota_0` + `ota_1`（各 3MB）+ `bootmedia`，支持升级失败回滚
+- 只读 BLE 设备清单服务（`0x1FFA`）暴露硬件与构建信息，App 刷写前做兼容校验；
+  清单精简为 App 实际使用的字段，确保 512 字节内不截断
 
-### 三连表：用真蓝牙配对取代绑定按钮
+## 主题数据化（编译期 TOML 主题）
 
-原来的 "BIND MASTER" 按钮是抓从表当下收到的任意一台主表 ESP-NOW 广播来绑定——附近有多台主表时（比如赛道日好几台车都在用）没法指定要跟哪一台。现在主表会真正通过蓝牙广播身份（`SkyGauge-XXYY`），从表在现成的蓝牙扫描页（从表角色下会变成 "FIND MASTER" 配对页）里发现并绑定，之后每次开机都会自动重连。
-
-- 新增 `gauge_pair_ble_client.c/h`（从表侧一次性蓝牙配对客户端）和 `ble_adv_util.c/h`（从 OBD 蓝牙客户端里提出来的共享广播名解析工具）。
-- `racechrono_ble_diy.c` 在现有 RaceChrono 服务旁边加了一个独立的配对 GATT 服务，共用同一份蓝牙广播。
-- `ui_ScreenPageMultiGauge.c` 去掉了 BIND MASTER / UNBIND 按钮。
-- 开机流程：从表没配对过会停在配对页；配对过则直接跳过、进入仪表显示。
-
-### 修复：主表在 OBD 协议探测时看门狗重启
-
-定位到了测试中出现的一次真实重启：等待 ELM327 响应的阻塞循环最多能空等 3 秒且不喂狗，协议自动探测连续超时几次累加起来就会超过 5 秒的 TWDT 窗口，导致轮询过程中重启。已经在等待循环里补上喂狗。
-
-### 其它修复
-
-- 从表蓝牙扫描 15 秒窗口自然到期后状态不会复位，导致重试/删除后重扫静默失效。
-- 从表在配对页划走时停的是错误的蓝牙扫描 API，导致配对扫描在后台空跑。
-- I2C 设备缓存计数逻辑在超过 8 个地址后会越界读（潜在崩溃，实际还没触发过）。
-- LCD 初始化时如果 QSPI 探测失败，会用到未初始化的寄存器数据。
-
-### 优化
-
-- 蓝牙/ESP-NOW 数据断连超时后，仪表页显示 "NO SIGNAL" 提示。
-- 档位显示优先使用车型支持的 CAN 精确解码档位，没有时才回退到转速/车速估算。
-- 里程/行程统计不再每 30 秒写一次 flash，只在运行时内存里累计（没有界面显示过，纯粹是 flash 损耗）。
-- 删除了从未被真正接入使用的 `fsm.h` 状态机脚手架和 OBD 数据的 dirty-flag 跟踪层。
-- 把蓝牙广播名解析、屏幕白色圆环边框、深色滚轮样式这三处在约 18 个页面里重复的代码提取成共享实现；节流了一处全量重绘的图表和几个仪表页，只在真正可见/真正变化时才刷新。
+- 主题从 C 代码改为**数据声明**：`themes/` 下的 `theme.toml` + 素材 PNG，
+  `tools/gen_themes.py` 在 CMake configure 阶段生成 `ui_theme_generated.c`
+- 8 个装饰色角色 + 3 类可选素材（表框/指针/表盘），总预算 1536 KB
+- `registry.txt` 槽位表只能追加，防止 OTA 后在用设备被静默换肤
+- 语义色（报警红等）全局固定，任何主题不可改

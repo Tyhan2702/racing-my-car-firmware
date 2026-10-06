@@ -1,228 +1,148 @@
 # OBD BRZ Gauge
 
-A round ESP-IDF car gauge for the Waveshare ESP32-S3-Touch-LCD-1.85. It connects
-to an ELM327-compatible BLE OBD adapter, reads vehicle data, and renders a
-touch UI with LVGL.
+[English](README.en.md) | 简体中文
 
-基于 ESP-IDF 的圆形车载仪表，硬件为微雪 Waveshare ESP32-S3-Touch-LCD-1.85。
+基于 ESP-IDF 的圆形车载仪表。硬件为微雪 Waveshare ESP32-S3-Touch-LCD-1.85，
 通过 BLE 连接兼容 ELM327 的 OBD 适配器读取车辆数据，用 LVGL 渲染触控界面。
 
 **[效果演示 / Demo video](https://www.douyin.com/video/7614174567678984187)**
 
-> Based on [zhaizhaitao/open_obd_dsp](https://github.com/zhaizhaitao/open_obd_dsp)
-> by zhaizhaitao ([Bilibili demo](https://www.bilibili.com/video/BV18oHXz6EiQ/)).
-> This is a derivative with additional vehicle profiles, multi-gauge support and
-> a theming system.
->
-> 本项目基于 [zhaizhaitao/open_obd_dsp](https://github.com/zhaizhaitao/open_obd_dsp)
-> 二次开发，原作者 zhaizhaitao（[B 站演示](https://www.bilibili.com/video/BV18oHXz6EiQ/)）。
+> 基于 [zhaizhaitao/open_obd_dsp](https://github.com/zhaizhaitao/open_obd_dsp)
+> 二次开发（[B 站演示](https://www.bilibili.com/video/BV18oHXz6EiQ/)）。
 > 本仓库新增了多车型适配、三连表联动和主题系统。
 
 ---
 
-## ⚠️ Branch Notice / 分支说明
+## 文档索引
 
-This repository has two main branches with **incompatible partition layouts**:
+| 文档 | 内容 |
+|------|------|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | **使用指南** —— 页面导航、设置、三连表配对、开机动画、App 升级 |
+| [docs/FLASH.md](docs/FLASH.md) | **烧录与升级** —— 分区表、USB 烧录、App OTA 与回滚 |
+| [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— BLE 服务与 WiFi HTTP API |
+| [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— 17 个内置车型、新增车型教程 |
+| [docs/THEMES.md](docs/THEMES.md) | **主题制作** —— 两套主题系统、素材规格、主题商店 |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | **故障排查** —— 连不上 / 没数据、协议自动检测 |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | **开发指南** —— 代码架构、编译配置、工具脚本 |
+| [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
 
-- **`main`** — Stable branch, themes compiled into firmware
-- **`theme-upgrade`** — Experimental branch with runtime-loadable themes (4MB theme partition)
-
-⚠️ You **cannot** OTA upgrade between branches. See [docs/BRANCH_COMPARISON.md](docs/BRANCH_COMPARISON.md) for details.
-
-本仓库有两个主要分支，**分区布局不兼容**：
-
-- **`main`** — 稳定分支，主题编译进固件
-- **`theme-upgrade`** — 实验分支，支持运行时加载主题（4MB 主题分区）
-
-⚠️ 两个分支之间**无法通过 OTA 互相升级**。详见 [docs/BRANCH_COMPARISON.md](docs/BRANCH_COMPARISON.md)。
-
----
-
-## 📖 Documentation / 文档索引
-
-**Start here / 从这里开始**
-
-| Document | What it covers / 内容 |
-|----------|----------------------|
-| [docs/README.zh-CN.md](docs/README.zh-CN.md) | **完整中文说明** — 功能、依赖、编译烧录、适配要点 |
-| [docs/README.en.md](docs/README.en.md) | **Full English guide** — features, requirements, build and flash |
-| [docs/BRANCH_COMPARISON.md](docs/BRANCH_COMPARISON.md) | **Branch differences** — main vs theme-upgrade partition layouts / 分支差异对比 |
-| [docs/APP_INTEGRATION.md](docs/APP_INTEGRATION.md) | App/device manifest, firmware validation, single-slot boot animation / App 对接、硬件校验、单槽开机动画 |
-| [firmware/README.md](firmware/README.md) | Pre-built binaries and flash addresses / 预编译固件与烧录地址 |
-| [CHANGELOG.md](CHANGELOG.md) | Changelog / 更新日志（中英双语） |
-
-**Vehicles & OBD / 车辆适配与 OBD**
-
-| Document | What it covers / 内容 |
-|----------|----------------------|
-| [docs/VEHICLE_CONFIG.md](docs/VEHICLE_CONFIG.md) | **Adding a vehicle profile** / 新增车型看这篇（中英对照） |
-| [docs/OBD_TROUBLESHOOTING.md](docs/OBD_TROUBLESHOOTING.md) | No data / won't connect — diagnosis / 连不上或没数据时的排查 |
-| [docs/AUTO_PROTOCOL_DETECTION.md](docs/AUTO_PROTOCOL_DETECTION.md) | Protocol auto-detection: usage, FAQ, debugging / 自动协议检测：用法、常见问题、调试 |
-| [docs/BRZ_ZD8_PROTOCOL_GUIDE.md](docs/BRZ_ZD8_PROTOCOL_GUIDE.md) | BRZ ZD8 (Gen2) protocol diagnosis / ZD8 协议诊断 |
-
-**UI themes / 界面主题**
-
-| Document | What it covers / 内容 |
-|----------|----------------------|
-| [themes/README.md](themes/README.md) | **Build a theme** — no C code needed / 做一套主题（中英双语） |
-| [docs/THEMING.md](docs/THEMING.md) | Theme framework internals / 主题框架内部实现 |
-
-Repository layout is in [this README](#repository-layout--目录结构) below.
-目录结构见本文下方的[目录结构](#repository-layout--目录结构)一节。
-
----
-
-## Status / 当前状态
+## 硬件与软件栈
 
 | | |
 |---|---|
-| Hardware / 硬件 | Waveshare ESP32-S3-Touch-LCD-1.85 (360×360 round, 16 MB flash, 8 MB PSRAM) |
-| Stack / 软件栈 | ESP-IDF 5.5.3, LVGL 8 |
-| Link / 通信链路 | BLE + ELM327 — standard OBD PID; only ZN/C6 CAN keeps ATMA monitoring |
-| Multi-gauge / 三连表 | One master + multiple slaves over ESP-NOW / 一主多从，ESP-NOW 联动 |
-| Verified on / 已验证 | Subaru BRZ ZN/C6 (fully) — ZN/C6 CAN is the only CAN-backed profile; other profiles are OBD-only / 其余车型已配置，部分仍需上车验证 |
+| 硬件 | Waveshare ESP32-S3-Touch-LCD-1.85（360×360 圆屏 ST77916，16 MB Flash，8 MB PSRAM）|
+| 软件栈 | ESP-IDF 5.5.3，LVGL 8 |
+| 通信 | BLE 连接 ELM327 兼容 OBD 适配器（标准 PID + 各厂商私有 Mode 21/22）|
+| 三连表 | 一块主表读 OBD，其余从表通过 ESP-NOW 零负载同步显示 |
+| 传感器 | RS485 刹车温度（Modbus RTU）、ADS1115 油压 ADC（V1 板，部分车型可用 OBD 直读油压替代）|
 
-**Vehicle profiles / 内置车型** (12) — full list in
-[vehicle_profiles.c](main/app_obd_dsp/vehicle_profiles.c), selectable in Settings:
+## 内置车型（17 个）
+
+在**设置页 → VEHICLE** 滚轮里选择你的车型（立即生效，不用重启）。
+各车型的协议锁定、油温读取、挡位来源等完整对比见
+[docs/VEHICLES.md](docs/VEHICLES.md)：
 
 `OBD2 Generic` · `ZN/C6 CAN` · `ZN/C6 PID` · `ZD8 OBD` · `ZD8` · `MX-5 ND` ·
-`BMW F/G` · `BMW G OBD` · `JCW F56` · `POS 997.2` · `POS 997.1` · `GIULIA 2.0T`
+`BMW F/G` · `Supra A90` · `BMW G OBD` · `BMW E` · `JCW F56` · `MINI R55` ·
+`POS 997.2` · `POS 997.1` · `GIULIA 2.0T` · `jeep` · `Honda Integra`
 
-## Highlights / 主要特性
+当前仅在 Subaru BRZ ZN/C6 上完整验证；其余车型已配置，部分仍需上车验证。
 
-- **CAN broadcast monitoring** — only `ZN/C6 CAN` bypasses PID polling for
-  high-rate channels; the rest stay on OBD-only polling. / **CAN 广播帧监听** —— 仅 `ZN/C6 CAN` 使用高速监听，其余车型保持 OBD 轮询。
-- **Single-thread ELM327 loop** — no mixed OBD/CAN parallel path; only `ZN/C6 CAN`
-  uses ATMA, so the adapter does not get contended by dual polling. /
-  **ELM327 单线程轮询** —— 不再混跑 OBD/CAN；只有 `ZN/C6 CAN` 走 ATMA，避免适配器抢占和数据延迟。
-- **Brake-temp / oil-pressure alarm throttle** — these two alarms are rate-limited
-  to once every 30 seconds. / **刹车温度 / 油压报警节流** —— 两项报警限制为 30 秒一次，减少刷屏。
-- **Multi-gauge over ESP-NOW** — one board reads OBD and broadcasts; the others
-  display with zero extra OBD load, paired over real BLE. /
-  **三连表** —— 主表读 OBD 广播，从表零额外负载显示，走真蓝牙配对。
-- **Data-driven themes** — a theme is a folder with a manifest plus optional
-  artwork; no C code. / **配置驱动主题** —— 一个文件夹 + 一份清单，不用写 C。
-- **BLE device manifest** — a read-only GATT service exposes hardware/build info so the App can reject mismatched firmware before flashing. / **BLE 设备清单** —— 只读 GATT 服务暴露硬件/构建信息，App 刷写前先做硬件匹配校验。
-- **RPM warning, incl. linked mode** — three gauges light up in sequence as revs
-  climb. / **转速报警（含联动模式）** —— 三块表随转速依次亮起。
-- Manufacturer oil-temp paths beyond PID 01 5C (Mode 21/22, Mazda, MINI/BMW),
-  per-vehicle protocol lock, gear from CAN when available.
-- Self-healing BLE: re-initializes on reconnect and recovers when data stalls —
-  no manual reconnect after ignition. / 数据中断自愈，上车通电无需手动重连。
+## 核心特性
 
-Full feature lists: [中文](docs/README.zh-CN.md#功能概览) ·
-[English](docs/README.en.md#features)
+- **17 个车型配置**：各车型独立的传动比（最高 8 挡）、油温读取策略、协议锁定、功能寻址；挡位优先用 CAN/DID 直读，无效时按传动比估算
+- **CAN 广播帧监听**：仅 `ZN/C6 CAN` 走 ATMA 高速通道（0x140 节气门、0x360 油温水温）；其余车型保持单线程 OBD 轮询，避免适配器抢占
+- **厂商油温路径**：丰田/斯巴鲁 Mode 21、马自达 / MINI / BMW Mode 22、FCA UDS 扩展寻址等，主策略失败自动回退
+- **三连表（ESP-NOW）**：主表广播、从表零额外 OBD 负载，走真蓝牙配对（主表广播 `SkyGauge-XXYY`），断电记忆
+- **转速报警（含联动模式）**：超阈值全屏红色闪烁；三连表模式按表位依次亮起
+- **两套主题系统**：编译期 TOML 主题（改颜色/素材）与运行时主题分区（自定义表盘页面布局），见 [docs/THEMES.md](docs/THEMES.md)
+- **双路 OTA**：配套手机 App 走 BLE 或 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
+- **开机动画**：OFF / RACE / VIDEO 三模式，VIDEO 模式可从手机 App 上传自制动画（360×360 圆形安全区）
+- **RaceChrono BLE 输出**：可作为 RaceChrono DIY 设备向手机 App 提供数据
+- **自愈连接**：数据中断自动重初始化重连，上车通电无需手动操作
 
-## Quick Start / 快速开始
+## 快速开始
 
-### Build from source / 从源码编译
+### 方式一：烧录预编译固件
+
+需要：开发板、USB 数据线、[esptool.py](https://github.com/espressif/esptool)（`pip install esptool`）。
+
+```bash
+esptool.py --chip esp32s3 -p PORT -b 460800 --before default_reset --after hard_reset \
+  write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB \
+  0x0     firmware/release/bootloader/bootloader.bin \
+  0x8000  firmware/release/partition_table/partition-table.bin \
+  0xf000  firmware/release/ota_data_initial.bin \
+  0x20000 firmware/release/obd_brz_gauge.bin \
+  0xA20000 firmware/release/bootmedia.bin
+```
+
+- `PORT` 换成你的串口（Windows `COM3`，Linux `/dev/ttyUSB0`，macOS `/dev/cu.usbserial-*`）
+- 首次烧录会擦除全部数据（含 NVS 设置）
+- `bootmedia.bin`（开机动画）和可选的主题分区 `0x620000` 不烧也能正常开机
+- 完整分区布局见 [docs/FLASH.md](docs/FLASH.md)，烧录地址以 [partitions.csv](partitions.csv) 为准
+
+### 方式二：源码编译
+
+需要 [ESP-IDF 5.5.3](https://docs.espressif.com/projects/esp-idf/) 环境：
 
 ```bash
 git clone https://github.com/steveEcode/obd_brz_gauge.git
 cd obd_brz_gauge
-git checkout theme-upgrade
 idf.py set-target esp32s3
 idf.py build
 idf.py -p PORT flash monitor
 ```
 
-### Flash pre-built firmware / 烧录预编译固件
+首次构建会自动下载组件依赖到 `managed_components/`；换开发板编译前先在
+`idf.py menuconfig → OBD DSP Configuration` 里选硬件版本（见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)）。
 
-Complete first-time flash (erases entire chip):
+## 仓库目录
 
-```bash
-esptool.py --chip esp32s3 -p PORT -b 460800 --before default_reset --after hard_reset \
-  write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB \
-  0x0 firmware/release/bootloader/bootloader.bin \
-  0x8000 firmware/release/partition_table/partition-table.bin \
-  0xf000 firmware/release/ota_data_initial.bin \
-  0x20000 firmware/release/obd_brz_gauge.bin \
-  0xA20000 firmware/release/bootmedia.bin
+```
+main/
+├── app_main.c          # 入口：硬件、LVGL、BLE 与任务启动
+├── app_obd_dsp/        # 应用层：OBD 缓存、车型配置、OTA、开机动画、设备身份
+├── bsp_obd_dsp/        # 板级：ELM327 BLE 客户端、ESP-NOW、LCD/触摸/IO 扩展、NVS、RS485
+├── export_path/        # LVGL UI（SquareLine 导出）：20+ 页面、字体、图片
+└── theme_engine/       # 运行时主题加载器（theme_0 分区）
+themes/                 # 编译期主题源文件（TOML 清单 + 素材）
+theme_store/            # 打包好的主题二进制与目录索引（分发用）
+bootmedia/              # 开机动画源文件
+tools/                  # 工具脚本（主题生成、打包、PID 挖掘、发布）
+firmware/release/       # 预编译固件
+android_app/            # 配套手机 App（APK）
+model/                  # 3D 打印模型（外壳、表座、支架）
+docs/                   # 文档（见上方索引）
+partitions.csv          # Flash 分区表（16MB）
 ```
 
-完整首次烧录（擦除整个芯片）：
+## 3D 打印模型
 
-```bash
-esptool.py --chip esp32s3 -p PORT -b 460800 --before default_reset --after hard_reset \
-  write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB \
-  0x0 firmware/release/bootloader/bootloader.bin \
-  0x8000 firmware/release/partition_table/partition-table.bin \
-  0xf000 firmware/release/ota_data_initial.bin \
-  0x20000 firmware/release/obd_brz_gauge.bin \
-  0xA20000 firmware/release/bootmedia.bin
-```
+| 文件 | 说明 |
+|------|------|
+| `model/esp32_1.85_weixue/housing.stl` | 开发板外壳 |
+| `model/Subaru/brz_zc6/triple_gauge_pod.stp` | BRZ ZN/C6 三连表底座 |
+| `model/Subaru/brz_zc6/passenger_dashboard_scan.stl` | BRZ ZN/C6 副驾仪表台扫描件（拟合参考）|
+| `model/mazda/mx5_nd/air_vent_bracket.stl` | MX-5 ND 出风口支架 |
 
-**Notes / 说明:**
-- Replace `PORT` with your serial port (e.g., `COM3` on Windows, `/dev/ttyUSB0` on Linux, `/dev/cu.usbserial-*` on macOS)
-- Requires [esptool.py](https://github.com/espressif/esptool) installed: `pip install esptool`
-- First flash erases all data including NVS settings
-- For subsequent OTA updates, use the companion mobile app
+## 已知限制
 
-- 将 `PORT` 替换为你的串口（Windows: `COM3`，Linux: `/dev/ttyUSB0`，macOS: `/dev/cu.usbserial-*`）
-- 需要安装 [esptool.py](https://github.com/espressif/esptool)：`pip install esptool`
-- 首次烧录会擦除所有数据（包括 NVS 设置）
-- 后续升级请使用配套手机 App 进行 OTA 更新
+- 仅 Subaru BRZ ZN/C6 完整验证过数据读取；不保证所有 ELM327 兼容设备稳定工作，不保证各车型 PID 返回格式一致
+- 刹车温度 / 油压报警限制为 30 秒提示一次
+- 里程 / 行程统计只在运行时内存累计，每次开机清零
+- 主题切换需重启生效（所有页面仅在开机时创建一次）
 
-## Repository Layout / 目录结构
+## 致谢
 
-| Path | Contents |
-|------|----------|
-| [main/app_main.c](main/app_main.c) | Entry point: hardware, LVGL, BLE and task startup |
-| [main/app_obd_dsp](main/app_obd_dsp) | OBD data cache, vehicle profiles, CAN decoders, boot media |
-| [main/bsp_obd_dsp](main/bsp_obd_dsp) | Board support: BLE, NVS, LCD, touch, I2C, IO expander, ESP-NOW |
-| [main/export_path](main/export_path) | LVGL UI (SquareLine export) + theme framework |
-| [themes](themes) | Theme manifests and artwork / 主题清单与素材 |
-| [bootmedia](bootmedia) | Boot animation blocks (SPIFFS partition source) |
-| [tools](tools) | Helper scripts: theme codegen, image conversion, boot blocks |
-| [firmware/release](firmware/release) | Pre-compiled binaries |
-| [model](model) | 3D printable housings, gauge pods and brackets |
-| [docs](docs) | Documentation (see index above) |
+- [zhaizhaitao/open_obd_dsp](https://github.com/zhaizhaitao/open_obd_dsp) —— 上游项目
+- [Hokori23](https://github.com/Hokori23) —— 性能优化建议与贡献（NVS 刷盘锁、分页刷新节奏、OBD 轮询吞吐）
+- [timurrrr/ft86](https://github.com/timurrrr/ft86) —— 完整的 FT86 CAN 总线文档，使 CAN 广播监听得以实现
 
-## 3D Models / 开源模型
+## 许可证
 
-| File | Description |
-|------|-------------|
-| `model/esp32_1.85_weixue/housing.stl` | Board housing / 开发板外壳 |
-| `model/Subaru/brz_zc_n6/triple_gauge_pod.stp` | BRZ ZN/C6 triple gauge pod / 三连表底座 |
-| `model/Subaru/brz_zc_n6/passenger_dashboard_scan.stl` | BRZ ZN/C6 passenger dash scan (fitting reference) / 副驾仪表台扫描件 |
-| `model/mazda/mx5_nd/air_vent_bracket.stl` | MX-5 ND air vent bracket / 出风口支架 |
-
-## Porting Notes / 适配提醒
-
-This repository contains board-specific adaptation and UI resources. Porting to
-another ESP32-S3 board means revisiting pin mapping and display settings
-([main/bsp_obd_dsp](main/bsp_obd_dsp)); porting to another car means
-re-verifying BLE services, PIDs and response parsing
-([docs/VEHICLE_CONFIG.md](docs/VEHICLE_CONFIG.md)).
-
-仓库内是针对当前开发板的适配代码和 UI 资源。换开发板需要重新检查引脚定义和屏幕参数；
-换车型或适配器需要重新验证 BLE 服务、PID 和返回数据解析。
-
-## Acknowledgments / 致谢
-
-- [Hokori23](https://github.com/Hokori23) — performance optimization suggestions
-  and contributions (NVS flush lock hold-time, page-aware refresh cadence, OBD
-  polling throughput). / 性能优化建议与贡献。
-- [timurrrr/ft86](https://github.com/timurrrr/ft86) — comprehensive FT86 CAN bus
-  documentation (Gen1/Gen2 CAN ID mappings and byte-level decoding formulas),
-  which made the CAN broadcast monitoring possible. /
-  提供了完整的 FT86 CAN 总线文档，使 CAN 广播帧监听得以实现。
-
-## License / 开源协议
-
-This project is licensed under the **GNU General Public License v3.0 (GPLv3)**.
-
-本项目采用 **GNU 通用公共许可证 v3.0 (GPLv3)** 开源协议。
-
-- You are free to use, modify, and distribute this software.
-- If you distribute modified versions, you must also release the source code under GPLv3.
-- See [LICENSE](LICENSE) for the full license text.
-
-**简单来说**：
-- ✅ 可以自由使用、修改和分发本软件
-- ⚠️ 如果分发修改版本，必须同样以GPLv3协议开源代码
-- 🔒 增强了防专利条款和Tivoization保护
-- 📄 完整协议文本见 [LICENSE](LICENSE) 文件
+本项目采用 **GPLv3** 开源协议，见 [LICENSE](LICENSE)。可以自由使用、修改和分发；
+分发修改版本时必须同样以 GPLv3 开源。
 
 ```
 Copyright (C) 2024-2026  steveEcode and contributors
@@ -234,6 +154,6 @@ the Free Software Foundation, either version 3 of the License, or
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
