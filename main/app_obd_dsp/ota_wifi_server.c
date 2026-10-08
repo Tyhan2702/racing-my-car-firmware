@@ -45,6 +45,7 @@
 #include "app_obd_dsp/boot_media_mount.h"
 #include "app_obd_dsp/theme_mount.h"
 #include "app_obd_dsp/device_identity.h"
+#include "app_obd_dsp/theme_stack.h"
 #include "bsp_obd_dsp/rs485_brake_temp.h"
 
 static const char *TAG = "ota_wifi";
@@ -537,6 +538,23 @@ static esp_err_t info_handler(httpd_req_t *req)
     const char *manifest = device_identity_manifest_json();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, manifest, strlen(manifest));
+    return ESP_OK;
+}
+
+// GET /ota/theme/list — the themes in the installed package ({"themes":[{"id","name"}],"pages":N}), so the
+// Racing My Car app can drop the ones the owner removed on the gauge before it rebuilds the package.
+static esp_err_t theme_list_handler(httpd_req_t *req)
+{
+    if (s_state == OTA_WIFI_STATE_IDLE) {
+        return send_err(req, "ota not active");
+    }
+    char *json = theme_stack_list_json();
+    if (!json) {
+        return send_err(req, "out of memory");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json, strlen(json));
+    free(json);
     return ESP_OK;
 }
 
@@ -1775,7 +1793,7 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     config.recv_wait_timeout = 2;                  // 2s per recv call, Content-Length模式下不应该超时
     config.send_wait_timeout = 300;
     // Reduce httpd memory usage
-    config.max_uri_handlers = 24;                    // 20 handlers (incl. OPTIONS preflight for POST routes), +4 headroom
+    config.max_uri_handlers = 24;                    // 21 handlers (incl. OPTIONS preflight for POST routes), +3 headroom
     config.max_resp_headers = 4;                     // minimal headers
     config.max_open_sockets = 7;                     // max allowed by LWIP_MAX_SOCKETS (10 - 3 internal)
     config.backlog_conn = 5;                         // accept队列长度
@@ -1830,6 +1848,13 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
         .handler = info_handler,
     };
     httpd_register_uri_handler(s_httpd, &info_uri);
+
+    httpd_uri_t theme_list_uri = {
+        .uri = "/ota/theme/list",
+        .method = HTTP_GET,
+        .handler = theme_list_handler,
+    };
+    httpd_register_uri_handler(s_httpd, &theme_list_uri);
 
     httpd_uri_t status_uri = {
         .uri = "/ota/status",

@@ -68,6 +68,8 @@ extern lv_obj_t * ui_ImageGearBlackEar;
 void ui_ScreenPageThemeGauge_screen_init(void);
 extern lv_obj_t * ui_ScreenPageThemeGauge;
 void ui_event_theme_gauge_background(lv_event_t * e);
+void ui_event_theme_gauge_long_press(lv_event_t * e);
+void ui_theme_delete_prompt(void);
 extern uint8_t ui_theme_gauge_page_index;  // Current theme page index
 
 // SCREEN: ui_ScreenPageRpm
