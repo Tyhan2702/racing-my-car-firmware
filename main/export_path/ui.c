@@ -1224,6 +1224,13 @@ void ui_event_easter_egg_background(lv_event_t * e)
     ui_ext_tick();
 }
 
+// PLAY button: RMC NIGHT RUN (ui_GameRun.c refuses to open while the car is moving)
+void ui_event_easter_egg_play_button(lv_event_t *e)
+{
+    (void)e;
+    ui_game_open();
+}
+
 // OTA button: enter OTA mode screen (WiFi SoftAP + HTTP server, no BLE)
 void ui_event_easter_egg_ota_button(lv_event_t *e)
 {

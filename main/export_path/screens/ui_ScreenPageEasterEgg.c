@@ -75,8 +75,8 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     // ---- OTA button (the BUILD tag already lives in the info block above) ----
     lv_obj_t *btn_ota = lv_btn_create(ui_ScreenPageEasterEgg);
     lv_obj_set_style_clip_corner(btn_ota, true, 0);
-    lv_obj_set_size(btn_ota, 140, 32);
-    lv_obj_align(btn_ota, LV_ALIGN_BOTTOM_MID, 0, -56);
+    lv_obj_set_size(btn_ota, 110, 32);
+    lv_obj_align(btn_ota, LV_ALIGN_BOTTOM_MID, -60, -56);
     lv_obj_set_style_bg_color(btn_ota, lv_color_hex(0x00AA55), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(btn_ota, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_radius(btn_ota, 16, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -87,6 +87,22 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     lv_obj_set_style_text_color(lbl_ota, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_center(lbl_ota);
     lv_obj_add_event_cb(btn_ota, ui_event_easter_egg_ota_button, LV_EVENT_CLICKED, NULL);
+
+    // ---- PLAY: RMC NIGHT RUN (ui_GameRun.c), only with the car standing still ----
+    lv_obj_t *btn_play = lv_btn_create(ui_ScreenPageEasterEgg);
+    lv_obj_set_style_clip_corner(btn_play, true, 0);
+    lv_obj_set_size(btn_play, 110, 32);
+    lv_obj_align(btn_play, LV_ALIGN_BOTTOM_MID, 60, -56);
+    lv_obj_set_style_bg_color(btn_play, lv_color_hex(0xFFDD00), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(btn_play, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(btn_play, 16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(btn_play, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_t *lbl_play = lv_label_create(btn_play);
+    lv_label_set_text(lbl_play, "PLAY");
+    lv_obj_set_style_text_font(lbl_play, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(lbl_play, lv_color_hex(0x111111), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_center(lbl_play);
+    lv_obj_add_event_cb(btn_play, ui_event_easter_egg_play_button, LV_EVENT_CLICKED, NULL);
 
     imageEasterEgg = NULL;
 
