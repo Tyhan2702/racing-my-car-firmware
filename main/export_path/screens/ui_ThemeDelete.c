@@ -98,6 +98,21 @@ void ui_theme_delete_prompt(void)
     button(s_overlay, "Delete", 0xD32F2F, 62, on_delete);
 }
 
+// Theme widgets only show data, but LVGL makes many of them clickable by default (bars, plain panels). A press on
+// one of those keeps its LONG_PRESSED to itself, and themes are often full-screen, so the page never saw the
+// long-press. Making every widget on the page pass touches through lets the page get it wherever it is pressed
+// (swipes kept working only because gestures bubble up by default).
+void ui_theme_page_touch_through(lv_obj_t *obj)
+{
+    uint32_t n = lv_obj_get_child_cnt(obj);
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *child = lv_obj_get_child(obj, i);
+        lv_obj_clear_flag(child, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(child, LV_OBJ_FLAG_EVENT_BUBBLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+        ui_theme_page_touch_through(child);
+    }
+}
+
 void ui_event_theme_gauge_long_press(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
