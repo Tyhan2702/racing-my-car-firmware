@@ -3,6 +3,7 @@
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
 #include "esp_err.h"
+#include "esp_timer.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
@@ -424,9 +425,61 @@ static bool theme_resolve_data_source(const obd_snapshot_t *obd, const char *src
     return true;
 }
 
+// Page sweep: every time a theme page is shown (each swipe), its dials run up to full scale and back down to the
+// live value, like a car's gauges at start-up. 0.6 s up (ease-out), 0.2 s at the top, 0.6 s down to the value.
+// Labels count along using the range of an arc/bar/image bound to the same data (no range of their own).
+// Backlight and the master/slave sync of the boot sweep (ui_ext.c) are not involved.
+#define PAGE_SWEEP_UP_US    600000
+#define PAGE_SWEEP_HOLD_US  200000
+#define PAGE_SWEEP_DOWN_US  600000
+static int64_t s_page_sweep_start_us;
+
+static bool sweep_range(const theme_binding_t *bind, int32_t *lo, int32_t *hi)
+{
+    if (bind->kind != BINDING_KIND_LABEL) {
+        *lo = bind->range_min; *hi = bind->range_max;
+        return bind->range_max > bind->range_min;
+    }
+    for (int i = 0; i < s_ctx.binding_count; i++) {
+        const theme_binding_t *o = &s_ctx.bindings[i];
+        if (o->widget && o->kind != BINDING_KIND_LABEL && o->range_max > o->range_min &&
+            strcmp(o->data_source, bind->data_source) == 0) {
+            *lo = o->range_min; *hi = o->range_max;
+            return true;
+        }
+    }
+    return false;
+}
+
+/** The value to show while the page sweep runs (value = the live one), or value itself once it is over. */
+static int32_t page_sweep_value(const theme_binding_t *bind, int32_t value)
+{
+    if (s_page_sweep_start_us == 0) return value;
+    int64_t t = esp_timer_get_time() - s_page_sweep_start_us;
+    if (t >= PAGE_SWEEP_UP_US + PAGE_SWEEP_HOLD_US + PAGE_SWEEP_DOWN_US) return value;
+    int32_t lo, hi;
+    if (!sweep_range(bind, &lo, &hi)) return value;
+    if (value < lo) value = lo;
+    if (value > hi) value = hi;
+    float f;
+    if (t < PAGE_SWEEP_UP_US) {
+        float x = (float)t / PAGE_SWEEP_UP_US;
+        f = 1.0f - (1.0f - x) * (1.0f - x);                      // ease-out up to full scale
+        return lo + (int32_t)((hi - lo) * f);
+    }
+    if (t < PAGE_SWEEP_UP_US + PAGE_SWEEP_HOLD_US) return hi;
+    float x = (float)(t - PAGE_SWEEP_UP_US - PAGE_SWEEP_HOLD_US) / PAGE_SWEEP_DOWN_US;
+    f = x * x * (3.0f - 2.0f * x);                               // smooth step down to the live value
+    return hi + (int32_t)((value - hi) * f);
+}
+
 void theme_update_data(const obd_snapshot_t *obd) {
     if (!s_ctx.loaded || !obd) {
         return;
+    }
+    if (s_page_sweep_start_us != 0 &&
+        esp_timer_get_time() - s_page_sweep_start_us >= PAGE_SWEEP_UP_US + PAGE_SWEEP_HOLD_US + PAGE_SWEEP_DOWN_US) {
+        s_page_sweep_start_us = 0;
     }
 
     for (int i = 0; i < s_ctx.binding_count; i++) {
@@ -439,6 +492,7 @@ void theme_update_data(const obd_snapshot_t *obd) {
         if (!theme_resolve_data_source(obd, bind->data_source, &value)) {
             continue;
         }
+        value = page_sweep_value(bind, value);
 
         switch (bind->kind) {
         case BINDING_KIND_ARC: {
@@ -1189,6 +1243,7 @@ static lv_obj_t* theme_create_custom_page(const char *page_id) {
     // when theme_update_data() timer fires after the old page is deleted
     s_ctx.binding_count = 0;
     memset(s_ctx.bindings, 0, sizeof(s_ctx.bindings));
+    s_page_sweep_start_us = esp_timer_get_time();   // every page shown starts with a sweep
 
     lv_obj_t *page = lv_obj_create(NULL);
     lv_obj_set_size(page, 360, 360);
