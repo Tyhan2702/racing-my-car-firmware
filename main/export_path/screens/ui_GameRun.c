@@ -374,7 +374,7 @@ void ui_game_open(void)
     s_best = label(&ui_font_FontTypoderSize16, 0xFFDD00, LV_ALIGN_TOP_MID, 0, 76);
     s_kmh = label(&ui_font_FontTypoderSize16, 0xFFFFFF, LV_ALIGN_LEFT_MID, 22, -40);
     s_turbo = label(&ui_font_FontTypoderSize16, 0x00E5FF, LV_ALIGN_RIGHT_MID, -22, -40);
-    s_title = label(&ui_font_FontTypoderSize28, 0xFFDD00, LV_ALIGN_CENTER, 0, -14);
+    s_title = label(&ui_font_FontTypoderSize24, 0xFFDD00, LV_ALIGN_CENTER, 0, -14);
     s_hint = label(&ui_font_FontTypoderSize16, 0xFFFFFF, LV_ALIGN_CENTER, 0, 34);
     lv_obj_set_style_bg_color(s_hint, rgb(0x000000), 0);
     lv_obj_set_style_bg_opa(s_hint, LV_OPA_60, 0);
