@@ -14,7 +14,7 @@
 typedef enum { L_READY, L_ARMING, L_WAIT_GO, L_GO, L_RESULT } lights_state_t;
 
 static lights_state_t s_state;
-static int s_on, s_drawn = -1;
+static int s_drawn = -1;
 static float s_t, s_hold;
 static int64_t s_go_us;
 static lv_obj_t *s_big, *s_msg, *s_best_l;
