@@ -426,12 +426,13 @@ static bool theme_resolve_data_source(const obd_snapshot_t *obd, const char *src
 }
 
 // Page sweep: every time a theme page is shown (each swipe), its dials run up to full scale and back down to the
-// live value, like a car's gauges at start-up. 0.6 s up (ease-out), 0.2 s at the top, 0.6 s down to the value.
-// Labels count along using the range of an arc/bar/image bound to the same data (no range of their own).
+// live value, like a car's gauges at start-up. 1 s up (ease-out), 0.4 s at the top, 1 s down to the value.
+// Labels count along using the range of an arc/bar/image bound to the same data, or else the usual full scale of
+// that data (many themes show some values only as numbers, and some have no dial at all).
 // Backlight and the master/slave sync of the boot sweep (ui_ext.c) are not involved.
-#define PAGE_SWEEP_UP_US    600000
-#define PAGE_SWEEP_HOLD_US  200000
-#define PAGE_SWEEP_DOWN_US  600000
+#define PAGE_SWEEP_UP_US    1000000
+#define PAGE_SWEEP_HOLD_US  400000
+#define PAGE_SWEEP_DOWN_US  1000000
 static int64_t s_page_sweep_start_us;
 
 static bool sweep_range(const theme_binding_t *bind, int32_t *lo, int32_t *hi)
@@ -448,6 +449,16 @@ static bool sweep_range(const theme_binding_t *bind, int32_t *lo, int32_t *hi)
             return true;
         }
     }
+    // no dial for this value on the page: its usual full scale, in obd_snapshot_t units
+    static const struct { const char *src; int32_t lo, hi; } scale[] = {
+        {"obd.rpm", 0, 8000},            {"obd.speed", 0, 255},           {"obd.boost", 0, 200},
+        {"obd.coolant_temp", 0, 130},    {"obd.oil_temp", 0, 150},        {"obd.oil_pressure", 0, 100},
+        {"obd.battery_voltage", 0, 150}, {"obd.afr", 1000, 2000},         {"obd.throttle", 0, 100},
+        {"obd.intake_temp", 0, 80},      {"obd.gear", 0, 6},
+    };
+    for (size_t i = 0; i < sizeof(scale) / sizeof(scale[0]); i++) {
+        if (strcmp(bind->data_source, scale[i].src) == 0) { *lo = scale[i].lo; *hi = scale[i].hi; return true; }
+    }
     return false;
 }
 
@@ -459,6 +470,7 @@ static int32_t page_sweep_value(const theme_binding_t *bind, int32_t value)
     if (t >= PAGE_SWEEP_UP_US + PAGE_SWEEP_HOLD_US + PAGE_SWEEP_DOWN_US) return value;
     int32_t lo, hi;
     if (!sweep_range(bind, &lo, &hi)) return value;
+    if (strcmp(bind->data_source, "obd.gear") == 0 && value == 127) value = lo;   // gear unknown: settle at the bottom
     if (value < lo) value = lo;
     if (value > hi) value = hi;
     float f;
