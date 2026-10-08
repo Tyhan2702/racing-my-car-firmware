@@ -928,8 +928,9 @@ void ui_event_gear_background(lv_event_t * e)
     if(event_code == LV_EVENT_GESTURE) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         if(dir == LV_DIR_RIGHT) {
+            // Gear -> GAMES -> Info (screens/game_core.c)
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+            _ui_screen_change(&ui_ScreenPageGames, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageGames_screen_init);
         }
         else if(dir == LV_DIR_LEFT) {
             lv_indev_wait_release(lv_indev_get_act());
@@ -1192,7 +1193,12 @@ void ui_event_easter_egg_background(lv_event_t * e)
     }
     if(event_code == LV_EVENT_GESTURE) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if(dir == LV_DIR_RIGHT || dir == LV_DIR_LEFT) {
+        if(dir == LV_DIR_LEFT) {
+            // back to the GAMES page (Gear -> GAMES -> Info)
+            lv_indev_wait_release(lv_indev_get_act());
+            _ui_screen_change(&ui_ScreenPageGames, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageGames_screen_init);
+        }
+        else if(dir == LV_DIR_RIGHT) {
             lv_indev_wait_release(lv_indev_get_act());
             // If a custom theme with pages is loaded, swipe left/right returns to theme pages
             if (theme_page_list_count() > 0) {
@@ -1222,13 +1228,6 @@ void ui_event_easter_egg_background(lv_event_t * e)
 
     // ---- hand-written extension logic hook (ui_ext.c, not overwritten by SquareLine) ----
     ui_ext_tick();
-}
-
-// PLAY button: RMC NIGHT RUN (ui_GameRun.c refuses to open while the car is moving)
-void ui_event_easter_egg_play_button(lv_event_t *e)
-{
-    (void)e;
-    ui_game_open();
 }
 
 // OTA button: enter OTA mode screen (WiFi SoftAP + HTTP server, no BLE)

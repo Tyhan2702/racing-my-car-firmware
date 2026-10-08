@@ -71,8 +71,8 @@ void ui_event_theme_gauge_background(lv_event_t * e);
 void ui_event_theme_gauge_long_press(lv_event_t * e);
 void ui_theme_delete_prompt(void);
 void ui_theme_page_touch_through(lv_obj_t *obj);
-void ui_game_open(void);
-void ui_event_easter_egg_play_button(lv_event_t * e);
+extern lv_obj_t *ui_ScreenPageGames;      // GAMES page (screens/game_core.c): Gear -> GAMES -> Info
+void ui_ScreenPageGames_screen_init(void);
 extern uint8_t ui_theme_gauge_page_index;  // Current theme page index
 
 // SCREEN: ui_ScreenPageRpm
@@ -255,7 +255,8 @@ LV_IMG_DECLARE(ui_img_pngmainback_png);    // assets/pngMainBack.png
 LV_IMG_DECLARE(pngLogoMITSUBISHI);    // assets/pngLogoMITSUBISHI.png
 LV_IMG_DECLARE(pngLogoSkyGarage);     // assets/sklogo.png (280x280)
 #if USE_CUSTOM_BOOT_LOGO == 1
-LV_IMG_DECLARE(imgBootLogoCustom);    // customer custom boot image (convert it yourself and place in images/)
+LV_IMG_DECLARE(imgBootLogoCustom);
+LV_IMG_DECLARE(imgRmcMarkSmall);       // small yellow Racing My Car mark (info page title)    // customer custom boot image (convert it yourself and place in images/)
 #endif
 #if USE_CUSTOM_RPM_FLASH == 1
 LV_IMG_DECLARE(imgRpmFlash1);

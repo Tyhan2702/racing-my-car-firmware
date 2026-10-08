@@ -31,11 +31,22 @@ void ui_ScreenPageEasterEgg_screen_init(void)
        Kept minimal on purpose: role + OBD link state + firmware build tag.
        Layout on the 360x360 round panel: title y=88..124, info block centered,
        OTA button y=288..320. */
-    lv_obj_t *label_title = lv_label_create(ui_ScreenPageEasterEgg);
-    lv_label_set_text(label_title, "RMC GAUGE");
+    // title: the yellow Racing My Car mark (small) + GAUGE, side by side
+    lv_obj_t *title_row = lv_obj_create(ui_ScreenPageEasterEgg);
+    lv_obj_remove_style_all(title_row);
+    lv_obj_set_size(title_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(title_row, 10, 0);
+    lv_obj_clear_flag(title_row, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(title_row, LV_OBJ_FLAG_EVENT_BUBBLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_t *mark = lv_img_create(title_row);
+    lv_img_set_src(mark, &imgRmcMarkSmall);
+    lv_obj_t *label_title = lv_label_create(title_row);
+    lv_label_set_text(label_title, "GAUGE");
     lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize36, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 88);
+    lv_obj_align(title_row, LV_ALIGN_TOP_MID, 0, 88);
 
     // Role + connection state: master/standalone show BLE (ELM327), slave shows its master
     uint8_t device_role = nvs_cfg_get()->device_role;
@@ -75,8 +86,8 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     // ---- OTA button (the BUILD tag already lives in the info block above) ----
     lv_obj_t *btn_ota = lv_btn_create(ui_ScreenPageEasterEgg);
     lv_obj_set_style_clip_corner(btn_ota, true, 0);
-    lv_obj_set_size(btn_ota, 110, 32);
-    lv_obj_align(btn_ota, LV_ALIGN_BOTTOM_MID, -60, -56);
+    lv_obj_set_size(btn_ota, 140, 32);
+    lv_obj_align(btn_ota, LV_ALIGN_BOTTOM_MID, 0, -56);
     lv_obj_set_style_bg_color(btn_ota, lv_color_hex(0x00AA55), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(btn_ota, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_radius(btn_ota, 16, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -88,21 +99,6 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     lv_obj_center(lbl_ota);
     lv_obj_add_event_cb(btn_ota, ui_event_easter_egg_ota_button, LV_EVENT_CLICKED, NULL);
 
-    // ---- PLAY: RMC NIGHT RUN (ui_GameRun.c), only with the car standing still ----
-    lv_obj_t *btn_play = lv_btn_create(ui_ScreenPageEasterEgg);
-    lv_obj_set_style_clip_corner(btn_play, true, 0);
-    lv_obj_set_size(btn_play, 110, 32);
-    lv_obj_align(btn_play, LV_ALIGN_BOTTOM_MID, 60, -56);
-    lv_obj_set_style_bg_color(btn_play, lv_color_hex(0xFFDD00), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(btn_play, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(btn_play, 16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(btn_play, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_t *lbl_play = lv_label_create(btn_play);
-    lv_label_set_text(lbl_play, "PLAY");
-    lv_obj_set_style_text_font(lbl_play, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(lbl_play, lv_color_hex(0x111111), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_center(lbl_play);
-    lv_obj_add_event_cb(btn_play, ui_event_easter_egg_play_button, LV_EVENT_CLICKED, NULL);
 
     imageEasterEgg = NULL;
 
