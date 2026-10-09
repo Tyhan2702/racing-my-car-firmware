@@ -17,7 +17,7 @@ jobs:
           esp_idf_version: v5.5.3
           target: esp32s3
           # build/ in git holds a macOS build tree; start from a clean one
-          command: rm -rf build && idf.py build && cd build && esptool.py --chip esp32s3 merge_bin -o merged-firmware.bin @flash_args
+          command: rm -rf build && idf.py build && idf.py size && idf.py size-components && cd build && esptool.py --chip esp32s3 merge_bin -o merged-firmware.bin @flash_args
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ github.sha }}
