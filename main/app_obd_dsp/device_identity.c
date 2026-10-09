@@ -1,3 +1,4 @@
+#include "esp_app_desc.h"
 #include "theme_engine/theme_interface.h"
 #include "device_identity.h"
 
@@ -78,6 +79,7 @@ const char *device_identity_manifest_json(void)
              "\"bootmedia_format\":%u"
              "},"
              "\"firmware\":{"
+             "\"version\":\"%s\","
              "\"build_tag\":\"%s\","
              "\"branch\":\"%s\","
              "\"count\":%u,"
@@ -97,6 +99,7 @@ const char *device_identity_manifest_json(void)
              s_identity.ota_slots,
              s_identity.bootmedia_slots,
              s_identity.bootmedia_format_version,
+             esp_app_get_description()->version,   // the release, e.g. v35
              OBD_GAUGE_BUILD_TAG,
              OBD_GAUGE_GIT_BRANCH,
              (unsigned)OBD_GAUGE_GIT_COUNT,

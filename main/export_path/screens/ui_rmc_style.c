@@ -46,8 +46,8 @@ lv_obj_t *rmc_row(lv_obj_t *card, const char *label, int y)
     lv_obj_set_style_text_font(v, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(v, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_align(v, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_long_mode(v, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(v, RMC_CARD_W - 32 - 92);
+    lv_label_set_long_mode(v, LV_LABEL_LONG_DOT);                          // one line, "..." when too long
+    lv_obj_set_size(v, RMC_CARD_W - 32 - 100, lv_font_get_line_height(&ui_font_FontTypoderSize16));
     lv_obj_align(v, LV_ALIGN_TOP_RIGHT, 0, y);
     return v;
 }

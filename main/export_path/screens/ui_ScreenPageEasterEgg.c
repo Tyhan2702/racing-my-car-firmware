@@ -9,6 +9,7 @@
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "ui_rmc_style.h"
+#include "esp_app_desc.h"
 
 #ifndef OBD_GAUGE_BUILD_TAG
 #define OBD_GAUGE_BUILD_TAG "unknown"
@@ -37,7 +38,7 @@ void ui_device_info_refresh(void)
         const char *n = elm327_ble_get_connected_name();
         lv_label_set_text(s_link_label, "OBD");
         lv_label_set_text(s_link, n && n[0] ? n : "NOT SET");
-        lv_label_set_text(s_status, up ? "CONNECTED" : "NOT CONNECTED");
+        lv_label_set_text(s_status, up ? "CONNECTED" : "OFFLINE");
     }
     lv_obj_set_style_text_color(s_status, lv_color_hex(up ? RMC_GREEN : RMC_DIM), 0);
 }
@@ -65,21 +66,18 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     lv_obj_set_style_text_color(title, lv_color_hex(RMC_DIM), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 84);
 
-    lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 142);
-    lv_obj_align(card, LV_ALIGN_CENTER, 0, 4);
-    s_mode = rmc_row(card, "MODE", 14);
-    s_link = rmc_row(card, "OBD", 44);
+    lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 152);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 30);
+    s_mode = rmc_row(card, "MODE", 16);
+    s_link = rmc_row(card, "OBD", 50);
     s_link_label = lv_obj_get_child(card, lv_obj_get_index(s_link) - 1);   // "OBD", or "MASTER" on a slave
-    s_status = rmc_row(card, "STATUS", 74);
-    lv_obj_t *fw = rmc_row(card, "FIRMWARE", 104);
-    lv_label_set_long_mode(fw, LV_LABEL_LONG_SCROLL_CIRCULAR);   // the build tag is long: it scrolls
-    lv_obj_set_style_text_color(fw, lv_color_hex(RMC_DIM), 0);
-    lv_label_set_text(fw, OBD_GAUGE_BUILD_TAG);
+    s_status = rmc_row(card, "STATUS", 84);
+    lv_obj_t *fw = rmc_row(card, "FIRMWARE", 118);
+    lv_label_set_text(fw, esp_app_get_description()->version);   // the release, e.g. v35 (version.txt in the firmware repo)
     lv_obj_add_event_cb(scr, on_info_delete, LV_EVENT_DELETE, NULL);
     ui_device_info_refresh();
 
-    lv_obj_t *ota = rmc_pill(scr, "WI-FI UPDATE", true, 196, ui_event_easter_egg_ota_button);
-    lv_obj_align(ota, LV_ALIGN_BOTTOM_MID, 0, -56);
+    // no update button here: Wi-Fi update has its own item in the menu
     ui_LabelEasterEggInfo = NULL;   // the old one-block text is gone (ui.c skips it)
     imageEasterEgg = NULL;
 

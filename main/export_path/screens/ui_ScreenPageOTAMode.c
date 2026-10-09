@@ -7,6 +7,7 @@
 #include "../ui.h"
 #include "../ui_ext.h"
 #include "ui_rmc_style.h"
+#include "esp_app_desc.h"
 #include "app_obd_dsp/device_identity.h"
 #include "app_obd_dsp/ota_wifi_server.h"
 #include "bsp_obd_dsp/rs485_brake_temp.h"
@@ -57,10 +58,8 @@ void ui_ScreenPageOTAMode_screen_init(void)
     lv_obj_set_width(ui_LabelOTAModeStatus, 270);
     lv_obj_align(ui_LabelOTAModeStatus, LV_ALIGN_CENTER, 0, 74);
 
-    ui_LabelOTAModeVersion = lv_label_create(scr);   // the build, small: the app checks it over Wi-Fi anyway
-    lv_label_set_text(ui_LabelOTAModeVersion, OBD_GAUGE_BUILD_TAG);
-    lv_label_set_long_mode(ui_LabelOTAModeVersion, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_width(ui_LabelOTAModeVersion, 200);
+    ui_LabelOTAModeVersion = lv_label_create(scr);   // the firmware release now on the gauge, e.g. FIRMWARE v35
+    lv_label_set_text_fmt(ui_LabelOTAModeVersion, "FIRMWARE %s", esp_app_get_description()->version);
     lv_obj_set_style_text_font(ui_LabelOTAModeVersion, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(ui_LabelOTAModeVersion, lv_color_hex(0x666666), 0);
     lv_obj_set_style_text_align(ui_LabelOTAModeVersion, LV_TEXT_ALIGN_CENTER, 0);
