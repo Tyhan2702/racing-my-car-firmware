@@ -46,6 +46,7 @@
 #include "app_obd_dsp/theme_mount.h"
 #include "app_obd_dsp/device_identity.h"
 #include "app_obd_dsp/theme_stack.h"
+#include "export_path/screens/game_core.h"
 #include "bsp_obd_dsp/rs485_brake_temp.h"
 
 static const char *TAG = "ota_wifi";
@@ -551,6 +552,54 @@ static esp_err_t theme_list_handler(httpd_req_t *req)
     char *json = theme_stack_list_json();
     if (!json) {
         return send_err(req, "out of memory");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json, strlen(json));
+    free(json);
+    return ESP_OK;
+}
+
+// GET /ota/games — the games this firmware has and the ones installed from the app ({"available":[…],"installed":[…]}).
+static esp_err_t games_get_handler(httpd_req_t *req)
+{
+    if (s_state == OTA_WIFI_STATE_IDLE) {
+        return send_err(req, "ota not active");
+    }
+    char *json = games_list_json();
+    if (!json) {
+        return send_err(req, "out of memory");
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json, strlen(json));
+    free(json);
+    return ESP_OK;
+}
+
+// POST /ota/games {"installed":["run","lights",…]} — the games to show on the GAMES page (no restart needed).
+static esp_err_t games_post_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) {
+        return send_err(req, "unauthorized");
+    }
+    if (req->content_len <= 0 || req->content_len > 512) {
+        return send_err(req, "bad body");
+    }
+    char body[513] = {0};
+    int got = 0;
+    while (got < req->content_len) {
+        int r = httpd_req_recv(req, body + got, req->content_len - got);
+        if (r <= 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            return send_err(req, "receive failed");
+        }
+        got += r;
+    }
+    if (!games_install_json(body)) {
+        return send_err(req, "bad games list");
+    }
+    char *json = games_list_json();
+    if (!json) {
+        return send_json_response(req, 200, "{\"ok\":true}");
     }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json, strlen(json));
@@ -1793,7 +1842,7 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     config.recv_wait_timeout = 2;                  // 2s per recv call, Content-Length模式下不应该超时
     config.send_wait_timeout = 300;
     // Reduce httpd memory usage
-    config.max_uri_handlers = 24;                    // 21 handlers (incl. OPTIONS preflight for POST routes), +3 headroom
+    config.max_uri_handlers = 26;                    // 23 handlers (incl. OPTIONS preflight for POST routes), +3 headroom
     config.max_resp_headers = 4;                     // minimal headers
     config.max_open_sockets = 7;                     // max allowed by LWIP_MAX_SOCKETS (10 - 3 internal)
     config.backlog_conn = 5;                         // accept队列长度
@@ -1855,6 +1904,11 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
         .handler = theme_list_handler,
     };
     httpd_register_uri_handler(s_httpd, &theme_list_uri);
+
+    httpd_uri_t games_get_uri = { .uri = "/ota/games", .method = HTTP_GET, .handler = games_get_handler };
+    httpd_register_uri_handler(s_httpd, &games_get_uri);
+    httpd_uri_t games_post_uri = { .uri = "/ota/games", .method = HTTP_POST, .handler = games_post_handler };
+    httpd_register_uri_handler(s_httpd, &games_post_uri);
 
     httpd_uri_t status_uri = {
         .uri = "/ota/status",

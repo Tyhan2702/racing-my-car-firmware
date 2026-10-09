@@ -12,6 +12,8 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "nvs.h"
+#include "cJSON.h"
+#include <stdlib.h>
 #include "app_obd_dsp/obd_data_cache.h"
 
 #define FRAME_MS 30
@@ -34,9 +36,49 @@ static bool s_gestured;
 #define MAX_DIRTY 16
 static lv_area_t s_dirty[MAX_DIRTY];
 static int s_dirty_n;
-static int s_pick;                      // game shown on the GAMES page
-static lv_obj_t *s_icon, *s_name, *s_hint, *s_best, *s_dots[8];
+static int s_pick;                      // position in the installed list shown on the GAMES page
+static int s_inst[8], s_inst_n;         // installed games, as indexes into GAMES
+static lv_obj_t *s_icon, *s_name, *s_hint, *s_best, *s_dots[8], *s_tile, *s_arrows[2], *s_empty;
 static lv_color_t *s_icon_buf;
+
+// ---------- installed games (set from the app) ----------
+static uint32_t installed_mask(void)
+{
+    nvs_handle_t h; uint32_t v = 0;
+    if (nvs_open("rmc_game", NVS_READONLY, &h) == ESP_OK) { nvs_get_u32(h, "installed", &v); nvs_close(h); }
+    return v;
+}
+
+char *games_list_json(void)
+{
+    uint32_t mask = installed_mask();
+    cJSON *o = cJSON_CreateObject(), *av = cJSON_AddArrayToObject(o, "available"), *in = cJSON_AddArrayToObject(o, "installed");
+    for (int i = 0; i < GAME_COUNT; i++) {
+        cJSON_AddItemToArray(av, cJSON_CreateString(GAMES[i]->key));
+        if (mask & (1u << i)) cJSON_AddItemToArray(in, cJSON_CreateString(GAMES[i]->key));
+    }
+    char *text = cJSON_PrintUnformatted(o);
+    cJSON_Delete(o);
+    return text;
+}
+
+bool games_install_json(const char *json)
+{
+    cJSON *o = json ? cJSON_Parse(json) : NULL, *list = o ? cJSON_GetObjectItem(o, "installed") : NULL;
+    if (!cJSON_IsArray(list)) { cJSON_Delete(o); return false; }
+    uint32_t mask = 0;
+    cJSON *v = NULL;
+    cJSON_ArrayForEach(v, list) {
+        if (!cJSON_IsString(v)) continue;
+        for (int i = 0; i < GAME_COUNT; i++) if (strcmp(v->valuestring, GAMES[i]->key) == 0) mask |= 1u << i;
+    }
+    cJSON_Delete(o);
+    nvs_handle_t h;
+    if (nvs_open("rmc_game", NVS_READWRITE, &h) != ESP_OK) return false;
+    bool ok = nvs_set_u32(h, "installed", mask) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    return ok;
+}
 
 // ---------- small helpers ----------
 float gc_rand(void) { return (float)(esp_random() & 0xFFFF) / 65535.0f; }
@@ -236,9 +278,31 @@ static void play(const game_def_t *g)
 }
 
 // ---------- the GAMES page ----------
+static void refresh_installed(void)
+{
+    uint32_t mask = installed_mask();
+    s_inst_n = 0;
+    for (int i = 0; i < GAME_COUNT; i++) if (mask & (1u << i)) s_inst[s_inst_n++] = i;
+    if (s_pick >= s_inst_n) s_pick = 0;
+}
+
 static void show_pick(void)
 {
-    const game_def_t *g = GAMES[s_pick];
+    refresh_installed();
+    bool none = s_inst_n == 0;
+    lv_obj_t *parts[] = {s_tile, s_arrows[0], s_arrows[1], s_name, s_hint, s_best};
+    for (size_t i = 0; i < sizeof(parts) / sizeof(parts[0]); i++) {
+        if (none) lv_obj_add_flag(parts[i], LV_OBJ_FLAG_HIDDEN); else lv_obj_clear_flag(parts[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (none) lv_obj_clear_flag(s_empty, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(s_empty, LV_OBJ_FLAG_HIDDEN);
+    if (s_inst_n < 2) { lv_obj_add_flag(s_arrows[0], LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(s_arrows[1], LV_OBJ_FLAG_HIDDEN); }
+    for (int i = 0; i < GAME_COUNT; i++) {
+        if (i < s_inst_n && s_inst_n > 1) lv_obj_clear_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(s_dots[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_bg_color(s_dots[i], lv_color_hex(i == s_pick ? 0xFFDD00 : 0x444444), 0);
+        lv_obj_align(s_dots[i], LV_ALIGN_BOTTOM_MID, (int)((i - (s_inst_n - 1) / 2.0f) * 16), -34);
+    }
+    if (none || !s_icon_buf) return;
+    const game_def_t *g = GAMES[s_inst[s_pick]];
     for (int i = 0; i < ICON * ICON; i++) s_icon_buf[i] = lv_color_hex(0x101010);
     g->icon(s_icon_buf, ICON);
     lv_obj_invalidate(s_icon);
@@ -247,17 +311,16 @@ static void show_pick(void)
     int32_t b = best_of(g);
     if (b) lv_label_set_text_fmt(s_best, "BEST %ld%s%s", (long)b, g->unit[0] ? " " : "", g->unit);
     else lv_label_set_text(s_best, "NO RECORD YET");
-    for (int i = 0; i < GAME_COUNT; i++)
-        lv_obj_set_style_bg_color(s_dots[i], lv_color_hex(i == s_pick ? 0xFFDD00 : 0x444444), 0);
 }
 
 static void on_arrow(lv_event_t *e)
 {
     int step = (int)(intptr_t)lv_event_get_user_data(e);
-    s_pick = (s_pick + step + GAME_COUNT) % GAME_COUNT;
+    if (s_inst_n == 0) return;
+    s_pick = (s_pick + step + s_inst_n) % s_inst_n;
     show_pick();
 }
-static void on_icon(lv_event_t *e) { (void)e; play(GAMES[s_pick]); }
+static void on_icon(lv_event_t *e) { (void)e; if (s_inst_n) play(GAMES[s_inst[s_pick]]); }
 
 static void on_page(lv_event_t *e)
 {
@@ -267,7 +330,7 @@ static void on_page(lv_event_t *e)
         ui_ScreenPageGames = NULL;
         return;
     }
-    if (code == LV_EVENT_SCREEN_LOAD_START) { if (s_icon_buf) show_pick(); return; }   // best scores may have changed
+    if (code == LV_EVENT_SCREEN_LOAD_START) { show_pick(); return; }   // installed games and best scores may have changed
     if (code != LV_EVENT_GESTURE) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
     if (dir == LV_DIR_LEFT) {
@@ -312,7 +375,7 @@ void ui_ScreenPageGames_screen_init(void)
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 30);
 
     // icon tile: a canvas inside a yellow-rimmed button; tap it to play
-    lv_obj_t *tile = lv_btn_create(scr);
+    lv_obj_t *tile = s_tile = lv_btn_create(scr);
     lv_obj_set_size(tile, ICON + 10, ICON + 10);
     lv_obj_align(tile, LV_ALIGN_CENTER, 0, -22);
     lv_obj_set_style_radius(tile, 28, 0);
@@ -330,8 +393,16 @@ void ui_ScreenPageGames_screen_init(void)
     lv_obj_clear_flag(s_icon, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(s_icon, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    arrow(scr, LV_SYMBOL_LEFT, -132, -1);
-    arrow(scr, LV_SYMBOL_RIGHT, 132, 1);
+    s_arrows[0] = arrow(scr, LV_SYMBOL_LEFT, -132, -1);
+    s_arrows[1] = arrow(scr, LV_SYMBOL_RIGHT, 132, 1);
+
+    // nothing installed yet: point to the app
+    s_empty = lv_label_create(scr);
+    lv_label_set_text(s_empty, "NO GAMES YET\n\nINSTALL THEM IN THE\nRACING MY CAR APP\n(GAUGE > GAMES)");
+    lv_obj_set_style_text_font(s_empty, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(s_empty, lv_color_hex(0x9A9A9A), 0);
+    lv_obj_set_style_text_align(s_empty, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(s_empty);
 
     s_name = lv_label_create(scr);
     lv_obj_set_style_text_font(s_name, &ui_font_FontTypoderSize24, 0);
@@ -356,5 +427,5 @@ void ui_ScreenPageGames_screen_init(void)
         lv_obj_align(s_dots[i], LV_ALIGN_BOTTOM_MID, (i - (GAME_COUNT - 1) / 2.0f) * 16, -34);
     }
     lv_obj_add_event_cb(scr, on_page, LV_EVENT_ALL, NULL);
-    if (s_icon_buf) show_pick();
+    show_pick();
 }

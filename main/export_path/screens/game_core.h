@@ -49,5 +49,10 @@ int32_t gc_best(void);                 // best score of the running game (0 = no
 bool gc_record(int32_t score);         // stores the score if it beats the best; true when it did
 void gc_toast(const char *text);
 
+// Games are installed from the Racing My Car app (GET/POST /ota/games): none are shown until the owner installs
+// them. The installed set lives in NVS ("rmc_game"/"installed", bit i = game i of the list in game_core.c).
+char *games_list_json(void);              // {"available":["run",…],"installed":[…]} (malloc'd, free() it)
+bool games_install_json(const char *json); // {"installed":["run","lights",…]} -> saved; false on bad input
+
 void ui_ScreenPageGames_screen_init(void);   // the GAMES page (page carousel: Gear -> GAMES -> Info)
 extern lv_obj_t *ui_ScreenPageGames;
