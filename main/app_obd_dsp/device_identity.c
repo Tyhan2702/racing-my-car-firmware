@@ -1,3 +1,4 @@
+#include "theme_engine/theme_interface.h"
 #include "device_identity.h"
 
 #include <stdio.h>
@@ -55,9 +56,7 @@ const device_identity_t *device_identity_get(void)
 
 const char *device_identity_manifest_json(void)
 {
-    if (s_manifest_json[0] != '\0') {
-        return s_manifest_json;
-    }
+    // rebuilt on every call: theme_pages changes once the theme is loaded at boot
 
     // Factory (eFuse) base MAC: the Racing My Car platform registers genuine gauges by it. It is the same value
     // esptool reads over USB, so a gauge flashed and registered by the owner is recognised by the app later.
@@ -83,7 +82,8 @@ const char *device_identity_manifest_json(void)
              "\"branch\":\"%s\","
              "\"count\":%u,"
              "\"features\":[\"factory_reset\",\"locked_boot\"]"
-             "}"
+             "},"
+             "\"theme_pages\":%u"
              "}",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
              s_identity.board_name,
@@ -99,7 +99,8 @@ const char *device_identity_manifest_json(void)
              s_identity.bootmedia_format_version,
              OBD_GAUGE_BUILD_TAG,
              OBD_GAUGE_GIT_BRANCH,
-             (unsigned)OBD_GAUGE_GIT_COUNT);
+             (unsigned)OBD_GAUGE_GIT_COUNT,
+             (unsigned)theme_page_list_count());   // 0: no theme, the platform installs the default themes
 
     if (written < 0 || written >= (int)sizeof(s_manifest_json)) {
         ESP_LOGE(TAG, "manifest JSON truncated (len=%d, cap=%u)", written, (unsigned)sizeof(s_manifest_json));

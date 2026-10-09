@@ -743,6 +743,7 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
 
     case ESP_GATTS_READ_EVT:
         if (param->read.handle == s_handle_manifest) {
+            if (param->read.offset == 0) prepare_device_info_manifest();   // fresh theme_pages (loaded after BLE starts)
             esp_gatt_rsp_t rsp = {0};
             rsp.attr_value.handle = param->read.handle;
             rsp.attr_value.offset = param->read.offset;
