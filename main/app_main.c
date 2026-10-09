@@ -34,6 +34,7 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
 #include "app_obd_dsp/boot_media_mount.h"
+#include "app_obd_dsp/usb_mailbox.h"
 #include "bsp_obd_dsp/rs485_brake_temp.h"
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
 #include "bsp_obd_dsp/ads1115_oil_pressure.h"
@@ -193,6 +194,7 @@ void app_main(void)
 
     /* 1. NVS init (must be first) */
     nvs_storage_init();
+    usb_mailbox_apply();   // games / menu the platform wrote over a USB cable
 
     /* 1.5 Task watchdog: 10s timeout, idle task not subscribed (avoids false triggers when BLE blocks) */
     esp_task_wdt_config_t wdt_cfg = {
