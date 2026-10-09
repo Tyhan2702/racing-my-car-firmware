@@ -194,10 +194,6 @@ void ui_ScreenPageInfoCustom_screen_init(void);
 extern lv_obj_t * ui_ScreenPageInfoCustom;
 void ui_event_info_custom_background(lv_event_t * e);
 
-// SCREEN: ui_ScreenPageSettings
-void ui_ScreenPageSettings_screen_init(void);
-extern lv_obj_t * ui_ScreenPageSettings;
-void ui_event_settings_background(lv_event_t * e);
 // CUSTOM VARIABLES
 
 // SCREEN: ui_ScreenPageOilWarn
@@ -227,10 +223,6 @@ void ui_ScreenPageNeedleConfig_screen_init(void);
 extern lv_obj_t * ui_ScreenPageNeedleConfig;
 void ui_event_needle_config_background(lv_event_t * e);
 
-// SCREEN: ui_ScreenPageMultiGauge (entered by swiping down on the settings page: triple-gauge master/slave + master selection)
-void ui_ScreenPageMultiGauge_screen_init(void);
-extern lv_obj_t * ui_ScreenPageMultiGauge;
-void ui_event_multi_gauge_background(lv_event_t * e);
 
 // Needle page runtime interface (implemented in ui.c, reuses the disp_item system)
 void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,

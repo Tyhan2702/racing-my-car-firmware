@@ -112,6 +112,49 @@ static void on_vehicle(lv_event_t *e)
     show_vehicle();
 }
 
+// ---------- several gauges: mode, position, boot intro (were the firmware's own MULTI-GAUGE page) ----------
+static lv_obj_t *s_mode_val, *s_pos_val, *s_intro_val;
+static const char *const MODES[] = {"MASTER", "SLAVE", "ALONE"};    // device_role 0/1/2
+static const char *const INTROS[] = {"OFF", "RACE", "VIDEO"};       // intro_enable 0/1/2 (VIDEO: the app's boot animation)
+static void show_multi(void)
+{
+    uint8_t role = nvs_cfg_get()->device_role, intro = nvs_intro_enable_get(), pos = nvs_device_position_get();
+    lv_label_set_text(s_mode_val, MODES[role <= 2 ? role : 2]);
+    lv_label_set_text_fmt(s_pos_val, "%u", (unsigned)(pos >= 1 && pos <= 3 ? pos : 1));
+    lv_label_set_text(s_intro_val, INTROS[intro <= 2 ? intro : 2]);
+}
+static void on_mode(lv_event_t *e)
+{
+    int step = (int)(intptr_t)lv_event_get_user_data(e);
+    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    cfg.device_role = (uint8_t)(((cfg.device_role <= 2 ? cfg.device_role : 2) + 3 + step) % 3);
+    save(&cfg);
+    show_multi();
+    gc_toast("RESTART TO APPLY");            // Bluetooth and the gauge link start by role at boot
+}
+static void on_pos(lv_event_t *e)
+{
+    int step = (int)(intptr_t)lv_event_get_user_data(e);
+    uint8_t pos = nvs_device_position_get();
+    pos = (uint8_t)(((pos >= 1 && pos <= 3 ? pos : 1) - 1 + 3 + step) % 3 + 1);
+    nvs_device_position_set(pos);
+    show_multi();
+}
+static void on_intro(lv_event_t *e)
+{
+    int step = (int)(intptr_t)lv_event_get_user_data(e);
+    uint8_t v = nvs_intro_enable_get();
+    nvs_intro_enable_set((uint8_t)(((v <= 2 ? v : 2) + 3 + step) % 3));
+    show_multi();
+}
+static lv_obj_t *choice_card(const char *title, lv_event_cb_t cb)
+{
+    lv_obj_t *c = card(title, 96);
+    round_btn(c, "<", LV_ALIGN_BOTTOM_LEFT, -6, -10, cb, (void *)(intptr_t)-1);
+    round_btn(c, ">", LV_ALIGN_BOTTOM_RIGHT, 6, -10, cb, (void *)(intptr_t)1);
+    return value_label(c, LV_ALIGN_BOTTOM_MID, 0, -18, &ui_font_FontTypoderSize20);
+}
+
 // ---------- shift light ----------
 static void show_rpm(void)
 {
@@ -305,6 +348,11 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     lv_obj_align(sw, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_add_event_cb(sw, on_rc, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_align(lv_obj_get_child(c, 0), LV_ALIGN_LEFT_MID, 0, 0);
+
+    s_mode_val = choice_card("GAUGE MODE", on_mode);
+    s_pos_val = choice_card("GAUGE POSITION", on_pos);
+    s_intro_val = choice_card("BOOT INTRO", on_intro);
+    show_multi();
 
     action_card("TRIP", "RESET TRIP", do_reset_trip);
     action_card("GAUGE", "RESTART", do_restart);

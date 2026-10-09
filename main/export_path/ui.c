@@ -140,9 +140,6 @@ lv_obj_t * ui_ScreenPageInfoCustom;
 // labels defined in ui_ScreenPageInfo.c
 // CUSTOM VARIABLES
 
-// SCREEN: ui_ScreenPageSettings
-void ui_ScreenPageSettings_screen_init(void);
-lv_obj_t * ui_ScreenPageSettings;
 // CUSTOM VARIABLES
 
 // SCREEN: ui_ScreenPageOilWarn
@@ -165,9 +162,6 @@ lv_obj_t * ui_NeedleUnitLabel;
 void ui_ScreenPageNeedleConfig_screen_init(void);
 lv_obj_t * ui_ScreenPageNeedleConfig;
 
-// SCREEN: ui_ScreenPageMultiGauge (triple-gauge settings: master/slave + master selection)
-void ui_ScreenPageMultiGauge_screen_init(void);
-lv_obj_t * ui_ScreenPageMultiGauge;
 
 // SCREEN: ui_ScreenPageChartConfig (chart data-source selection)
 void ui_ScreenPageChartConfig_screen_init(void);
@@ -444,8 +438,7 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
         scr == ui_ScreenPageIntro) {
         return 33;
     }
-    if (scr == ui_ScreenPageSettings || scr == ui_ScreenPageMultiGauge ||
-        scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
+    if (scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
         scr == ui_ScreenPageTempCustom || scr == ui_ScreenPageInfoCustom ||
         scr == ui_ScreenPageNeedleConfig || scr == ui_ScreenPageChartConfig ||
         scr == ui_ScreenPageChartAlarm || scr == ui_ScreenPageOilWarn ||
@@ -1240,9 +1233,10 @@ void ui_event_easter_egg_background(lv_event_t * e)
             _ui_screen_change(&ui_ScreenPageBLEScan, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageBLEScan_screen_init);
         }
         else if(dir == LV_DIR_BOTTOM) {
-            // swipe down → settings page
+            // swipe down → the menu's SETTINGS (screens/ui_menu_settings.c)
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageSettings, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageSettings_screen_init);
+            if (!ui_ScreenPageMenuSettings) ui_ScreenPageMenuSettings_screen_init();
+            lv_scr_load_anim(ui_ScreenPageMenuSettings, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, false);
         }
     }
 
@@ -1345,7 +1339,6 @@ void ui_init(void)
     ui_ScreenPageTempCustom = NULL;
     ui_ScreenPageInfoCustom = NULL;
     ui_ScreenPageNeedleConfig = NULL;   // config page lazy-loaded
-    ui_ScreenPageMultiGauge = NULL;     // triple-gauge settings page lazy-loaded
     ui_ScreenPageChartConfig = NULL;    // chart data-source selection page lazy-loaded
     ui_ScreenPageChartAlarm = NULL;     // chart alarm settings page lazy-loaded
     ui_ScreenPageIntro = NULL;          // boot animation page lazy-loaded
@@ -1409,32 +1402,3 @@ void ui_event_ble_scan_background(lv_event_t * e)
     }
 }
 
-/* Settings page events - swipe left/right returns to the device info page */
-void ui_event_settings_background(lv_event_t * e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    if(code == LV_EVENT_GESTURE){
-        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if(dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
-            lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
-        }
-        else if(dir == LV_DIR_BOTTOM){   // swipe down enters the triple-gauge settings page
-            lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageMultiGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageMultiGauge_screen_init);
-        }
-    }
-}
-
-// Triple-gauge settings page gestures: swipe up/left/right → return to the settings page
-void ui_event_multi_gauge_background(lv_event_t * e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    if(code == LV_EVENT_GESTURE){
-        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if(dir == LV_DIR_TOP || dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
-            lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageSettings, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageSettings_screen_init);
-        }
-    }
-}
