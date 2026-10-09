@@ -97,7 +97,7 @@ static void spawn(void)
 {
     for (int i = 0; i < MAX_CONES; i++) {
         if (s_cone[i].alive) continue;
-        s_cone[i] = (cone_t){.a = fmodf(s_angle + 200.0f, 360.0f), .lane = (uint8_t)(gc_rand() < 0.5f), .alive = true};
+        s_cone[i] = (cone_t){.a = fmodf(s_angle + 150.0f, 360.0f), .lane = (uint8_t)(gc_rand() < 0.5f), .alive = true};
         return;
     }
 }

@@ -20,6 +20,7 @@ typedef struct { float d; int8_t lane; uint8_t kind; uint32_t color; bool alive;
 
 static run_state_t s_state;
 static obj_t s_obj[MAX_OBJ];
+static float s_dist;
 static float s_pos, s_kmh, s_px, s_curve, s_curve_t, s_spawn, s_turbo, s_turbo_left;
 static int s_lane, s_score, s_shown_score, s_shown_kmh, s_shown_turbo;
 static lv_obj_t *s_score_l, *s_best_l, *s_kmh_l, *s_turbo_l, *s_title, *s_hint;
@@ -128,7 +129,7 @@ static void reset_run(void)
 {
     memset(s_obj, 0, sizeof(s_obj));
     s_pos = 0; s_kmh = 120; s_lane = 0; s_px = lane_x(PLAYER_Y, 0); s_curve = 0; s_curve_t = 0;
-    s_spawn = 0; s_turbo = 100; s_turbo_left = 0; s_score = 0;
+    s_spawn = 0; s_turbo = 100; s_turbo_left = 0; s_score = 0 s_dist = 0;
 }
 
 static void begin(void)
@@ -186,7 +187,11 @@ static void frame(float dt)
                 else { s_turbo += 40; if (s_turbo > 100) s_turbo = 100; o->alive = false; }
             }
         }
-        if (s_state == R_RUN) s_score += (int)(v * dt * 0.1f);
+        if (s_state == R_RUN) {                              // distance points: kept as a fraction, a frame is < 1 point
+            s_dist += v * dt * 0.1f;
+            int whole = (int)s_dist;
+            s_score += whole; s_dist -= whole;
+        }
     } else {
         s_pos += 40.0f * dt;
         s_px += (lane_x(PLAYER_Y, s_lane) - s_px) * 0.35f;
