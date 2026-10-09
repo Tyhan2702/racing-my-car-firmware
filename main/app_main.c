@@ -24,7 +24,6 @@
 /* Waveshare BSP drivers */
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
 #include "app_obd_dsp/gauge_time.h"
-#include "app_obd_dsp/park_sleep.h"
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
 #include "bsp_obd_dsp/exio/TCA9554PWR.h"
 #endif
@@ -195,7 +194,6 @@ void app_main(void)
 
     /* 1. NVS init (must be first) */
     nvs_storage_init();
-    park_init();               // parked sleep: woke by its timer? then the screen stays dark for now
 
     /* 1.5 Task watchdog: 10s timeout, idle task not subscribed (avoids false triggers when BLE blocks) */
     esp_task_wdt_config_t wdt_cfg = {

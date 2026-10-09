@@ -11,7 +11,6 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/vehicle_profiles.h"
-#include "app_obd_dsp/park_sleep.h"
 #include "esp_system.h"
 
 #define CARD_W 252
@@ -147,14 +146,6 @@ static void on_rc(lv_event_t *e)
     cfg.rc_enabled = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED) ? 1 : 0;
     save(&cfg);
     gc_toast("APPLIES AFTER A RESTART");
-}
-
-// ---------- parked sleep (always-on power only) ----------
-static void on_park(lv_event_t *e)
-{
-    bool on = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
-    park_set_enabled(on);
-    if (on) gc_toast("ONLY FOR ALWAYS-ON POWER");
 }
 
 // ---------- actions that need a second tap ----------
@@ -314,17 +305,6 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     lv_obj_align(sw, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_add_event_cb(sw, on_rc, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_align(lv_obj_get_child(c, 0), LV_ALIGN_LEFT_MID, 0, 0);
-
-    c = card("PARKED SLEEP", 88);                       // always-on power: sleeps when the car is off, the clock keeps time
-    sw = lv_switch_create(c);
-    style_switch(sw, park_enabled());
-    lv_obj_align(sw, LV_ALIGN_TOP_RIGHT, 0, 12);
-    lv_obj_add_event_cb(sw, on_park, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_t *note = lv_label_create(c);
-    lv_label_set_text(note, "FOR ALWAYS-ON POWER:\nSCREEN OFF WHEN PARKED");
-    lv_obj_set_style_text_font(note, &ui_font_FontTypoderSize16, 0);
-    lv_obj_set_style_text_color(note, lv_color_hex(0x5A5A60), 0);
-    lv_obj_align(note, LV_ALIGN_BOTTOM_LEFT, 0, -10);
 
     action_card("TRIP", "RESET TRIP", do_reset_trip);
     action_card("GAUGE", "RESTART", do_restart);
