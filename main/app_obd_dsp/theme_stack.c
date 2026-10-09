@@ -122,8 +122,9 @@ bool theme_stack_remove_page_owner(const char *page_id, int *left)
 
     bool ok = false;
     if (remaining == 0) {
-        ok = esp_partition_erase_range(p, 0, MANIFEST_SIZE) == ESP_OK;
-        ESP_LOGI(TAG, "last theme removed, back to the built-in theme (%s)", ok ? "ok" : "erase failed");
+        // the last theme stays: without one the gauge would fall back to the firmware's own pages, which are not
+        // Racing My Car's (the platform's "restore default themes" replaces themes instead of erasing them)
+        ESP_LOGI(TAG, "page '%s' belongs to the last theme, kept", page_id);
     } else {
         char *text = cJSON_PrintUnformatted(manifest);
         size_t len = text ? strlen(text) : 0;

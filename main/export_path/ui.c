@@ -1008,6 +1008,11 @@ void ui_event_rpm_background(lv_event_t * e)
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageRpmWarn, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageRpmWarn_screen_init);
         }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c), on the built-in pages too
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
+        }
     }
 }
 void ui_event_speed_background(lv_event_t * e)
@@ -1022,6 +1027,11 @@ void ui_event_speed_background(lv_event_t * e)
         else if(dir == LV_DIR_LEFT) {
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageTemp, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageTemp_screen_init);
+        }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c), on the built-in pages too
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
         }
     }
 }
@@ -1043,6 +1053,11 @@ void ui_event_temp_background(lv_event_t * e)
         else if(dir == LV_DIR_BOTTOM) {
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageTempCustom, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageTempCustom_screen_init);
+        }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c), on the built-in pages too
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
         }
     }
 }
@@ -1151,6 +1166,11 @@ void ui_event_needle_background(lv_event_t * e)
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageOilPressure, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageOilPressure_screen_init);
         }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c), on the built-in pages too
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
+        }
     }
 }
 
@@ -1180,6 +1200,11 @@ void ui_event_info_background(lv_event_t * e)
         else if(dir == LV_DIR_BOTTOM) {
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageInfoCustom, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageInfoCustom_screen_init);
+        }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c), on the built-in pages too
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
         }
     }
 }

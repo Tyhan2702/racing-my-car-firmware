@@ -1,5 +1,5 @@
 // Long-press a theme page → "Delete this theme?" → the theme that owns the page is removed from the theme
-// package (theme_stack.c) and the gauge restarts, now showing the remaining themes (or the built-in one).
+// package (theme_stack.c) and the gauge restarts, now showing the remaining themes. The last theme cannot be deleted.
 // The prompt is an overlay on the top layer so it does not disturb the page underneath while it is open.
 
 #include <string.h>
@@ -40,8 +40,9 @@ static void on_delete(lv_event_t *e)
     int left = -1;
     bool ok = theme_stack_remove_page_owner(s_page_id, &left);
     if (s_status) {
-        lv_label_set_text(s_status, !ok ? "Could not delete" : left > 0 ? "Deleted. Restarting..." : "Deleted. Built-in theme...");
+        lv_label_set_text(s_status, ok ? "Deleted. Restarting..." : left == 0 ? "Last theme: it stays" : "Could not delete");
     }
+    if (!ok && left == 0) lv_obj_clear_state(btn, LV_STATE_DISABLED);
     if (ok) {
         lv_timer_t *t = lv_timer_create(restart_cb, 800, NULL);
         lv_timer_set_repeat_count(t, 1);
