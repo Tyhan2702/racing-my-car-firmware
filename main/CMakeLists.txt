@@ -92,6 +92,7 @@ idf_component_register(SRC_DIRS
                     "."
                     REQUIRES
                     esp_http_server
+                    spi_flash
                     esp_wifi
                     bt
                     spiffs
