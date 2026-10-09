@@ -157,8 +157,8 @@ static void begin(void)
 static void crash(void)
 {
     s_state = R_CRASH;
-    if (gc_record(s_score)) overlay("NEW RECORD!", "TAP TO RETRY\nSWIPE DOWN TO EXIT");
-    else overlay("CRASH!", "TAP TO RETRY\nSWIPE DOWN TO EXIT");
+    if (gc_record(s_score)) overlay("NEW RECORD!", "TAP TO RETRY\nHOLD 5 SEC TO EXIT");
+    else overlay("CRASH!", "TAP TO RETRY\nHOLD 5 SEC TO EXIT");
     lv_label_set_text_fmt(s_best_l, "BEST %ld", (long)gc_best());
 }
 

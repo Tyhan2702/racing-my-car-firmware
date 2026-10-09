@@ -1,6 +1,6 @@
 // App menu (see ui_menu.h): the RMC mark on top and round outlined buttons with their names, like a car's centre
 // screen. A tap opens a button, a tap on the mark or a swipe down goes back to the gauge. The platform shows the
-// same menu (web/gauge-menu.js). The menu is also a page of the left/right loop: theme pages ... MENU ... again.
+// same menu (web/gauge-menu.js). It opens only with a swipe up on a theme page; left/right stays among the themes.
 // Without a theme the gauge shows the "no theme" page here instead of the firmware's own gauge pages, which come
 // from the upstream project and are not Racing My Car's.
 
@@ -198,8 +198,9 @@ static void on_none(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_DELETE) { s_none_scr = NULL; return; }
-    if (code == LV_EVENT_GESTURE) lv_indev_wait_release(lv_indev_get_act());
-    if (code == LV_EVENT_GESTURE || code == LV_EVENT_CLICKED) ui_menu_open();   // any touch: the menu
+    bool up = code == LV_EVENT_GESTURE && lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_TOP;
+    if (up) lv_indev_wait_release(lv_indev_get_act());
+    if (up || code == LV_EVENT_CLICKED) ui_menu_open();   // a swipe up (as on a theme page) or a tap: the menu
 }
 static void none_screen_init(void)
 {
@@ -216,7 +217,7 @@ static void none_screen_init(void)
     lv_obj_set_style_text_color(t, lv_color_hex(C_PICK), 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, -18);
     lv_obj_t *h = lv_label_create(scr);
-    lv_label_set_text(h, "OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE FOR THE MENU");
+    lv_label_set_text(h, "OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE UP FOR THE MENU");
     lv_obj_set_style_text_font(h, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(h, lv_color_hex(0x9A9A9A), 0);
     lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
@@ -250,16 +251,6 @@ void ui_menu_go_home(void)
     if (home != cur) load_screen(home, ours);
 }
 
-// the menu in the left/right loop: swipe left to the first theme page, right to the last one
-static void to_theme_page(bool first)
-{
-    uint8_t n = theme_page_list_count();
-    if (!n) { ui_menu_go_home(); return; }
-    ui_theme_gauge_page_index = first ? 0 : n - 1;
-    if (ui_ScreenPageThemeGauge) { lv_obj_del(ui_ScreenPageThemeGauge); ui_ScreenPageThemeGauge = NULL; }
-    ui_ScreenPageThemeGauge_screen_init();
-    load_screen(ui_ScreenPageThemeGauge, true);
-}
 
 // ---------- the menu screen ----------
 // Like a car's centre screen: the RMC mark on top, round outlined buttons in rows of three with their names under
@@ -309,11 +300,10 @@ static void on_menu(lv_event_t *e)
     if (code == LV_EVENT_DELETE) { ui_ScreenPageMenu = NULL; return; }
     if (code == LV_EVENT_GESTURE && !s_closing) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if (dir == LV_DIR_TOP) return;
+        if (dir != LV_DIR_BOTTOM) return;
         lv_indev_wait_release(lv_indev_get_act());
         s_closing = true;
-        if (dir == LV_DIR_BOTTOM) ui_menu_go_home();
-        else to_theme_page(dir == LV_DIR_LEFT);
+        ui_menu_go_home();
     }
 }
 

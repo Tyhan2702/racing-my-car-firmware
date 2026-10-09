@@ -961,8 +961,10 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
                 _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             } else {
-                // past the last theme page: the menu (part of the loop)
-                ui_menu_open();
+                // past the last theme page: back to the first (the menu opens only with a swipe up)
+                ui_theme_gauge_page_index = 0;
+                ui_ScreenPageThemeGauge = NULL;
+                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             }
         }
         else if(dir == LV_DIR_TOP) {
@@ -978,8 +980,10 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
                 _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             } else {
-                // before the first theme page: the menu (part of the loop)
-                ui_menu_open();
+                // before the first theme page: to the last one
+                ui_theme_gauge_page_index = page_count ? page_count - 1 : 0;
+                ui_ScreenPageThemeGauge = NULL;
+                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             }
         }
     }
