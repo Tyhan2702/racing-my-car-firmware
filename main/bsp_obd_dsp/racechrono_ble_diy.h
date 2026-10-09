@@ -32,3 +32,6 @@ bool racechrono_ble_diy_is_connected(void);
 #ifdef __cplusplus
 }
 #endif
+
+// Advertise service 0x1FFC ("needs the time") so the app can find the gauge and set its clock (gauge_time.c).
+void racechrono_ble_diy_set_time_beacon(bool on);

@@ -11,6 +11,7 @@
 #include "nvs.h"
 #include "cJSON.h"
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
+#include "bsp_obd_dsp/racechrono_ble_diy.h"
 
 #define RTC_ADDR 0x51
 static const char *TAG = "gauge_time";
@@ -82,6 +83,7 @@ void gauge_time_set(int64_t utc, int16_t zone)
     uint8_t r[7] = {bcd((uint8_t)u.tm_sec), bcd((uint8_t)u.tm_min), bcd((uint8_t)u.tm_hour), bcd((uint8_t)u.tm_mday),
                     (uint8_t)u.tm_wday, bcd((uint8_t)(u.tm_mon + 1)), bcd((uint8_t)(u.tm_year % 100))};   // OS bit cleared
     if (I2C_Write(RTC_ADDR, 0x04, r, sizeof(r)) == ESP_OK) s_rtc = true;
+    racechrono_ble_diy_set_time_beacon(false);   // stop asking for the time
     ESP_LOGI(TAG, "time set from the phone (zone %+d min)", zone);
 }
 
