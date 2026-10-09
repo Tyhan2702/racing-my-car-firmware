@@ -22,8 +22,8 @@
 #define STAY_MS 4000       // on a theme page this long -> it becomes the page shown at boot
 #define BTN 76             // button diameter
 #define COL 95             // distance between button columns
-#define ROW1 118           // button centre rows
-#define ROW2 234
+#define ROW1 128           // button centre rows
+#define ROW2 244
 #define C_IDLE 0x3A3A3C    // button ring, resting
 #define C_TEXT 0x8E8E93    // label, resting
 #define C_PICK 0xFFDD00    // the chosen button: ring, icon and label in RMC yellow
@@ -266,7 +266,7 @@ static void ui_ScreenPageMenu_screen_init(void)
 
     lv_obj_t *logo = lv_img_create(scr);
     lv_img_set_src(logo, &imgRmcMarkSmall);
-    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 34);
+    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 44);
     lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_ext_click_area(logo, 12);
     lv_obj_add_event_cb(logo, on_logo, LV_EVENT_CLICKED, NULL);
