@@ -3,6 +3,7 @@
 // row (colours worked out once), the city skyline, the pipes and the bird (tilted with its speed, painted per pixel).
 // Same rules, sizes and colours as the browser copy (web/game-arcade.js, skyHop).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -21,10 +22,10 @@ typedef enum { H_READY, H_RUN, H_OVER } hop_state_t;
 typedef struct { float x, g; bool done, alive; } pipe_t;
 
 static hop_state_t s_state;
-static pipe_t s_pipe[MAX_PIPES];
-static float s_y, s_vy, s_speed, s_t, s_city[CITY_N];
+static EXT_RAM_BSS_ATTR pipe_t s_pipe[MAX_PIPES];
+static EXT_RAM_BSS_ATTR float s_y, s_vy, s_speed, s_t, s_city[CITY_N];
 static int s_score, s_shown_score, s_last;           // s_last: newest pipe (-1 = none)
-static lv_color_t s_sky[GC_H];
+static EXT_RAM_BSS_ATTR lv_color_t s_sky[GC_H];
 static lv_obj_t *s_score_l, *s_title, *s_hint;
 
 static inline lv_color_t rgb(uint32_t h) { return lv_color_hex(h); }

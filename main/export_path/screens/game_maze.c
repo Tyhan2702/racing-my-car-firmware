@@ -4,6 +4,7 @@
 // (and the lives under it) is redrawn each frame. Same rules, sizes and colours as the browser copy
 // (web/game-arcade.js, mazeChase, with the MAZE layout).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,8 +30,8 @@ typedef enum { M_READY, M_RUN, M_OVER } maze_state_t;
 typedef struct { int cx, cy, dir; float p; } ent_t;    // cell, direction (-1 = standing), progress to the next cell
 
 static maze_state_t s_state;
-static uint8_t s_dots[N][N];                           // 0 none, 1 dot, 2 big dot
-static ent_t s_pac, s_ghost[3];
+static EXT_RAM_BSS_ATTR uint8_t s_dots[N][N];                           // 0 none, 1 dot, 2 big dot
+static EXT_RAM_BSS_ATTR ent_t s_pac, s_ghost[3];
 static int s_want, s_level, s_score, s_left, s_eaten, s_shown_score, s_ghost_i;
 static float s_fright, s_t;
 static lv_obj_t *s_score_l, *s_title, *s_hint;

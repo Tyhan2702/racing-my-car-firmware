@@ -3,6 +3,7 @@
 // is a point and makes it faster (6 steps a second, up to 14). Same rules as the browser copy (web/game-arcade.js).
 // The screen around the board is drawn once; the board is redrawn only when the snake steps or a run starts.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +21,7 @@ typedef enum { S_READY, S_RUN, S_OVER } snake_state_t;
 static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};   // 0 up, 1 right, 2 down, 3 left
 
 static snake_state_t s_state;
-static int8_t s_bx[MAX_LEN], s_by[MAX_LEN];   // the body, [0] = head
+static EXT_RAM_BSS_ATTR int8_t s_bx[MAX_LEN], s_by[MAX_LEN];   // the body, [0] = head
 static int s_len, s_dir, s_next, s_fx, s_fy, s_score, s_shown_score;
 static float s_t, s_speed;
 static bool s_redraw;

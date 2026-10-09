@@ -3,6 +3,7 @@
 // row, every 10 lines is a level and the blocks fall faster. Same rules as the browser copy (web/game-arcade.js).
 // The well and the NEXT box are redrawn every frame; the rest of the screen is drawn once.
 
+#include "esp_attr.h"
 #include <string.h>
 #include "../ui.h"
 #include "game_core.h"
@@ -29,11 +30,11 @@ static const uint32_t BCOL[7] = {0x2FD6FF, 0xFFDD00, 0xB04DFF, 0x2FE06B, 0xFF303
 static const int SCORES[5] = {0, 100, 300, 500, 800};
 
 static blocks_state_t s_state;
-static int8_t s_grid[CH][CW];                  // -1 empty, else the colour of the block
+static EXT_RAM_BSS_ATTR int8_t s_grid[CH][CW];                  // -1 empty, else the colour of the block
 static piece_t s_cur;
 static int s_nxt, s_score, s_lines, s_level, s_shown_score, s_shown_lines, s_shown_level;
 static float s_t, s_flash;
-static lv_color_t s_col[7], s_hi[7], s_ghost[7], s_ghost_hi[7];
+static EXT_RAM_BSS_ATTR lv_color_t s_col[7], s_hi[7], s_ghost[7], s_ghost_hi[7];
 static lv_obj_t *s_score_l, *s_lines_l, *s_level_l, *s_title, *s_hint;
 
 static inline lv_color_t rgb(uint32_t h) { return lv_color_hex(h); }

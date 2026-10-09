@@ -4,6 +4,7 @@
 // Fuel is short; three lives, a crash costs one. Everything is redrawn every frame. Same rules, sizes and colours
 // as the browser copy (web/game-arcade3.js, moonLander).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -18,8 +19,8 @@ typedef enum { L_READY, L_RUN, L_OVER } lander_state_t;
 typedef enum { R_NONE, R_LANDED, R_CRASH } result_t;
 
 static lander_state_t s_state;
-static float s_gx[NSEG + 1], s_gy[NSEG + 1], s_pad0, s_pad1, s_pady;
-static int16_t s_gtop[GC_W];   // the first ground pixel row of each column
+static EXT_RAM_BSS_ATTR float s_gx[NSEG + 1], s_gy[NSEG + 1], s_pad0, s_pad1, s_pady;
+static EXT_RAM_BSS_ATTR int16_t s_gtop[GC_W];   // the first ground pixel row of each column
 static float s_x, s_y, s_vx, s_vy, s_fuel, s_rt, s_t, s_tx, s_ty;
 static bool s_thrust;
 static int s_level, s_score, s_left;

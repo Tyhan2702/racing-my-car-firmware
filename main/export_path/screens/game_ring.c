@@ -3,6 +3,7 @@
 // lap +5, and the car keeps getting faster. The track is drawn once into a background copy; each frame only the
 // spots under the car and the cones are restored from it and redrawn.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -24,8 +25,8 @@ typedef struct { int x0, y0, x1, y1; } box_t;
 
 static ring_state_t s_state;
 static lv_color_t *s_bg;
-static cone_t s_cone[MAX_CONES];
-static box_t s_prev[MAX_RECTS];
+static EXT_RAM_BSS_ATTR cone_t s_cone[MAX_CONES];
+static EXT_RAM_BSS_ATTR box_t s_prev[MAX_RECTS];
 static int s_prev_n;
 static float s_angle, s_speed, s_r, s_next_spawn, s_lap_angle;
 static int s_lane, s_score;

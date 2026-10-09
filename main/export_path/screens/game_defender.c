@@ -3,6 +3,7 @@
 // ends when the lives run out or the aliens reach the ship. The star field drifts down over the whole screen, so
 // every frame is redrawn. Same rules, sizes and colours as the browser copy (web/game-arcade.js, starDefender).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -23,9 +24,9 @@ typedef struct { float x, y; uint8_t r; bool alive; } alien_t;
 typedef struct { float x, y; bool alive; } shot_t;
 
 static def_state_t s_state;
-static alien_t s_alien[N_ALIENS];
-static shot_t s_shot[MAX_SHOTS], s_bomb[MAX_BOMBS];
-static float s_star[N_STARS][3];
+static EXT_RAM_BSS_ATTR alien_t s_alien[N_ALIENS];
+static EXT_RAM_BSS_ATTR shot_t s_shot[MAX_SHOTS], s_bomb[MAX_BOMBS];
+static EXT_RAM_BSS_ATTR float s_star[N_STARS][3];
 static float s_sx, s_dir, s_fire, s_drop, s_hurt, s_t;
 static int s_wave, s_score, s_left, s_shown_score;
 static lv_obj_t *s_score_l, *s_title, *s_hint;

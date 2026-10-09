@@ -4,6 +4,7 @@
 // copy (web/game-arcade2.js, stackUp). The whole scene is drawn while the camera moves; otherwise only the sliding
 // block's row and the falling piece are redrawn.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -18,11 +19,11 @@
 typedef enum { S_READY, S_RUN, S_OVER } stack_state_t;
 
 static stack_state_t s_state;
-static float s_tx[RING], s_tw[RING];           // block i at [i % RING]
+static EXT_RAM_BSS_ATTR float s_tx[RING], s_tw[RING];           // block i at [i % RING]
 static int s_n, s_dir, s_score, s_shown_score, s_cut_i, s_drawn_cam;
 static float s_cx, s_cw, s_speed, s_cam, s_perfect, s_cut_x, s_cut_w, s_cut_y, s_cut_drawn;
 static bool s_cut, s_cut_shown, s_full, s_perfect_on;
-static lv_color_t s_bg[GC_H], s_col[HUES], s_hi[HUES];
+static EXT_RAM_BSS_ATTR lv_color_t s_bg[GC_H], s_col[HUES], s_hi[HUES];
 static int s_x0, s_y0, s_x1, s_y1;             // clip box
 static lv_obj_t *s_score_l, *s_perfect_l, *s_title, *s_hint;
 

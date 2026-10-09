@@ -4,6 +4,7 @@
 // Same rules, sizes and colours as the browser copy (web/game-arcade2.js, gemMatch). The board is redrawn only when
 // it changes (a swap, the pop of matched gems, the selection); the clock bar above it every frame.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,8 +26,8 @@ static const uint32_t GEMC[6] = {0xFF3030, 0xFFDD00, 0x2FE06B, 0x2F9BFF, 0xFF3DF
 static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};
 
 static gems_state_t s_state;
-static int8_t s_g[N][N];                       // gem kind 0..5 (-1 only while the board collapses)
-static bool s_pop[N * N];                      // the cells of the match that is popping
+static EXT_RAM_BSS_ATTR int8_t s_g[N][N];                       // gem kind 0..5 (-1 only while the board collapses)
+static EXT_RAM_BSS_ATTR bool s_pop[N * N];                      // the cells of the match that is popping
 static bool s_popping, s_has_sel, s_has_down, s_redraw, s_combo_on;
 static float s_pop_t, s_clock;
 static int s_sel_x, s_sel_y, s_down_x, s_down_y, s_score, s_combo, s_shown_score, s_shown_combo;

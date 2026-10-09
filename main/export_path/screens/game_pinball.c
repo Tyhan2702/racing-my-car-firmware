@@ -5,6 +5,7 @@
 // out once, the rim arc, the thick lines (guides, flippers) per pixel by their distance to the segment. Same rules,
 // sizes and colours as the browser copy (web/game-arcade2.js, pinball).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -32,10 +33,10 @@ static const float TGT_X[3] = {150, 180, 210};
 
 static pin_state_t s_state;
 static ball_t s_ball;
-static float s_ang[2], s_up[2], s_flash[3], s_wait, s_t;
-static bool s_target[3];
+static EXT_RAM_BSS_ATTR float s_ang[2], s_up[2], s_flash[3], s_wait, s_t;
+static EXT_RAM_BSS_ATTR bool s_target[3];
 static int s_score, s_left, s_shown_score;
-static band_t s_band[MAX_BANDS];
+static EXT_RAM_BSS_ATTR band_t s_band[MAX_BANDS];
 static int s_n_band;
 static lv_obj_t *s_score_l, *s_title, *s_hint;
 

@@ -2,6 +2,7 @@
 // Pseudo-3D road redrawn row by row below the horizon each frame (the sky is drawn once); traffic, yellow tokens
 // (+100) and blue turbo cells come toward the player's yellow Racing My Car car; the speed keeps rising.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -19,7 +20,7 @@ typedef enum { R_READY, R_RUN, R_CRASH } run_state_t;
 typedef struct { float d; int8_t lane; uint8_t kind; uint32_t color; bool alive; } obj_t;   // kind 0 car, 1 token, 2 turbo
 
 static run_state_t s_state;
-static obj_t s_obj[MAX_OBJ];
+static EXT_RAM_BSS_ATTR obj_t s_obj[MAX_OBJ];
 static float s_dist;
 static float s_pos, s_kmh, s_px, s_curve, s_curve_t, s_spawn, s_turbo, s_turbo_left;
 static int s_lane, s_score, s_shown_score, s_shown_kmh, s_shown_turbo;

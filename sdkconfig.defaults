@@ -1042,6 +1042,8 @@ CONFIG_PM_RESTORE_CACHE_TAGMEM_AFTER_LIGHT_SLEEP=y
 # ESP PSRAM
 #
 CONFIG_SPIRAM=y
+# game and menu state lives in PSRAM (EXT_RAM_BSS_ATTR): internal RAM stays free for Bluetooth, Wi-Fi and LVGL
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 
 #
 # SPI RAM config

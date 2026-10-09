@@ -4,6 +4,7 @@
 // Same rules, sizes and colours as the browser copy (web/game-arcade2.js, merge). The numbers are 16 labels, one on
 // each cell; the board is redrawn only after a move, the new tile's pop only in its own cell.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,10 +30,10 @@
 typedef enum { M_READY, M_RUN, M_OVER } merge_state_t;
 
 static merge_state_t s_state;
-static int s_b[N][N], s_shown[N][N], s_score, s_shown_score, s_born_x, s_born_y;
+static EXT_RAM_BSS_ATTR int s_b[N][N], s_shown[N][N], s_score, s_shown_score, s_born_x, s_born_y;
 static float s_born_t;
 static bool s_born_anim, s_redraw, s_dim;
-static lv_obj_t *s_num[N][N], *s_score_l, *s_title, *s_hint;
+static EXT_RAM_BSS_ATTR lv_obj_t *s_num[N][N], *s_score_l, *s_title, *s_hint;
 static lv_color_t *s_tb;                       // where the shapes draw (the canvas or the icon)
 static int s_tw, s_th;
 

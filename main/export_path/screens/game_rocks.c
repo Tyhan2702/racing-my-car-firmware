@@ -4,6 +4,7 @@
 // faster with time. Everything moves, so every frame is redrawn; the rocks (9-point lumps) and the turned ship are
 // filled polygons. Same rules, sizes and colours as the browser copy (web/game-arcade2.js, rockGuard).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -24,12 +25,12 @@ typedef struct { float x, y, vx, vy; } shot_t;
 typedef struct { float x, y, r, vx, vy, spin, pts[RPTS]; bool dead; } rock_t;
 
 static rocks_state_t s_state;
-static shot_t s_shot[MAX_SHOTS];
-static rock_t s_rock[MAX_ROCKS];
+static EXT_RAM_BSS_ATTR shot_t s_shot[MAX_SHOTS];
+static EXT_RAM_BSS_ATTR rock_t s_rock[MAX_ROCKS];
 static int s_n_shot, s_n_rock;
 static float s_aim, s_spawn, s_fire, s_hurt, s_t, s_lvl;
 static int s_score, s_left, s_shown_score;
-static int16_t s_star[N_STARS][2];
+static EXT_RAM_BSS_ATTR int16_t s_star[N_STARS][2];
 static lv_color_t s_ring_c;
 static lv_obj_t *s_score_l, *s_title, *s_hint;
 

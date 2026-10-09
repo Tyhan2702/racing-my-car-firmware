@@ -4,6 +4,7 @@
 // score; ‹ › switch games, the dots show which one. Swiping left/right moves between pages as everywhere else
 // on the gauge (Gear <- GAMES -> Info).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -43,11 +44,11 @@ static lv_timer_t *s_timer;
 static int64_t s_last_us;
 static bool s_gestured;
 #define MAX_DIRTY 16
-static lv_area_t s_dirty[MAX_DIRTY];
+static EXT_RAM_BSS_ATTR lv_area_t s_dirty[MAX_DIRTY];
 static int s_dirty_n;
 static int s_pick;                      // position in the installed list shown on the GAMES page
-static int s_inst[GAME_COUNT], s_inst_n;         // installed games, as indexes into GAMES
-static lv_obj_t *s_icon, *s_name, *s_hint, *s_best, *s_dots[GAME_COUNT], *s_tile, *s_arrows[2], *s_empty;
+static EXT_RAM_BSS_ATTR int s_inst[GAME_COUNT], s_inst_n;         // installed games, as indexes into GAMES
+static EXT_RAM_BSS_ATTR lv_obj_t *s_icon, *s_name, *s_hint, *s_best, *s_dots[GAME_COUNT], *s_tile, *s_arrows[2], *s_empty;
 static lv_color_t *s_icon_buf;
 
 // ---------- installed games (set from the app) ----------

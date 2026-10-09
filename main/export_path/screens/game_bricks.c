@@ -3,6 +3,7 @@
 // cleared wall is a new, faster one; three balls. Same rules as the browser copy (web/game-arcade.js). The field
 // (with the balls left under it) is redrawn every frame; the rest of the screen is drawn once.
 
+#include "esp_attr.h"
 #include <math.h>
 #include <stdbool.h>
 #include "../ui.h"
@@ -34,11 +35,11 @@ static const uint32_t ROWC[ROWS] = {0xFF3030, 0xFF8A00, 0xFFDD00, 0x2FE06B, 0x2F
 static const int PTS[ROWS] = {50, 40, 30, 20, 10};
 
 static bricks_state_t s_state;
-static brick_t s_brick[ROWS * COLS];
+static EXT_RAM_BSS_ATTR brick_t s_brick[ROWS * COLS];
 static float s_px, s_bx, s_by, s_vx, s_vy;
 static bool s_stuck, s_shown_launch;
 static int s_lv, s_score, s_left, s_shown_score;
-static lv_color_t s_hi[ROWS];
+static EXT_RAM_BSS_ATTR lv_color_t s_hi[ROWS];
 static lv_obj_t *s_score_l, *s_launch_l, *s_title, *s_hint;
 
 static inline lv_color_t rgb(uint32_t h) { return lv_color_hex(h); }

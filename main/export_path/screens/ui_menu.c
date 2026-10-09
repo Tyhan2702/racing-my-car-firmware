@@ -2,6 +2,7 @@
 // screen. A tap opens a button, a tap on the mark or a swipe down goes back to the gauge. The platform shows the
 // same menu (web/gauge-menu.js).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -64,7 +65,7 @@ static const menu_item_t ITEMS[] = {
 #define ITEM_COUNT (int)(sizeof(ITEMS) / sizeof(ITEMS[0]))
 
 // ---------- settings (NVS "rmc_ui") ----------
-static int s_order[ITEM_COUNT], s_order_n;   // visible items in order
+static EXT_RAM_BSS_ATTR int s_order[ITEM_COUNT], s_order_n;   // visible items in order
 
 static int item_index(const char *key)
 {
@@ -207,8 +208,8 @@ void ui_menu_go_home(void)
 // ---------- the menu screen ----------
 // Like a car's centre screen: the RMC mark on top, round outlined buttons in rows of three with their names under
 // them. The button last opened is shown in RMC yellow, and so is the one under the finger.
-static lv_obj_t *s_btn[ITEM_COUNT], *s_icon[ITEM_COUNT], *s_label[ITEM_COUNT];
-static int s_btn_item[ITEM_COUNT], s_btn_n;
+static EXT_RAM_BSS_ATTR lv_obj_t *s_btn[ITEM_COUNT], *s_icon[ITEM_COUNT], *s_label[ITEM_COUNT];
+static EXT_RAM_BSS_ATTR int s_btn_item[ITEM_COUNT], s_btn_n;
 static int s_last = -1;                 // item last opened from the menu (kept while the gauge runs)
 static bool s_closing;
 

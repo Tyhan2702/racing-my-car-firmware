@@ -3,6 +3,7 @@
 // The whole road scrolls, so every frame is redrawn. Same rules, sizes and colours as the browser copy
 // (web/game-arcade2.js, highwayChase).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -26,8 +27,8 @@ static const uint32_t CARC[5] = {0xFF3030, 0x2F9BFF, 0x2FE06B, 0xFF3DF2, 0xF2F2F
 static const float LANES[4] = {L + 24, L + 72, R - 72, R - 24};
 
 static chase_state_t s_state;
-static car_t s_car[MAX_CARS];
-static can_t s_can[MAX_CANS];
+static EXT_RAM_BSS_ATTR car_t s_car[MAX_CARS];
+static EXT_RAM_BSS_ATTR can_t s_can[MAX_CANS];
 static int s_n_car, s_n_can;
 static float s_px, s_tx, s_speed, s_dist, s_fuel, s_spawn, s_can_t, s_scroll;
 static int s_shown_dist, s_shown_kmh;

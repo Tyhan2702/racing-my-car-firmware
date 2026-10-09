@@ -4,6 +4,7 @@
 // down; a bubble below the red line ends the game. Everything is redrawn every frame. Same rules, sizes and colours
 // as the browser copy (web/game-arcade3.js, bubblePop).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -30,14 +31,14 @@ typedef struct { float x, y, vy; int8_t v; } fall_t;
 static const uint32_t COLC[5] = {0xFF3030, 0xFFDD00, 0x2FE06B, 0x2F9BFF, 0xFF3DF2};
 
 static bubbles_state_t s_state;
-static int8_t s_g[MAXR][COLS];                    // colour 0..4, -1 = empty
+static EXT_RAM_BSS_ATTR int8_t s_g[MAXR][COLS];                    // colour 0..4, -1 = empty
 static int s_rows, s_offset, s_cur, s_nxt, s_shots, s_score, s_shown_score, s_n_pop, s_n_fall;
 static bool s_shot_on, s_aiming;
 static float s_shot_x, s_shot_y, s_shot_vx, s_shot_vy, s_aim, s_t;
 static int s_shot_v;
-static pop_t s_pop[MAX_POP];
-static fall_t s_fall[MAX_FALL];
-static lv_color_t s_hl[5], s_lose_c;
+static EXT_RAM_BSS_ATTR pop_t s_pop[MAX_POP];
+static EXT_RAM_BSS_ATTR fall_t s_fall[MAX_FALL];
+static EXT_RAM_BSS_ATTR lv_color_t s_hl[5], s_lose_c;
 static lv_obj_t *s_score_l, *s_title, *s_hint;
 
 static inline lv_color_t rgb(uint32_t h) { return lv_color_hex(h); }
@@ -152,8 +153,8 @@ static void settle(int r, int c, int v)
     if (r >= MAXR) r = MAXR - 1;                  // never (see MAXR)
     while (s_rows <= r) { memset(s_g[s_rows], -1, COLS); s_rows++; }
     s_g[r][c] = (int8_t)v;
-    static int16_t q[MAXR * COLS];
-    static bool seen[MAXR * COLS];
+    static EXT_RAM_BSS_ATTR int16_t q[MAXR * COLS];
+    static EXT_RAM_BSS_ATTR bool seen[MAXR * COLS];
     int nb[6][2], nq = 0;
     memset(seen, 0, sizeof(seen));
     q[nq++] = (int16_t)(r * COLS + c); seen[r * COLS + c] = true;

@@ -3,6 +3,7 @@
 // for each crossing, and every crossing makes the traffic faster; three lives. Only the playfield (and the lives
 // under it) is redrawn each frame. Same rules, sizes and colours as the browser copy (web/game-arcade.js, roadCross).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -27,7 +28,7 @@ static const uint32_t CARC[5] = {0xFF3030, 0x2F9BFF, 0xFF3DF2, 0x2FE06B, 0xFF8A0
 static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};
 
 static road_state_t s_state;
-static car_t s_car[MAX_CARS];
+static EXT_RAM_BSS_ATTR car_t s_car[MAX_CARS];
 static int s_ncar, s_px, s_py, s_top, s_level, s_score, s_left, s_shown_score, s_shown_level;
 static float s_hop;
 static int s_cx0, s_cy0, s_cx1, s_cy1;                 // clip box for the spans

@@ -6,6 +6,7 @@
 // (the night sky row by row, colours worked out once; trails blended over it). Same rules, sizes and colours as
 // the browser copy (web/game-arcade3.js, cityDefence).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -28,14 +29,14 @@ typedef struct { float x, y, r, t; bool enemy; } boom_t;
 static const int16_t CITY[N_CITY][2] = {{96, 312}, {264, 312}, {130, 322}, {230, 322}};
 
 static defence_state_t s_state;
-static bool s_city[N_CITY];
-static missile_t s_mis[MAX_MIS];
-static inter_t s_int[MAX_INT];
-static boom_t s_boom[MAX_BOOM];
+static EXT_RAM_BSS_ATTR bool s_city[N_CITY];
+static EXT_RAM_BSS_ATTR missile_t s_mis[MAX_MIS];
+static EXT_RAM_BSS_ATTR inter_t s_int[MAX_INT];
+static EXT_RAM_BSS_ATTR boom_t s_boom[MAX_BOOM];
 static int s_n_mis, s_n_int, s_n_boom;
 static int s_wave, s_to_launch, s_ammo, s_score, s_shown_score, s_shown_wave, s_shown_ammo;
 static float s_launch_t, s_t;
-static lv_color_t s_sky[GC_H];
+static EXT_RAM_BSS_ATTR lv_color_t s_sky[GC_H];
 static lv_obj_t *s_score_l, *s_info_l, *s_title, *s_hint;
 
 static inline lv_color_t rgb(uint32_t h) { return lv_color_hex(h); }

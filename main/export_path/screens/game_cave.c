@@ -5,6 +5,7 @@
 // turned with its climb or fall (a filled polygon) and its flame while you hold. Same rules, sizes and colours as
 // the browser copy (web/game-arcade3.js, caveFlyer).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -19,12 +20,12 @@ typedef enum { C_READY, C_RUN, C_OVER } cave_state_t;
 typedef struct { float mid, gap, block; bool has_block; } col_t;
 
 static cave_state_t s_state;
-static col_t s_col[NCOL];
+static EXT_RAM_BSS_ATTR col_t s_col[NCOL];
 static int s_head;                                // s_col[s_head] is the leftmost column
 static float s_y, s_vy, s_scroll, s_speed, s_t;
 static bool s_hold;
 static int s_score, s_shown_score, s_n_trail;
-static float s_trail[TRAIL][2];
+static EXT_RAM_BSS_ATTR float s_trail[TRAIL][2];
 static lv_obj_t *s_score_l, *s_title, *s_hint;
 
 static inline lv_color_t rgb(uint32_t h) { return lv_color_hex(h); }

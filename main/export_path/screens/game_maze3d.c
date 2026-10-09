@@ -5,6 +5,7 @@
 // drones as discs behind a per-column depth check. Everything moves, so every frame is redrawn. Same rules, sizes
 // and colours as the browser copy (web/game-arcade3.js, darkMaze).
 
+#include "esp_attr.h"
 #include <math.h>
 #include <string.h>
 #include "../ui.h"
@@ -26,21 +27,21 @@ typedef struct { float x, y, a; bool hp; } drone_t;
 typedef struct { float x, y, a, d; bool dead; } shot_t;
 
 static dm_state_t s_state;
-static uint8_t s_map[MAXN][MAXN];
+static EXT_RAM_BSS_ATTR uint8_t s_map[MAXN][MAXN];
 static int s_n, s_level, s_score, s_left;
 static float s_px, s_py, s_pa, s_clock, s_hurt, s_flash, s_t;
-static drone_t s_drone[MAX_DRONES];
-static shot_t s_shot[MAX_SHOTS];
+static EXT_RAM_BSS_ATTR drone_t s_drone[MAX_DRONES];
+static EXT_RAM_BSS_ATTR shot_t s_shot[MAX_SHOTS];
 static int s_n_drone, s_n_shot;
 static bool s_has_last;
 static int s_last_x;
 static bool s_tint;                            // the red hurt flash: every colour drawn under it is pre-blended
 
-static float s_off_cos[COLS], s_off_sin[COLS], s_zbuf[COLS];
-static lv_color_t s_row[GC_H], s_row_hurt[GC_H];   // the sky / floor gradients
-static int16_t s_run_end[COLS][MAX_RUNS];
-static uint8_t s_run_kind[COLS][MAX_RUNS];     // 0 sky / floor, 1 stone, 2 mortar
-static lv_color_t s_wall_c[COLS], s_mortar_c[COLS];
+static EXT_RAM_BSS_ATTR float s_off_cos[COLS], s_off_sin[COLS], s_zbuf[COLS];
+static EXT_RAM_BSS_ATTR lv_color_t s_row[GC_H], s_row_hurt[GC_H];   // the sky / floor gradients
+static EXT_RAM_BSS_ATTR int16_t s_run_end[COLS][MAX_RUNS];
+static EXT_RAM_BSS_ATTR uint8_t s_run_kind[COLS][MAX_RUNS];     // 0 sky / floor, 1 stone, 2 mortar
+static EXT_RAM_BSS_ATTR lv_color_t s_wall_c[COLS], s_mortar_c[COLS];
 
 static lv_obj_t *s_score_l, *s_clock_l, *s_lv_l, *s_title, *s_hint;
 static int s_shown_score, s_shown_clock, s_shown_lv, s_shown_red;
@@ -115,7 +116,7 @@ static void build(void)
     if (s_n > MAXN) s_n = MAXN;
     int n = s_n;
     memset(s_map, 1, sizeof s_map);
-    static uint8_t stack[MAXN * MAXN][2];      // depth-first carving from (1,1)
+    static EXT_RAM_BSS_ATTR uint8_t stack[MAXN * MAXN][2];      // depth-first carving from (1,1)
     int sp = 0;
     stack[sp][0] = 1; stack[sp][1] = 1; sp++;
     s_map[1][1] = 0;
@@ -141,7 +142,7 @@ static void build(void)
     s_map[n - 2][n - 2] = 2;
     s_px = 1.5f; s_py = 1.5f;
     s_pa = s_map[1][2] == 0 ? 0 : PI_F / 2;
-    static uint8_t free_c[MAXN * MAXN][2];
+    static EXT_RAM_BSS_ATTR uint8_t free_c[MAXN * MAXN][2];
     int nf = 0;
     for (int y = 1; y < n - 1; y++)
         for (int x = 1; x < n - 1; x++)
