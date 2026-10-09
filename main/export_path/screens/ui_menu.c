@@ -20,8 +20,9 @@
 
 #define MW 360
 #define MH 360
-#define ICON_R 48          // radius of the middle icon
-#define SLOT 108           // distance between honeycomb neighbours
+#define ICON_R 54          // radius of the middle icon
+#define SLOT 118           // distance between honeycomb neighbours
+#define GLYPH_R 48         // the symbols are drawn for this radius and scaled to the icon
 #define IDLE_MS 60000      // a minute without a touch on the menu pages -> back to the gauge
 #define STAY_MS 4000       // on a theme page this long -> it becomes the page shown at boot
 
@@ -110,8 +111,8 @@ static const menu_item_t ITEMS[] = {
     {"boot",  "BOOT ANIMATION", 0xFF8A00, glyph_boot,  open_boot},
 };
 #define ITEM_COUNT (int)(sizeof(ITEMS) / sizeof(ITEMS[0]))
-// honeycomb slots, the first in the middle
-static const int8_t SLOTS[7][2] = {{0, 0}, {-1, -2}, {1, -2}, {2, 0}, {1, 2}, {-1, 2}, {-2, 0}};
+// honeycomb slots, filled so any count looks balanced: middle, the four diagonals, then right and left
+static const int8_t SLOTS[7][2] = {{0, 0}, {-1, -2}, {1, -2}, {1, 2}, {-1, 2}, {2, 0}, {-2, 0}};
 
 // ---------- settings (NVS "rmc_ui") ----------
 static int s_order[ITEM_COUNT], s_order_n;   // visible items in order
@@ -286,7 +287,7 @@ static void draw(void)
         slot_pos(k, &x, &y, &r);
         const menu_item_t *it = &ITEMS[s_order[k]];
         disc(s_buf, x, y, r, it->color);
-        it->glyph(s_buf, (int)lroundf(x), (int)lroundf(y), r / ICON_R);
+        it->glyph(s_buf, (int)lroundf(x), (int)lroundf(y), r / GLYPH_R);
         float d = (x - MW / 2) * (x - MW / 2) + (y - MH / 2) * (y - MH / 2);
         if (d < best) { best = d; nearest = k; }
     }
