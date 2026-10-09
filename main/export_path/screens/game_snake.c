@@ -154,7 +154,7 @@ static void frame(float dt)
 
 static void input(gc_input_t in, lv_point_t at)
 {
-    if (in != GC_PRESS && in != GC_SWIPE_UP && in != GC_SWIPE_LEFT && in != GC_SWIPE_RIGHT) return;
+    if (in != GC_PRESS && in != GC_SWIPE_UP && in != GC_SWIPE_DOWN && in != GC_SWIPE_LEFT && in != GC_SWIPE_RIGHT) return;
     if (s_state != S_RUN) {
         if (in != GC_PRESS) return;
         if (s_state == S_OVER) reset();
@@ -166,7 +166,7 @@ static void input(gc_input_t in, lv_point_t at)
     if (in == GC_PRESS) {                      // the side of the head the finger is on
         int dx = at.x - (X0 + s_bx[0] * C + C / 2), dy = at.y - (Y0 + s_by[0] * C + C / 2);
         steer(abs(dx) > abs(dy) ? (dx < 0 ? 3 : 1) : (dy < 0 ? 0 : 2));
-    } else steer(in == GC_SWIPE_UP ? 0 : in == GC_SWIPE_RIGHT ? 1 : 3);
+    } else steer(in == GC_SWIPE_UP ? 0 : in == GC_SWIPE_RIGHT ? 1 : in == GC_SWIPE_DOWN ? 2 : 3);
 }
 
 static void icon(lv_color_t *b, int n)

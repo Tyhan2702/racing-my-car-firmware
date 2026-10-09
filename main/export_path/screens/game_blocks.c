@@ -248,7 +248,7 @@ static void input(gc_input_t in, lv_point_t at)
         else turn();
     } else if (in == GC_SWIPE_LEFT) move(-1);
     else if (in == GC_SWIPE_RIGHT) move(1);
-    else if (in == GC_SWIPE_UP) drop();
+    else if (in == GC_SWIPE_UP || in == GC_SWIPE_DOWN) drop();
 }
 
 static void icon(lv_color_t *b, int n)

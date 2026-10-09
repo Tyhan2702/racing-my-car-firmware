@@ -312,8 +312,9 @@ static void on_touch(lv_event_t *e)
         s_gestured = true;
         lv_point_t p = {0, 0};
         s_hold_us = 0;
-        if (dir == LV_DIR_BOTTOM) return;      // no swipe leaves a game (hold 5 s instead)
-        if (s_game->input) s_game->input(dir == LV_DIR_TOP ? GC_SWIPE_UP : dir == LV_DIR_LEFT ? GC_SWIPE_LEFT : GC_SWIPE_RIGHT, p);
+        // every swipe is the game's (no swipe leaves a game: hold 5 s instead)
+        if (s_game->input) s_game->input(dir == LV_DIR_TOP ? GC_SWIPE_UP : dir == LV_DIR_BOTTOM ? GC_SWIPE_DOWN :
+                                         dir == LV_DIR_LEFT ? GC_SWIPE_LEFT : GC_SWIPE_RIGHT, p);
         return;
     }
     if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) s_hold_us = 0;

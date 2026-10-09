@@ -339,8 +339,8 @@ static void input(gc_input_t in, lv_point_t at)
     }
     if (s_popping) return;
     if (in == GC_PRESS) { cell_at(at, &s_down_x, &s_down_y); s_has_down = true; return; }
-    if ((in == GC_SWIPE_UP || in == GC_SWIPE_LEFT || in == GC_SWIPE_RIGHT) && s_has_down && inside(s_down_x, s_down_y)) {
-        int d = in == GC_SWIPE_UP ? 0 : in == GC_SWIPE_RIGHT ? 1 : 3;
+    if ((in == GC_SWIPE_UP || in == GC_SWIPE_DOWN || in == GC_SWIPE_LEFT || in == GC_SWIPE_RIGHT) && s_has_down && inside(s_down_x, s_down_y)) {
+        int d = in == GC_SWIPE_UP ? 0 : in == GC_SWIPE_RIGHT ? 1 : in == GC_SWIPE_DOWN ? 2 : 3;
         try_swap(s_down_x, s_down_y, s_down_x + DX[d], s_down_y + DY[d]);
         s_has_down = false;
         return;

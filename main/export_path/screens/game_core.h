@@ -14,7 +14,7 @@
 // GC_PRESS: the moment a finger touches (timing games); GC_TAP: released without swiping (games that also use swipes);
 // GC_DRAG: the finger moved while pressed (paddles follow it), with its position; GC_RELEASE: the finger lifted
 // (always, swipe or not; only sent to games with wants_release, for hold / aim-and-release controls)
-typedef enum { GC_PRESS, GC_TAP, GC_SWIPE_UP, GC_SWIPE_LEFT, GC_SWIPE_RIGHT, GC_DRAG, GC_RELEASE } gc_input_t;
+typedef enum { GC_PRESS, GC_TAP, GC_SWIPE_UP, GC_SWIPE_LEFT, GC_SWIPE_RIGHT, GC_DRAG, GC_RELEASE, GC_SWIPE_DOWN } gc_input_t;
 
 typedef struct {
     const char *name;            // shown on the GAMES page, e.g. "NIGHT RUN"

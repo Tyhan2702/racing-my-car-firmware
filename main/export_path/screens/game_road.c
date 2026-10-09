@@ -214,6 +214,7 @@ static void input(gc_input_t in, lv_point_t at)
         float dx = at.x - (X0 + (s_px + 0.5f) * C), dy = at.y - (Y0 + (s_py + 0.5f) * C);
         step(fabsf(dx) > fabsf(dy) ? (dx < 0 ? 3 : 1) : (dy < 0 ? 0 : 2));
     } else if (in == GC_SWIPE_UP) step(0);
+    else if (in == GC_SWIPE_DOWN) step(2);
     else if (in == GC_SWIPE_LEFT) step(3);
     else if (in == GC_SWIPE_RIGHT) step(1);
 }

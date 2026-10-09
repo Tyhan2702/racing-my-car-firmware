@@ -269,6 +269,7 @@ static void input(gc_input_t in, lv_point_t at)
         int dx = at.x - GC_W / 2, dy = at.y - (Y0 + SZ / 2);
         slide(abs(dx) > abs(dy) ? (dx < 0 ? 3 : 1) : (dy < 0 ? 0 : 2));
     } else if (in == GC_SWIPE_UP) slide(0);
+    else if (in == GC_SWIPE_DOWN) slide(2);
     else if (in == GC_SWIPE_LEFT) slide(3);
     else if (in == GC_SWIPE_RIGHT) slide(1);
 }

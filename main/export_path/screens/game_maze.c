@@ -270,7 +270,7 @@ static void frame(float dt)
 
 static void input(gc_input_t in, lv_point_t at_pt)
 {
-    if (in != GC_PRESS && in != GC_SWIPE_UP && in != GC_SWIPE_LEFT && in != GC_SWIPE_RIGHT) return;
+    if (in != GC_PRESS && in != GC_SWIPE_UP && in != GC_SWIPE_DOWN && in != GC_SWIPE_LEFT && in != GC_SWIPE_RIGHT) return;
     if (s_state != M_RUN) {
         if (in != GC_PRESS) return;
         if (s_state == M_OVER) reset();
@@ -284,7 +284,7 @@ static void input(gc_input_t in, lv_point_t at_pt)
         at(&s_pac, &px, &py);
         float dx = at_pt.x - (X0 + (px + 0.5f) * C), dy = at_pt.y - (Y0 + (py + 0.5f) * C);
         s_want = fabsf(dx) > fabsf(dy) ? (dx < 0 ? 3 : 1) : (dy < 0 ? 0 : 2);
-    } else s_want = in == GC_SWIPE_UP ? 0 : in == GC_SWIPE_RIGHT ? 1 : 3;
+    } else s_want = in == GC_SWIPE_UP ? 0 : in == GC_SWIPE_RIGHT ? 1 : in == GC_SWIPE_DOWN ? 2 : 3;
 }
 
 static void icon(lv_color_t *b, int n)
