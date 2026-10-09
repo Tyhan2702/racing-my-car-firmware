@@ -9,6 +9,7 @@
 #include "../ui_ext.h"
 #include "ui_menu.h"
 #include "game_core.h"
+#include "clock_faces.h"
 #include "theme_engine/theme_interface.h"
 #include "app_obd_dsp/ota_wifi_server.h"
 #include "app_obd_dsp/boot_block_player.h"
@@ -20,10 +21,9 @@
 
 #define IDLE_MS 60000      // a minute without a touch on the menu pages -> back to the gauge
 #define STAY_MS 4000       // on a theme page this long -> it becomes the page shown at boot
-#define BTN 76             // button diameter
-#define COL 95             // distance between button columns
-#define ROW1 128           // button centre rows
-#define ROW2 244
+#define BTN 64             // button diameter
+#define COL 92             // distance between button columns
+static const int ROWS[] = {100, 196, 292};   // button centre rows (rows of three, a short row centred)
 #define C_IDLE 0x3A3A3C    // button ring, resting
 #define C_TEXT 0x8E8E93    // label, resting
 #define C_PICK 0xFFDD00    // the chosen button: ring, icon and label in RMC yellow
@@ -37,10 +37,11 @@ LV_IMG_DECLARE(imgMenu_obd);
 LV_IMG_DECLARE(imgMenu_ota);
 LV_IMG_DECLARE(imgMenu_info);
 LV_IMG_DECLARE(imgMenu_boot);
+LV_IMG_DECLARE(imgMenu_time);
 
 typedef struct {
     const char *key, *name;          // name: the label under the button
-    const lv_img_dsc_t *icon;        // 40x40 alpha icon (images/imgMenuIcons.c)
+    const lv_img_dsc_t *icon;        // 34x34 alpha icon (images/imgMenuIcons.c)
     void (*open)(void);
 } menu_item_t;
 
@@ -50,12 +51,14 @@ static void open_obd(void);
 static void open_ota(void);
 static void open_info(void);
 static void open_boot(void);
+static void open_time(void);
 
-// default order, by how often a driver needs them: connect the car, adjust the gauge, play when parked; then the
-// occasional ones, with the version last
+// default order, by how often a driver needs them: connect the car, adjust the gauge, the clock, play when parked;
+// then the occasional ones, with the version last
 static const menu_item_t ITEMS[] = {
     {"obd",      "OBD",      &imgMenu_obd,      open_obd},
     {"settings", "SETTINGS", &imgMenu_settings, open_settings},
+    {"time",     "TIME",     &imgMenu_time,     open_time},
     {"games",    "GAMES",    &imgMenu_games,    open_games},
     {"boot",     "BOOT",     &imgMenu_boot,     open_boot},
     {"ota",      "UPDATE",   &imgMenu_ota,      open_ota},
@@ -189,12 +192,18 @@ static void load_screen(lv_obj_t *scr, bool delete_current)
     lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, delete_current);
 }
 
+static lv_obj_t *s_from;   // the page the menu was opened from
+
 void ui_menu_go_home(void)
 {
     lv_obj_t *cur = lv_scr_act();
     // our own screens and the game screens free themselves when deleted; system pages are kept for later
     bool ours = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||
                 (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings);
+    if (ui_ScreenPageClock && s_from == ui_ScreenPageClock && cur != ui_ScreenPageClock) {   // opened from a clock face
+        load_screen(ui_ScreenPageClock, ours);
+        return;
+    }
     if (theme_page_list_count() > 0) {
         if (!ui_ScreenPageThemeGauge) ui_ScreenPageThemeGauge_screen_init();   // still there when the menu was opened from it
         load_screen(ui_ScreenPageThemeGauge, ours);
@@ -270,7 +279,7 @@ static void ui_ScreenPageMenu_screen_init(void)
     lv_img_set_src(logo, &imgRmcMarkSmall);
     lv_img_set_pivot(logo, 42, 15);
     lv_img_set_zoom(logo, 218);                      // 85 %
-    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 46);
+    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 22);
     lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_ext_click_area(logo, 12);
     lv_obj_add_event_cb(logo, on_logo, LV_EVENT_CLICKED, NULL);
@@ -278,8 +287,8 @@ static void ui_ScreenPageMenu_screen_init(void)
     s_btn_n = s_order_n < ITEM_COUNT ? s_order_n : ITEM_COUNT;
     if (s_last < 0 && s_btn_n) s_last = s_order[0];
     for (int b = 0; b < s_btn_n; b++) {
-        int row = b / 3, in_row = row ? s_btn_n - 3 : (s_btn_n < 3 ? s_btn_n : 3), col = b % 3;
-        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * COL), y = row ? ROW2 : ROW1;
+        int row = b / 3, left = s_btn_n - row * 3, in_row = left < 3 ? left : 3, col = b % 3;
+        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * COL), y = ROWS[row];
         int item = s_btn_item[b] = s_order[b];
         lv_obj_t *btn = s_btn[b] = lv_obj_create(scr);
         lv_obj_remove_style_all(btn);
@@ -302,7 +311,7 @@ static void ui_ScreenPageMenu_screen_init(void)
         lv_obj_set_style_text_font(l, &ui_font_FontTypoderSize16, 0);
         lv_obj_set_width(l, 120);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_pos(l, x - 60, y + BTN / 2 + 6);
+        lv_obj_set_pos(l, x - 60, y + BTN / 2 + 4);
     }
     highlight(s_last);
 }
@@ -310,6 +319,7 @@ static void ui_ScreenPageMenu_screen_init(void)
 void ui_menu_open(void)
 {
     if (ui_ScreenPageMenu) return;
+    s_from = lv_scr_act();
     ui_ScreenPageMenu_screen_init();
     // the gauge page stays, so closing the menu is instant; the boot animation preview and SETTINGS are freed
     lv_obj_t *cur = lv_scr_act();
@@ -324,6 +334,7 @@ static void leave_to(lv_obj_t **target, void (*init)(void))
     load_screen(*target, true);
 }
 
+static void open_time(void) { ui_clock_open_from_menu(); }   // keeps the gauge page: the clock screen is light
 static void open_games(void) { leave_to(&ui_ScreenPageGames, ui_ScreenPageGames_screen_init); }
 static void open_settings(void) { leave_to(&ui_ScreenPageMenuSettings, ui_ScreenPageMenuSettings_screen_init); }
 static void open_obd(void)   { leave_to(&ui_ScreenPageBLEScan, ui_ScreenPageBLEScan_screen_init); }

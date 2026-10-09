@@ -22,6 +22,7 @@
 #include "app_obd_dsp/vehicle_profiles.h"
 #include "app_obd_dsp/boot_block_player.h"
 #include "screens/ui_menu.h"
+#include "screens/clock_faces.h"
 #include "app_obd_dsp/boot_media_mount.h"
 #include "theme_engine/theme_interface.h"
 #include "esp_timer.h"
@@ -253,6 +254,13 @@ static void boot_enter_default_page(void)
 
     // If a custom theme with pages is loaded, boot directly into the first theme page
     uint8_t page_count = theme_page_list_count();
+    if (ui_clock_boot()) {                     // the driver last settled on a clock face
+        ui_ScreenPageLogo = NULL;
+        imageLogo = NULL;
+        s_boot_done = true;
+        if(s_sweep_pending) { s_sweep_pending = false; s_sweep_step = 1; }
+        return;
+    }
     if (page_count > 0) {
         ui_theme_gauge_page_index = ui_menu_saved_theme_index();   // the theme page the driver last settled on
         if (ui_ScreenPageThemeGauge) {
