@@ -97,7 +97,15 @@ static void glyph_boot(lv_color_t *b, int cx, int cy, float s)         // play t
     }
 }
 
+static void glyph_settings(lv_color_t *b, int cx, int cy, float s)     // a gear
+{
+    for (int k = 0; k < 8; k++) gc_ring_in(b, MW, MH, cx, cy, (int)(17 * s), (int)(28 * s), k * 45.0f, k * 45.0f + 24.0f, lv_color_hex(0xFFFFFF));
+    disc(b, cx, cy, 21 * s, 0xFFFFFF);
+    disc(b, cx, cy, 9 * s, 0x636366);
+}
+
 static void open_games(void);
+static void open_settings(void);
 static void open_obd(void);
 static void open_ota(void);
 static void open_info(void);
@@ -105,6 +113,7 @@ static void open_boot(void);
 
 static const menu_item_t ITEMS[] = {
     {"games", "GAMES",          0x8B5CF6, glyph_games, open_games},
+    {"settings", "SETTINGS",    0x636366, glyph_settings, open_settings},
     {"obd",   "OBD DEVICE",     0x2F9BFF, glyph_obd,   open_obd},
     {"ota",   "WIFI UPDATE",    0x22C55E, glyph_ota,   open_ota},
     {"info",  "VERSION",        0x8E8E93, glyph_info,  open_info},
@@ -245,7 +254,7 @@ void ui_menu_go_home(void)
     lv_obj_t *cur = lv_scr_act();
     // our own screens and the game screens free themselves when deleted; system pages are kept for later
     bool ours = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||
-                (s_boot_scr && cur == s_boot_scr);
+                (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings);
     if (theme_page_list_count() > 0) {
         if (!ui_ScreenPageThemeGauge) ui_ScreenPageThemeGauge_screen_init();   // still there when the menu was opened from it
         load_screen(ui_ScreenPageThemeGauge, ours);
@@ -389,8 +398,9 @@ void ui_menu_open(void)
     if (ui_ScreenPageMenu) return;
     ui_ScreenPageMenu_screen_init();
     if (!s_buf) { lv_obj_del(ui_ScreenPageMenu); gc_toast("NOT ENOUGH MEMORY"); return; }
-    // the gauge page stays, so closing the menu is instant; the boot animation preview is freed
-    load_screen(ui_ScreenPageMenu, s_boot_scr && lv_scr_act() == s_boot_scr);
+    // the gauge page stays, so closing the menu is instant; the boot animation preview and SETTINGS are freed
+    lv_obj_t *cur = lv_scr_act();
+    load_screen(ui_ScreenPageMenu, (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings));
 }
 
 // leaving the menu for another page: the theme page is rebuilt on the way back (frees its memory meanwhile)
@@ -402,6 +412,7 @@ static void leave_to(lv_obj_t **target, void (*init)(void))
 }
 
 static void open_games(void) { leave_to(&ui_ScreenPageGames, ui_ScreenPageGames_screen_init); }
+static void open_settings(void) { leave_to(&ui_ScreenPageMenuSettings, ui_ScreenPageMenuSettings_screen_init); }
 static void open_obd(void)   { leave_to(&ui_ScreenPageBLEScan, ui_ScreenPageBLEScan_screen_init); }
 static void open_ota(void)   { leave_to(&ui_ScreenPageOTAMode, ui_ScreenPageOTAMode_screen_init); }
 static void open_info(void)  { leave_to(&ui_ScreenPageEasterEgg, ui_ScreenPageEasterEgg_screen_init); }
@@ -466,7 +477,7 @@ static void idle_cb(lv_timer_t *t)
     if (ui_ScreenPageOTAMode && cur == ui_ScreenPageOTAMode) return;   // never in the middle of an update
     bool menu_page = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||
                      (ui_ScreenPageBLEScan && cur == ui_ScreenPageBLEScan) || (ui_ScreenPageEasterEgg && cur == ui_ScreenPageEasterEgg) ||
-                     (s_boot_scr && cur == s_boot_scr);
+                     (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings);
     if (!menu_page || !cur) return;
     if (s_boot_scr && cur == s_boot_scr) boot_stop();
     lv_disp_trig_activity(NULL);     // one return per idle minute

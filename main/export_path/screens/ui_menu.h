@@ -9,6 +9,8 @@
 #include "lvgl.h"
 
 extern lv_obj_t *ui_ScreenPageMenu;
+extern lv_obj_t *ui_ScreenPageMenuSettings;   // SETTINGS (ui_menu_settings.c)
+void ui_ScreenPageMenuSettings_screen_init(void);
 
 void ui_menu_init(void);              // once, after the UI is built: starts the idle check
 void ui_menu_open(void);              // swipe up on a gauge page
