@@ -111,7 +111,8 @@ static int wall(float x, float y) { return cell((int)floorf(clampf(x, -2, MAXN +
 
 static void build(void)
 {
-    s_n = 9 + 2 * (s_level < 4 ? s_level : 4);
+    s_n = 9 + 2 * (s_level < 4 ? (s_level > 0 ? s_level : 0) : 4);   // 9..17 = MAXN
+    if (s_n > MAXN) s_n = MAXN;
     int n = s_n;
     memset(s_map, 1, sizeof s_map);
     static uint8_t stack[MAXN * MAXN][2];      // depth-first carving from (1,1)
