@@ -6,6 +6,7 @@
 //  - SLAVE: scan and pair with the triple-gauge master ("SkyGauge-XXYY" broadcast), see gauge_pair_ble_client.c
 
 #include "../ui.h"
+#include "ui_menu.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
@@ -168,7 +169,7 @@ static void on_device_selected(lv_event_t *e) {
     if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
 
     elm327_ble_connect_by_addr(mac, name);
-    _ui_screen_change(&ui_ScreenPageTemp, LV_SCR_LOAD_ANIM_FADE_ON, 300, 500, &ui_ScreenPageTemp_screen_init);
+    ui_menu_go_home_later(800);   // back to the theme (never the firmware's own pages)
 }
 
 // BLE pairing result callback (called in the BT task context, lvgl_lock required)
@@ -189,7 +190,7 @@ static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]) {
         if (s_label_saved_hdr) lv_obj_clear_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
 
         lv_label_set_text(s_label_status, "Paired!");
-        _ui_screen_change(&ui_ScreenPageTemp, LV_SCR_LOAD_ANIM_FADE_ON, 300, 500, &ui_ScreenPageTemp_screen_init);
+        ui_menu_go_home_later(800);
     } else {
         ESP_LOGW(TAG_BLE_UI, "Pairing failed, rescanning");
         lv_label_set_text(s_label_status, "Pair failed, retrying...");

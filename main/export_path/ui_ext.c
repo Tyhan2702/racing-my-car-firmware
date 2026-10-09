@@ -283,21 +283,8 @@ static void boot_enter_default_page(void)
         return;
     }
 
-    lv_obj_t **target_scr = NULL;
-    void (*target_init)(void) = NULL;
-    // Default page: 0=Temp,1=Info,2=Chart,3=Needle,4=Gear,5=Rpm,6=Speed
-    switch(pg_cfg->default_page) {
-        case 0: target_scr = &ui_ScreenPageTemp;  target_init = ui_ScreenPageTemp_screen_init;  break;
-        case 1: target_scr = &ui_ScreenPageInfo;  target_init = ui_ScreenPageInfo_screen_init;  break;
-        case 2: target_scr = &ui_ScreenPageOilPressure; target_init = ui_ScreenPageOilPressure_screen_init;  break;
-        case 3: target_scr = &ui_ScreenPageNeedle; target_init = ui_ScreenPageNeedle_screen_init;  break;
-        case 4: target_scr = &ui_ScreenPageGear;  target_init = ui_ScreenPageGear_screen_init;  break;
-        case 5: target_scr = &ui_ScreenPageRpm;   target_init = ui_ScreenPageRpm_screen_init;   break;
-        case 6: target_scr = &ui_ScreenPageSpeed; target_init = ui_ScreenPageSpeed_screen_init; break;
-        default: target_scr = &ui_ScreenPageTemp; target_init = ui_ScreenPageTemp_screen_init;  break;
-    }
-    if(*target_scr == NULL) target_init();
-    lv_scr_load_anim(*target_scr, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
+    // no theme: the "no theme" page (ui_menu.c), never the firmware's own gauge pages (default_page is not used)
+    lv_scr_load_anim(ui_menu_home_screen(), LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
     ui_ScreenPageLogo = NULL;
     imageLogo = NULL;
     s_boot_done = true;

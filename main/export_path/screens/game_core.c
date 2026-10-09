@@ -351,13 +351,7 @@ static void on_page(lv_event_t *e)
     if (code == LV_EVENT_SCREEN_LOAD_START) { show_pick(); return; }   // installed games and best scores may have changed
     if (code != LV_EVENT_GESTURE) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-    if (dir == LV_DIR_LEFT) {
-        lv_indev_wait_release(lv_indev_get_act());
-        _ui_screen_change(&ui_ScreenPageGear, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageGear_screen_init);
-    } else if (dir == LV_DIR_RIGHT) {
-        lv_indev_wait_release(lv_indev_get_act());
-        _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
-    } else if (dir == LV_DIR_BOTTOM) {           // swipe down: the app menu
+    if (dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT || dir == LV_DIR_BOTTOM) {   // opened from the menu: back to it
         lv_indev_wait_release(lv_indev_get_act());
         ui_menu_open();
     }

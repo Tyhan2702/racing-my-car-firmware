@@ -14,7 +14,9 @@ void ui_ScreenPageMenuSettings_screen_init(void);
 
 void ui_menu_init(void);              // once, after the UI is built: starts the idle check
 void ui_menu_open(void);              // swipe up on a gauge page
-void ui_menu_go_home(void);           // back to the remembered theme page (or the Gear page without a theme)
+void ui_menu_go_home(void);           // back to the remembered theme page (or the "no theme" page)
+void ui_menu_go_home_later(uint32_t ms);
+lv_obj_t *ui_menu_home_screen(void);  // that page, built if needed (boot)
 void ui_menu_theme_shown(void);       // a theme page was just built: remember it once the driver stays on it
 uint8_t ui_menu_saved_theme_index(void);   // boot: index of the remembered theme page (0 if none / gone)
 

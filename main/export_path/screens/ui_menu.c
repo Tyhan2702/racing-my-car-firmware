@@ -1,6 +1,8 @@
 // App menu (see ui_menu.h): the RMC mark on top and round outlined buttons with their names, like a car's centre
 // screen. A tap opens a button, a tap on the mark or a swipe down goes back to the gauge. The platform shows the
-// same menu (web/gauge-menu.js).
+// same menu (web/gauge-menu.js). The menu is also a page of the left/right loop: theme pages ... MENU ... again.
+// Without a theme the gauge shows the "no theme" page here instead of the firmware's own gauge pages, which come
+// from the upstream project and are not Racing My Car's.
 
 #include "esp_attr.h"
 #include <math.h>
@@ -190,19 +192,73 @@ static void load_screen(lv_obj_t *scr, bool delete_current)
     lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, delete_current);
 }
 
+// ---------- no theme installed ----------
+static lv_obj_t *s_none_scr;
+static void on_none(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_DELETE) { s_none_scr = NULL; return; }
+    if (code == LV_EVENT_GESTURE) lv_indev_wait_release(lv_indev_get_act());
+    if (code == LV_EVENT_GESTURE || code == LV_EVENT_CLICKED) ui_menu_open();   // any touch: the menu
+}
+static void none_screen_init(void)
+{
+    lv_obj_t *scr = s_none_scr = lv_obj_create(NULL);
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
+    lv_obj_add_event_cb(scr, on_none, LV_EVENT_ALL, NULL);
+    lv_obj_t *logo = lv_img_create(scr);
+    lv_img_set_src(logo, &imgRmcMarkSmall);
+    lv_obj_align(logo, LV_ALIGN_CENTER, 0, -70);
+    lv_obj_t *t = lv_label_create(scr);
+    lv_label_set_text(t, "NO THEME YET");
+    lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize20, 0);
+    lv_obj_set_style_text_color(t, lv_color_hex(C_PICK), 0);
+    lv_obj_align(t, LV_ALIGN_CENTER, 0, -18);
+    lv_obj_t *h = lv_label_create(scr);
+    lv_label_set_text(h, "OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE FOR THE MENU");
+    lv_obj_set_style_text_font(h, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(h, lv_color_hex(0x9A9A9A), 0);
+    lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(h, LV_ALIGN_CENTER, 0, 48);
+}
+
+lv_obj_t *ui_menu_home_screen(void)
+{
+    if (theme_page_list_count() > 0) {
+        if (!ui_ScreenPageThemeGauge) ui_ScreenPageThemeGauge_screen_init();
+        return ui_ScreenPageThemeGauge;
+    }
+    if (!s_none_scr) none_screen_init();
+    return s_none_scr;
+}
+
+static void go_home_cb(lv_timer_t *t) { (void)t; ui_menu_go_home(); }
+void ui_menu_go_home_later(uint32_t ms)
+{
+    lv_timer_t *t = lv_timer_create(go_home_cb, ms, NULL);
+    lv_timer_set_repeat_count(t, 1);
+}
+
 void ui_menu_go_home(void)
 {
     lv_obj_t *cur = lv_scr_act();
     // our own screens and the game screens free themselves when deleted; system pages are kept for later
     bool ours = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||
                 (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings);
-    if (theme_page_list_count() > 0) {
-        if (!ui_ScreenPageThemeGauge) ui_ScreenPageThemeGauge_screen_init();   // still there when the menu was opened from it
-        load_screen(ui_ScreenPageThemeGauge, ours);
-    } else {
-        if (!ui_ScreenPageGear) ui_ScreenPageGear_screen_init();
-        load_screen(ui_ScreenPageGear, ours);
-    }
+    lv_obj_t *home = ui_menu_home_screen();   // the theme page is still there when the menu was opened from it
+    if (home != cur) load_screen(home, ours);
+}
+
+// the menu in the left/right loop: swipe left to the first theme page, right to the last one
+static void to_theme_page(bool first)
+{
+    uint8_t n = theme_page_list_count();
+    if (!n) { ui_menu_go_home(); return; }
+    ui_theme_gauge_page_index = first ? 0 : n - 1;
+    if (ui_ScreenPageThemeGauge) { lv_obj_del(ui_ScreenPageThemeGauge); ui_ScreenPageThemeGauge = NULL; }
+    ui_ScreenPageThemeGauge_screen_init();
+    load_screen(ui_ScreenPageThemeGauge, true);
 }
 
 // ---------- the menu screen ----------
@@ -251,10 +307,13 @@ static void on_menu(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_DELETE) { ui_ScreenPageMenu = NULL; return; }
-    if (code == LV_EVENT_GESTURE && !s_closing && lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_BOTTOM) {
+    if (code == LV_EVENT_GESTURE && !s_closing) {
+        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+        if (dir == LV_DIR_TOP) return;
         lv_indev_wait_release(lv_indev_get_act());
         s_closing = true;
-        ui_menu_go_home();
+        if (dir == LV_DIR_BOTTOM) ui_menu_go_home();
+        else to_theme_page(dir == LV_DIR_LEFT);
     }
 }
 

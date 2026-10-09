@@ -968,8 +968,8 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
                 _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             } else {
-                // Past the last theme page → go to Info page (version/settings)
-                _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+                // past the last theme page: the menu (part of the loop)
+                ui_menu_open();
             }
         }
         else if(dir == LV_DIR_TOP) {
@@ -985,8 +985,8 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
                 _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             } else {
-                // Before the first theme page → go to Info page (creating a loop)
-                _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+                // before the first theme page: the menu (part of the loop)
+                ui_menu_open();
             }
         }
     }
@@ -1229,26 +1229,10 @@ void ui_event_easter_egg_background(lv_event_t * e)
     }
     if(event_code == LV_EVENT_GESTURE) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if(dir == LV_DIR_LEFT) {
-            // back to the GAMES page (Gear -> GAMES -> Info)
+        if(dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT) {
+            // opened from the menu: back to it
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageGames, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageGames_screen_init);
-        }
-        else if(dir == LV_DIR_RIGHT) {
-            lv_indev_wait_release(lv_indev_get_act());
-            // If a custom theme with pages is loaded, swipe left/right returns to theme pages
-            if (theme_page_list_count() > 0) {
-                // Right swipe goes to last theme page, left swipe goes to first
-                ui_theme_gauge_page_index = (dir == LV_DIR_RIGHT) ? (theme_page_list_count() - 1) : 0;
-                if (ui_ScreenPageThemeGauge) {
-                    lv_obj_del(ui_ScreenPageThemeGauge);
-                    ui_ScreenPageThemeGauge = NULL;
-                }
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
-            } else {
-                // No theme loaded, return to Gear page
-                _ui_screen_change(&ui_ScreenPageGear, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageGear_screen_init);
-            }
+            ui_menu_open();
         }
         else if(dir == LV_DIR_TOP) {
             // swipe up → BLE scan page
@@ -1333,8 +1317,10 @@ void ui_init(void)
         }
     }
 
-    if (!has_custom_theme) {
-        // No custom theme - create built-in gauge pages
+    (void)has_custom_theme;
+    if (false) {
+        // the firmware's own gauge pages are never shown any more (the "no theme" page replaces them, ui_menu.c);
+        // they are built only if something opens them (showroom)
         ui_ScreenPageGear_screen_init();
         ui_ScreenPageRpm_screen_init();
         ui_ScreenPageSpeed_screen_init();
@@ -1386,7 +1372,7 @@ void ui_event_obd_prot_background(lv_event_t * e)
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         if(dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageTemp, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageTemp_screen_init);
+            ui_menu_go_home();
         }
     }else if(code == LV_EVENT_LONG_PRESSED){
         usSaveProtTimeCnt = 0;
