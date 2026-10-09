@@ -8,6 +8,7 @@
 #include <string.h>
 #include "../ui.h"
 #include "game_core.h"
+#include "ui_menu.h"
 #include "esp_heap_caps.h"
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -355,6 +356,9 @@ static void on_page(lv_event_t *e)
     } else if (dir == LV_DIR_RIGHT) {
         lv_indev_wait_release(lv_indev_get_act());
         _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+    } else if (dir == LV_DIR_BOTTOM) {           // swipe down: the app menu
+        lv_indev_wait_release(lv_indev_get_act());
+        ui_menu_open();
     }
 }
 

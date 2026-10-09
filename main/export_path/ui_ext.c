@@ -21,6 +21,7 @@
 #include "app_obd_dsp/obd_data_cache.h"
 #include "app_obd_dsp/vehicle_profiles.h"
 #include "app_obd_dsp/boot_block_player.h"
+#include "screens/ui_menu.h"
 #include "app_obd_dsp/boot_media_mount.h"
 #include "theme_engine/theme_interface.h"
 #include "esp_timer.h"
@@ -253,7 +254,7 @@ static void boot_enter_default_page(void)
     // If a custom theme with pages is loaded, boot directly into the first theme page
     uint8_t page_count = theme_page_list_count();
     if (page_count > 0) {
-        ui_theme_gauge_page_index = 0;
+        ui_theme_gauge_page_index = ui_menu_saved_theme_index();   // the theme page the driver last settled on
         if (ui_ScreenPageThemeGauge) {
             lv_obj_del(ui_ScreenPageThemeGauge);
             ui_ScreenPageThemeGauge = NULL;

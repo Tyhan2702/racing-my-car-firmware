@@ -4,6 +4,7 @@
 // Project name: OBD_PRJ
 // The UI theme is named PINK_CAT (pink cat): main color pink, secondary color purple
 #include "ui.h"
+#include "screens/ui_menu.h"
 #include "ui_helpers.h"
 #include "ui_ext.h"
 #include "ui_disp_item.h"
@@ -936,6 +937,11 @@ void ui_event_gear_background(lv_event_t * e)
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageRpm, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageRpm_screen_init);
         }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c)
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
+        }
         else if(dir == LV_DIR_BOTTOM && theme_has_page("main_gauge")) {
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
@@ -965,6 +971,11 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 // Past the last theme page → go to Info page (version/settings)
                 _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
             }
+        }
+        else if(dir == LV_DIR_TOP) {
+            // swipe up → the app menu (screens/ui_menu.c)
+            lv_indev_wait_release(lv_indev_get_act());
+            ui_menu_open();
         }
         else if(dir == LV_DIR_RIGHT) {
             lv_indev_wait_release(lv_indev_get_act());
@@ -1339,6 +1350,7 @@ void ui_init(void)
     lv_timer_create(my_timerMain,
                     ui_refresh_period_ms_for_screen(lv_scr_act(), false, false, false),
                     NULL);
+    ui_menu_init();   // a minute idle on the menu pages -> back to the gauge
 }
 
 /* OBD protocol page events */

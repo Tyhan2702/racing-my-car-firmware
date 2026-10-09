@@ -7,6 +7,7 @@
 
 #include "../ui.h"
 #include "theme_engine/theme_interface.h"
+#include "ui_menu.h"
 
 void ui_ScreenPageThemeGauge_screen_init(void)
 {
@@ -25,4 +26,5 @@ void ui_ScreenPageThemeGauge_screen_init(void)
     lv_obj_add_flag(ui_ScreenPageThemeGauge, LV_OBJ_FLAG_CLICKABLE);
     ui_theme_page_touch_through(ui_ScreenPageThemeGauge);
     lv_obj_add_event_cb(ui_ScreenPageThemeGauge, ui_event_theme_gauge_long_press, LV_EVENT_LONG_PRESSED, NULL);
+    ui_menu_theme_shown();   // staying on this page makes it the one shown at boot
 }
