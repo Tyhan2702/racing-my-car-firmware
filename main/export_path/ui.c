@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "screens/ui_menu.h"
 #include "screens/clock_faces.h"
+#include "app_obd_dsp/park_sleep.h"
 #include "ui_helpers.h"
 #include "ui_ext.h"
 #include "ui_disp_item.h"
@@ -841,7 +842,7 @@ void my_timerMain(lv_timer_t * timer)
 
 #if EXAMPLE_PIN_NUM_BK_LIGHT >= 0
         //wait 500ms before turning on the backlight, so it isn't enabled before init completes; runs once
-        if(ucOnlyOnce == 0)
+        if(ucOnlyOnce == 0 && !park_silent())   // a parked timer wake keeps the screen dark (park_sleep.c)
         {
             ulOpenLightTimeCnt++;
             if(ulOpenLightTimeCnt > 400 / 200)
@@ -1277,6 +1278,8 @@ void ui_ota_mode_refresh(void)
 
 ///////////////////// SCREENS ////////////////////
 
+static void park_timer(lv_timer_t *t) { (void)t; park_tick(); }
+
 void ui_init(void)
 {
     // OPTIMIZATION: Logo is already created and displayed by app_main.c before this function
@@ -1357,6 +1360,7 @@ void ui_init(void)
                     ui_refresh_period_ms_for_screen(lv_scr_act(), false, false, false),
                     NULL);
     ui_menu_init();   // a minute idle on the menu pages -> back to the gauge
+    lv_timer_create(park_timer, 1000, NULL);   // parked sleep (only when switched on in SETTINGS)
 }
 
 /* OBD protocol page events */
