@@ -7,6 +7,7 @@
 
 #include "../ui.h"
 #include "ui_menu.h"
+#include "ui_rmc_style.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
@@ -41,6 +42,24 @@ static void on_device_selected(lv_event_t *e);
 static void on_saved_device_delete(lv_event_t *e);
 static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]);
 
+// A found device: a dark rounded row like the SETTINGS cards, outlined in RMC yellow while pressed
+static void style_item(lv_obj_t *btn)
+{
+    lv_obj_set_height(btn, 46);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(RMC_CARD), 0);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn, 16, 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
+    lv_obj_set_style_border_width(btn, 2, LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(btn, lv_color_hex(RMC_YELLOW), LV_STATE_PRESSED);
+    lv_obj_set_style_border_side(btn, LV_BORDER_SIDE_FULL, LV_STATE_PRESSED);
+    lv_obj_set_style_pad_hor(btn, 16, 0);
+    lv_obj_set_style_text_color(btn, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(btn, &ui_font_FontTypoderSize16, 0);
+    lv_obj_t *l = lv_obj_get_child(btn, 0);
+    if (l) lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+}
+
 // Mutex for LVGL (defined in main)
 extern SemaphoreHandle_t lvgl_mux;
 static inline bool lvgl_lock_ui(int timeout_ms) {
@@ -72,16 +91,13 @@ static void scan_result_cb(const ble_scan_result_t *dev, int total_count) {
 
         // Add new device button
         lv_obj_t *btn = lv_list_add_btn(s_list, NULL, dev->name);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(btn, 255, LV_PART_MAIN);
-        lv_obj_set_style_text_color(btn, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(btn, &ui_font_FontTypoderSize20, LV_PART_MAIN);
+        style_item(btn);
         lv_obj_add_event_cb(btn, on_device_selected, LV_EVENT_CLICKED, NULL);
 
         memcpy(s_obd_macs[s_obd_mac_count], dev->addr, 6);
         s_obd_mac_count++;
 
-        lv_label_set_text_fmt(s_label_status, "Found %d devices", total_count);
+        lv_label_set_text_fmt(s_label_status, "FOUND %d", total_count);
         lvgl_unlock_ui();
     }
 }
@@ -106,16 +122,13 @@ static void scan_result_cb_gauge(const gauge_pair_scan_result_t *dev, int total_
         }
 
         lv_obj_t *btn = lv_list_add_btn(s_list, NULL, dev->name);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(btn, 255, LV_PART_MAIN);
-        lv_obj_set_style_text_color(btn, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(btn, &ui_font_FontTypoderSize20, LV_PART_MAIN);
+        style_item(btn);
         lv_obj_add_event_cb(btn, on_device_selected, LV_EVENT_CLICKED, NULL);
 
         memcpy(s_gauge_macs[s_gauge_mac_count], dev->addr, 6);
         s_gauge_mac_count++;
 
-        lv_label_set_text_fmt(s_label_status, "Found %d devices", total_count);
+        lv_label_set_text_fmt(s_label_status, "FOUND %d", total_count);
         lvgl_unlock_ui();
     }
 }
@@ -138,7 +151,7 @@ static void on_device_selected(lv_event_t *e) {
         gauge_pair_ble_scan_stop();
         s_scanning = false;
 
-        lv_label_set_text(s_label_status, "Pairing...");
+        lv_label_set_text(s_label_status, "PAIRING...");
         if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
         gauge_pair_ble_connect(mac, name, on_pair_result);
         return;
@@ -223,7 +236,7 @@ static void on_saved_device_delete(lv_event_t *e) {
 
     if (s_saved_panel)    lv_obj_add_flag(s_saved_panel,    LV_OBJ_FLAG_HIDDEN);
     if (s_label_saved_hdr) lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
-    if (s_label_status)   lv_label_set_text(s_label_status, "Saved device removed");
+    if (s_label_status)   lv_label_set_text(s_label_status, "SAVED DEVICE REMOVED");
 
     s_scanning = false;   // the native scan window expiry does not reset via callback; reset before forcing a rescan
     start_scan();         // list nearby devices again so a new one can be picked straight away
@@ -238,7 +251,7 @@ static void start_scan(void) {
     s_scan_started_ms = lv_tick_get();
 
     if (s_list) lv_obj_clean(s_list);
-    if (s_label_status) lv_label_set_text(s_label_status, "Scanning...");
+    if (s_label_status) lv_label_set_text(s_label_status, "SCANNING...");
     if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
 
     if (s_slave_mode) {
@@ -267,12 +280,12 @@ static void page_tick(lv_timer_t *t)
     (void)t;
     if (lv_scr_act() != ui_ScreenPageBLEScan) return;
     if (!s_slave_mode && s_label_saved_hdr && nvs_cfg_get()->ble_device_name[0] != '\0')
-        lv_label_set_text(s_label_saved_hdr, elm327_ble_is_connected() ? "SAVED DEVICE  -  CONNECTED" : "SAVED DEVICE  -  CONNECTING...");
+        { bool on = elm327_ble_is_connected(); lv_label_set_text(s_label_saved_hdr, on ? "SAVED - CONNECTED" : "SAVED - CONNECTING..."); lv_obj_set_style_text_color(s_label_saved_hdr, lv_color_hex(on ? RMC_GREEN : RMC_DIM), 0); }
     if (s_scanning && lv_tick_elaps(s_scan_started_ms) > 15500) {
         s_scanning = false;
         if (!s_slave_mode) elm327_ble_scan_only_stop();
         if (s_spinner) lv_obj_add_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
-        if (s_label_status) lv_label_set_text(s_label_status, "Tap NEARBY to scan again");
+        if (s_label_status) lv_label_set_text(s_label_status, "TAP SCAN TO LOOK AGAIN");
     }
 }
 
@@ -302,40 +315,18 @@ void ui_ScreenPageBLEScan_screen_init(void)
 {
     s_slave_mode = (nvs_cfg_get()->device_role == ESPNOW_ROLE_SLAVE);
 
-    ui_ScreenPageBLEScan = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_ScreenPageBLEScan, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_ScreenPageBLEScan, 360, LV_PART_MAIN | LV_STATE_DEFAULT);
-    ui_helpers_style_screen_bg(ui_ScreenPageBLEScan);
-    lv_obj_set_style_bg_opa(ui_ScreenPageBLEScan, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(ui_ScreenPageBLEScan, 0, LV_PART_MAIN);
+    // Racing My Car look (ui_rmc_style.h): title, the saved device in a card, then the devices nearby
+    lv_obj_t *scr = ui_ScreenPageBLEScan = lv_obj_create(NULL);
+    rmc_screen(scr);
+    rmc_title(scr, s_slave_mode ? "FIND MASTER" : "OBD DEVICE", 36);
 
-    // White border ring
-    lv_obj_t *spinner_ring = ui_helpers_create_ring(ui_ScreenPageBLEScan, 10);
+    s_label_status = lv_label_create(scr);
+    lv_label_set_text(s_label_status, "SCANNING...");
+    lv_obj_set_style_text_font(s_label_status, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(s_label_status, lv_color_hex(RMC_DIM), 0);
+    lv_obj_align(s_label_status, LV_ALIGN_TOP_MID, 0, 66);
 
-    // Title
-    lv_obj_t *label_title = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(label_title, s_slave_mode ? "FIND MASTER" : "OBD DEVICE");
-    lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize20, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 30);
-
-    // Scanning spinner (animated)
-    s_spinner = lv_spinner_create(ui_ScreenPageBLEScan, 1000, 60);
-    lv_obj_set_size(s_spinner, 24, 24);
-    lv_obj_align(s_spinner, LV_ALIGN_TOP_MID, 72, 20);
-    lv_obj_set_style_arc_color(s_spinner, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(s_spinner, 3, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(s_spinner, lv_color_hex(0x333333), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(s_spinner, 3, LV_PART_MAIN);
-
-    // Status label
-    s_label_status = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(s_label_status, "Scanning...");
-    lv_obj_set_style_text_font(s_label_status, &ui_font_FontTypoderSize16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(s_label_status, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
-    lv_obj_align(s_label_status, LV_ALIGN_TOP_MID, 0, 50);
-
-    // ==== SAVED DEVICE SECTION ====
+    // ==== SAVED DEVICE ====
     const nvs_user_cfg_t *saved_cfg = nvs_cfg_get();
     bool has_saved;
     if (s_slave_mode) {
@@ -344,90 +335,75 @@ void ui_ScreenPageBLEScan_screen_init(void)
     } else {
         has_saved = (saved_cfg->ble_device_name[0] != '\0');
     }
-
-    s_label_saved_hdr = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(s_label_saved_hdr, "SAVED DEVICE");
-    lv_obj_set_style_text_font(s_label_saved_hdr, &ui_font_FontTypoderSize16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(s_label_saved_hdr, lv_color_hex(0x888888), LV_PART_MAIN);
-    lv_obj_align(s_label_saved_hdr, LV_ALIGN_TOP_MID, 0, 72);
-    if (!has_saved) lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
-
-    // Saved device row: name + delete button
-    s_saved_panel = lv_obj_create(ui_ScreenPageBLEScan);
-    lv_obj_remove_style_all(s_saved_panel);
-    lv_obj_set_size(s_saved_panel, 264, 32);
-    lv_obj_align(s_saved_panel, LV_ALIGN_TOP_MID, 0, 90);
-    lv_obj_set_style_bg_color(s_saved_panel, lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(s_saved_panel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(s_saved_panel, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(s_saved_panel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_clear_flag(s_saved_panel, LV_OBJ_FLAG_SCROLLABLE);
-    if (!has_saved) lv_obj_add_flag(s_saved_panel, LV_OBJ_FLAG_HIDDEN);
-
-    // Device name inside panel
+    s_saved_panel = rmc_card(scr, RMC_CARD_W, 62);
+    lv_obj_align(s_saved_panel, LV_ALIGN_TOP_MID, 0, 92);
+    s_label_saved_hdr = lv_label_create(s_saved_panel);
+    lv_label_set_text(s_label_saved_hdr, "SAVED");
+    lv_obj_set_style_text_font(s_label_saved_hdr, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(s_label_saved_hdr, lv_color_hex(RMC_DIM), 0);
+    lv_obj_align(s_label_saved_hdr, LV_ALIGN_TOP_LEFT, 0, 8);
     s_saved_name_lbl = lv_label_create(s_saved_panel);
     lv_label_set_text(s_saved_name_lbl, has_saved ? saved_cfg->ble_device_name : "");
-    lv_obj_set_style_text_font(s_saved_name_lbl, &ui_font_FontTypoderSize20, LV_PART_MAIN);
-    lv_obj_set_style_text_color(s_saved_name_lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_align(s_saved_name_lbl, LV_ALIGN_LEFT_MID, 4, 0);
-
-    // Delete button inside panel
-    lv_obj_t *del_btn = lv_btn_create(s_saved_panel);
-    lv_obj_set_style_clip_corner(del_btn, true, 0);
-    lv_obj_set_size(del_btn, 30, 24);
-    lv_obj_align(del_btn, LV_ALIGN_RIGHT_MID, -2, 0);
-    lv_obj_set_style_bg_color(del_btn, lv_color_hex(0xBB2222), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(del_btn, 255, LV_PART_MAIN);
-    lv_obj_set_style_radius(del_btn, 4, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(del_btn, 2, LV_PART_MAIN);
+    lv_label_set_long_mode(s_saved_name_lbl, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(s_saved_name_lbl, RMC_CARD_W - 32 - 48);
+    lv_obj_set_style_text_font(s_saved_name_lbl, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(s_saved_name_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_align(s_saved_name_lbl, LV_ALIGN_BOTTOM_LEFT, 0, -9);
+    lv_obj_t *del_btn = lv_obj_create(s_saved_panel);                // forget it: a round grey x
+    lv_obj_remove_style_all(del_btn);
+    lv_obj_set_size(del_btn, 38, 38);
+    lv_obj_set_style_radius(del_btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(del_btn, lv_color_hex(0x3A3A3C), 0);
+    lv_obj_set_style_bg_color(del_btn, lv_color_hex(0xFF453A), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(del_btn, LV_OPA_COVER, 0);
+    lv_obj_add_flag(del_btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(del_btn, 8);
+    lv_obj_align(del_btn, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_t *del_lbl = lv_label_create(del_btn);
     lv_label_set_text(del_lbl, LV_SYMBOL_CLOSE);
-    lv_obj_set_style_text_color(del_lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_color(del_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(del_lbl);
     lv_obj_add_event_cb(del_btn, on_saved_device_delete, LV_EVENT_CLICKED, NULL);
+    if (!has_saved) { lv_obj_add_flag(s_saved_panel, LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN); }
 
-    // Thin divider
-    lv_obj_t *divider = lv_obj_create(ui_ScreenPageBLEScan);
-    lv_obj_remove_style_all(divider);
-    lv_obj_set_size(divider, 240, 1);
-    lv_obj_align(divider, LV_ALIGN_TOP_MID, 0, 128);
-    lv_obj_set_style_bg_color(divider, lv_color_hex(0x444444), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(divider, 255, LV_PART_MAIN);
-    lv_obj_clear_flag(divider, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    // ==== NEARBY ====
+    lv_obj_t *label_nearby = lv_label_create(scr);
+    lv_label_set_text(label_nearby, "NEARBY");
+    lv_obj_set_style_text_font(label_nearby, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(label_nearby, lv_color_hex(RMC_DIM), 0);
+    lv_obj_align(label_nearby, LV_ALIGN_TOP_LEFT, 70, 170);
+    s_spinner = rmc_spinner(scr, 18);
+    lv_obj_align(s_spinner, LV_ALIGN_TOP_LEFT, 148, 169);
+    lv_obj_t *scan = lv_obj_create(scr);                              // SCAN: look again
+    lv_obj_remove_style_all(scan);
+    lv_obj_set_size(scan, 84, 30);
+    lv_obj_set_style_radius(scan, 15, 0);
+    lv_obj_set_style_border_width(scan, 1, 0);
+    lv_obj_set_style_border_color(scan, lv_color_hex(RMC_YELLOW), 0);
+    lv_obj_set_style_bg_color(scan, lv_color_hex(RMC_YELLOW), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(scan, LV_OPA_COVER, LV_STATE_PRESSED);
+    lv_obj_add_flag(scan, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(scan, 10);
+    lv_obj_align(scan, LV_ALIGN_TOP_RIGHT, -70, 164);
+    lv_obj_add_event_cb(scan, on_rescan, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *scan_l = lv_label_create(scan);
+    lv_label_set_text(scan_l, "SCAN");
+    lv_obj_set_style_text_font(scan_l, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(scan_l, lv_color_hex(RMC_YELLOW), 0);
+    lv_obj_set_style_text_color(scan_l, lv_color_hex(0x000000), LV_STATE_PRESSED);
+    lv_obj_center(scan_l);
 
-    // ==== NEARBY SCAN SECTION ====
-    lv_obj_t *label_nearby = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(label_nearby, "NEARBY  -  TAP TO SCAN");
-    lv_obj_add_flag(label_nearby, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_ext_click_area(label_nearby, 12);
-    lv_obj_add_event_cb(label_nearby, on_rescan, LV_EVENT_CLICKED, NULL);
-    lv_obj_set_style_text_font(label_nearby, &ui_font_FontTypoderSize16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label_nearby, lv_color_hex(0x888888), LV_PART_MAIN);
-    lv_obj_align(label_nearby, LV_ALIGN_TOP_MID, 0, 134);
+    s_list = lv_list_create(scr);
+    lv_obj_set_size(s_list, RMC_CARD_W, 106);   // stays inside the round screen
+    lv_obj_align(s_list, LV_ALIGN_TOP_MID, 0, 202);
+    lv_obj_set_style_bg_opa(s_list, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_list, 0, 0);
+    lv_obj_set_style_pad_all(s_list, 0, 0);
+    lv_obj_set_style_pad_row(s_list, 8, 0);
+    lv_obj_set_style_radius(s_list, 0, 0);
+    lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_OFF);
 
-    // Device list (scan results)
-    s_list = lv_list_create(ui_ScreenPageBLEScan);
-    lv_obj_set_size(s_list, 264, 145);
-    lv_obj_align(s_list, LV_ALIGN_TOP_MID, 0, 152);
-    lv_obj_set_style_bg_color(s_list, lv_color_hex(0x111111), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(s_list, 255, LV_PART_MAIN);
-    lv_obj_set_style_border_width(s_list, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(s_list, lv_color_hex(0x444444), LV_PART_MAIN);
-    lv_obj_set_style_pad_all(s_list, 4, LV_PART_MAIN);
-    lv_obj_set_style_radius(s_list, 8, LV_PART_MAIN);
-
-    // Hint text at bottom
-    lv_obj_t *label_hint = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(label_hint, "Tap a device to connect   Slide to go back");
-    lv_obj_set_style_text_font(label_hint, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label_hint, lv_color_hex(0x555555), LV_PART_MAIN);
-    lv_obj_set_style_text_align(label_hint, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_align(label_hint, LV_ALIGN_BOTTOM_MID, 0, -15);
-
-    // Gesture event for navigation
-    lv_obj_move_foreground(spinner_ring);   // bring the ring to the front
-    lv_obj_add_event_cb(ui_ScreenPageBLEScan, ui_event_ble_scan_background, LV_EVENT_GESTURE, NULL);
-    lv_obj_add_event_cb(ui_ScreenPageBLEScan, on_page_event, LV_EVENT_ALL, NULL);   // rescans on every visit
+    lv_obj_add_event_cb(scr, ui_event_ble_scan_background, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_event_cb(scr, on_page_event, LV_EVENT_ALL, NULL);   // rescans on every visit
     if (!s_page_timer) s_page_timer = lv_timer_create(page_tick, 500, NULL);
 }
-

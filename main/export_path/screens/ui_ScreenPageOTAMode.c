@@ -6,6 +6,7 @@
 
 #include "../ui.h"
 #include "../ui_ext.h"
+#include "ui_rmc_style.h"
 #include "app_obd_dsp/device_identity.h"
 #include "app_obd_dsp/ota_wifi_server.h"
 #include "bsp_obd_dsp/rs485_brake_temp.h"
@@ -28,76 +29,45 @@ lv_obj_t *ui_LabelOTAModeStatus = NULL;
 lv_obj_t *ui_LabelOTAModeVersion = NULL;
 
 static void ui_event_ota_mode_background(lv_event_t *e);
+static lv_obj_t *s_ssid;   // the hotspot name, filled in once Wi-Fi is up
 
 void ui_ScreenPageOTAMode_screen_init(void)
 {
-    ui_ScreenPageOTAMode = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_ScreenPageOTAMode, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_ScreenPageOTAMode, 360, LV_PART_MAIN | LV_STATE_DEFAULT);
-    ui_helpers_style_screen_bg(ui_ScreenPageOTAMode);
-    lv_obj_set_style_bg_opa(ui_ScreenPageOTAMode, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    // Racing My Car look (ui_rmc_style.h): title, busy ring, the hotspot in a card, the state under it
+    lv_obj_t *scr = ui_ScreenPageOTAMode = lv_obj_create(NULL);
+    rmc_screen(scr);
+    rmc_title(scr, "WI-FI UPDATE", 52);
+    lv_obj_t *busy = rmc_spinner(scr, 34);
+    lv_obj_align(busy, LV_ALIGN_TOP_MID, 0, 92);
 
-    // White border ring
-    lv_obj_t *spinner_ring = ui_helpers_create_ring(ui_ScreenPageOTAMode, 10);
+    lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 82);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 10);
+    s_ssid = rmc_row(card, "WI-FI", 14);
+    lv_label_set_text(s_ssid, "OBD-Gauge-OTA");
+    lv_obj_t *pw = rmc_row(card, "PASSWORD", 46);
+    lv_label_set_text(pw, "88888888");
+    lv_obj_set_style_text_color(pw, lv_color_hex(RMC_YELLOW), 0);
 
-    // Title: "OTA MODE"
-    lv_obj_t *label_title = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(label_title, "OTA MODE");
-    lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 40);
+    ui_LabelOTAModeStatus = lv_label_create(scr);
+    lv_label_set_text(ui_LabelOTAModeStatus, "STARTING WI-FI...");
+    lv_obj_set_style_text_font(ui_LabelOTAModeStatus, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(RMC_DIM), 0);
+    lv_obj_set_style_text_align(ui_LabelOTAModeStatus, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(ui_LabelOTAModeStatus, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(ui_LabelOTAModeStatus, 270);
+    lv_obj_align(ui_LabelOTAModeStatus, LV_ALIGN_CENTER, 0, 74);
 
-    // Pulse icon (animated) to show the device is discoverable
-    lv_obj_t *pulse = lv_spinner_create(ui_ScreenPageOTAMode, 1000, 90);
-    lv_obj_set_size(pulse, 32, 32);
-    lv_obj_align(pulse, LV_ALIGN_TOP_MID, 0, 76);
-    lv_obj_set_style_arc_color(pulse, lv_color_hex(0x00CC66), LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(pulse, 3, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(pulse, lv_color_hex(0x333333), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(pulse, 3, LV_PART_MAIN);
-
-    // Version label (short git hash)
-    ui_LabelOTAModeVersion = lv_label_create(ui_ScreenPageOTAMode);
+    ui_LabelOTAModeVersion = lv_label_create(scr);   // the build, small: the app checks it over Wi-Fi anyway
     lv_label_set_text(ui_LabelOTAModeVersion, OBD_GAUGE_BUILD_TAG);
-    lv_obj_set_style_text_font(ui_LabelOTAModeVersion, &ui_font_FontTypoderSize20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(ui_LabelOTAModeVersion, lv_color_hex(0xCCCCCC), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(ui_LabelOTAModeVersion, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(ui_LabelOTAModeVersion, LV_ALIGN_TOP_MID, 0, 120);
+    lv_label_set_long_mode(ui_LabelOTAModeVersion, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_width(ui_LabelOTAModeVersion, 200);
+    lv_obj_set_style_text_font(ui_LabelOTAModeVersion, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(ui_LabelOTAModeVersion, lv_color_hex(0x666666), 0);
+    lv_obj_set_style_text_align(ui_LabelOTAModeVersion, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(ui_LabelOTAModeVersion, LV_ALIGN_BOTTOM_MID, 0, -64);
+    rmc_hint(scr, "SWIPE TO EXIT");
 
-    // WiFi AP info
-    lv_obj_t *label_name = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(label_name, "WiFi: OBD-Gauge-OTA-xxxx");
-    lv_obj_set_style_text_font(label_name, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_name, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(label_name, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_name, LV_ALIGN_CENTER, 0, 40);
-
-    // Password hint
-    lv_obj_t *label_pass = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(label_pass, "Password: 88888888");
-    lv_obj_set_style_text_font(label_pass, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_pass, lv_color_hex(0xFFCC00), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(label_pass, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_pass, LV_ALIGN_CENTER, 0, 12);
-
-    // Status label (hidden)
-    ui_LabelOTAModeStatus = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(ui_LabelOTAModeStatus, "");
-    lv_obj_add_flag(ui_LabelOTAModeStatus, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_text_font(ui_LabelOTAModeStatus, &ui_font_FontTypoderSize20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(ui_LabelOTAModeStatus, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(ui_LabelOTAModeStatus, LV_ALIGN_CENTER, 0, -40);
-
-    // Hint: slide to exit
-    lv_obj_t *label_hint = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(label_hint, "Slide away to exit OTA");
-    lv_obj_set_style_text_font(label_hint, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_hint, lv_color_hex(0x555555), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_hint, LV_ALIGN_BOTTOM_MID, 0, -40);
-
-    lv_obj_move_foreground(spinner_ring);
-    lv_obj_add_event_cb(ui_ScreenPageOTAMode, ui_event_ota_mode_background, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(scr, ui_event_ota_mode_background, LV_EVENT_ALL, NULL);
 
     rs485_brake_temp_pause();
 
@@ -119,12 +89,14 @@ void ui_ScreenPageOTAMode_screen_init(void)
     // Start WiFi SoftAP + HTTP server immediately (no BLE handshake needed)
     ESP_LOGI(TAG, "Starting WiFi OTA server from OTA mode screen");
     ota_wifi_info_t info = {0};
-    if (!ota_wifi_server_start(&info, NULL)) {
+    bool started = ota_wifi_server_start(&info, NULL);
+    if (started && info.ssid[0] && s_ssid) lv_label_set_text(s_ssid, info.ssid);   // the real name, not OBD-Gauge-OTA-xxxx
+    if (!started) {
         ESP_LOGE(TAG, "Failed to start WiFi OTA server");
         rs485_brake_temp_resume();
         if (ui_LabelOTAModeStatus) {
-            lv_label_set_text(ui_LabelOTAModeStatus, "WiFi start failed");
-            lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text(ui_LabelOTAModeStatus, "WI-FI DID NOT START");
+            lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF453A), 0);
         }
     }
 }

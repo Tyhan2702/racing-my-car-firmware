@@ -124,6 +124,7 @@ void ui_event_ble_scan_background(lv_event_t * e);
 // SCREEN: ui_ScreenPageOTAMode
 void ui_ScreenPageOTAMode_screen_init(void);
 extern lv_obj_t * ui_ScreenPageOTAMode;
+void ui_device_info_refresh(void);   // device info page (screens/ui_ScreenPageEasterEgg.c)
 extern lv_obj_t * ui_LabelOTAModeStatus;
 extern lv_obj_t * ui_LabelOTAModeVersion;
 void ui_ota_mode_refresh(void);  // called from timer to update OTA status

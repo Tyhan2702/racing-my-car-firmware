@@ -2,12 +2,13 @@
 // SquareLine Studio version: SquareLine Studio 1.5.0
 // LVGL version: 8.3.11
 // Project name: OBD_PRJ
-// Modified: EasterEgg page replaced with Device Info page
+// Modified: EasterEgg page replaced with Device Info page, in the Racing My Car look (ui_rmc_style.h)
 
 #include "../ui.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
+#include "ui_rmc_style.h"
 
 #ifndef OBD_GAUGE_BUILD_TAG
 #define OBD_GAUGE_BUILD_TAG "unknown"
@@ -16,92 +17,72 @@
 // ui_ScreenPageOTAMode is lazily created; forward ref for the OTA button handler
 extern lv_obj_t *ui_ScreenPageOTAMode;
 
+static lv_obj_t *s_mode, *s_link_label, *s_link, *s_status;
+
+// Role and OBD link as they are now (ui.c calls this twice a second while the page is shown)
+void ui_device_info_refresh(void)
+{
+    if (!s_mode) return;
+    uint8_t role = nvs_cfg_get()->device_role;
+    bool slave = role == ESPNOW_ROLE_SLAVE, up;
+    lv_label_set_text(s_mode, slave ? "SLAVE" : role == ESPNOW_ROLE_MASTER ? "MASTER" : "ALONE");
+    if (slave) {
+        up = espnow_link_slave_has_data();
+        const char *m = espnow_link_get_master_name();
+        lv_label_set_text(s_link_label, "MASTER");
+        lv_label_set_text(s_link, up && m[0] ? m : "--");
+        lv_label_set_text(s_status, up ? "LINKED" : "WAITING");
+    } else {
+        up = elm327_ble_is_connected();
+        const char *n = elm327_ble_get_connected_name();
+        lv_label_set_text(s_link_label, "OBD");
+        lv_label_set_text(s_link, n && n[0] ? n : "NOT SET");
+        lv_label_set_text(s_status, up ? "CONNECTED" : "NOT CONNECTED");
+    }
+    lv_obj_set_style_text_color(s_status, lv_color_hex(up ? RMC_GREEN : RMC_DIM), 0);
+}
+
+static void on_info_delete(lv_event_t *e)
+{
+    (void)e;
+    s_mode = s_link_label = s_link = s_status = NULL;
+}
+
 void ui_ScreenPageEasterEgg_screen_init(void)
 {
-    ui_ScreenPageEasterEgg = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_ScreenPageEasterEgg, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(ui_ScreenPageEasterEgg, 360, LV_PART_MAIN | LV_STATE_DEFAULT);
-    ui_helpers_style_screen_bg(ui_ScreenPageEasterEgg);
-    lv_obj_set_style_bg_opa(ui_ScreenPageEasterEgg, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_t *scr = ui_ScreenPageEasterEgg = lv_obj_create(NULL);
+    rmc_screen(scr);
 
-    // White border ring
-    lv_obj_t *spinner_ring = ui_helpers_create_ring(ui_ScreenPageEasterEgg, 10);
-
-    /* ---- Device Info Page ----
-       Kept minimal on purpose: role + OBD link state + firmware build tag.
-       Layout on the 360x360 round panel: title y=88..124, info block centered,
-       OTA button y=288..320. */
-    // title: the yellow Racing My Car mark (small) + GAUGE, side by side
-    lv_obj_t *title_row = lv_obj_create(ui_ScreenPageEasterEgg);
-    lv_obj_remove_style_all(title_row);
-    lv_obj_set_size(title_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(title_row, 10, 0);
-    lv_obj_clear_flag(title_row, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(title_row, LV_OBJ_FLAG_EVENT_BUBBLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
-    lv_obj_t *mark = lv_img_create(title_row);
+    // the RMC mark, where the menu has it
+    lv_obj_t *mark = lv_img_create(scr);
     lv_img_set_src(mark, &imgRmcMarkSmall);
-    lv_obj_t *label_title = lv_label_create(title_row);
-    lv_label_set_text(label_title, "GAUGE");
-    lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize36, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(title_row, LV_ALIGN_TOP_MID, 0, 88);
+    lv_img_set_pivot(mark, 42, 15);
+    lv_img_set_zoom(mark, 218);
+    lv_obj_align(mark, LV_ALIGN_TOP_MID, 0, 46);
+    lv_obj_t *title = lv_label_create(scr);
+    lv_label_set_text(title, "GAUGE INFO");
+    lv_obj_set_style_text_font(title, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(RMC_DIM), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 84);
 
-    // Role + connection state: master/standalone show BLE (ELM327), slave shows its master
-    uint8_t device_role = nvs_cfg_get()->device_role;
-    bool is_slave = (device_role == ESPNOW_ROLE_SLAVE);
-    const char *mode_str = is_slave ? "SLAVE"
-                         : (device_role == ESPNOW_ROLE_MASTER) ? "MASTER" : "STANDALONE";
-    const char *conn_label, *conn_name, *conn_status;
-    if (is_slave) {
-        bool linked = espnow_link_slave_has_data();
-        const char *mname = espnow_link_get_master_name();
-        conn_label  = "SLAVE";
-        conn_name   = (linked && mname[0]) ? mname : "--";
-        conn_status = linked ? "Linked" : "Waiting";
-    } else {
-        const char *ble_name = elm327_ble_get_connected_name();
-        if (!ble_name || ble_name[0] == '\0') ble_name = "Not set";
-        conn_label  = "BLE";
-        conn_name   = ble_name;
-        conn_status = elm327_ble_is_connected() ? "Connected" : "Disconnected";
-    }
+    lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 142);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 4);
+    s_mode = rmc_row(card, "MODE", 14);
+    s_link = rmc_row(card, "OBD", 44);
+    s_link_label = lv_obj_get_child(card, lv_obj_get_index(s_link) - 1);   // "OBD", or "MASTER" on a slave
+    s_status = rmc_row(card, "STATUS", 74);
+    lv_obj_t *fw = rmc_row(card, "FIRMWARE", 104);
+    lv_label_set_long_mode(fw, LV_LABEL_LONG_SCROLL_CIRCULAR);   // the build tag is long: it scrolls
+    lv_obj_set_style_text_color(fw, lv_color_hex(RMC_DIM), 0);
+    lv_label_set_text(fw, OBD_GAUGE_BUILD_TAG);
+    lv_obj_add_event_cb(scr, on_info_delete, LV_EVENT_DELETE, NULL);
+    ui_device_info_refresh();
 
-    ui_LabelEasterEggInfo = lv_label_create(ui_ScreenPageEasterEgg);
-    lv_label_set_long_mode(ui_LabelEasterEggInfo, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(ui_LabelEasterEggInfo, 280);
-    lv_label_set_text_fmt(ui_LabelEasterEggInfo,
-        "MODE: %s\n"
-        "%s: %s\n"
-        "Status: %s\n"
-        "BUILD %s",
-        mode_str, conn_label, conn_name, conn_status, OBD_GAUGE_BUILD_TAG);
-    lv_obj_set_style_text_font(ui_LabelEasterEggInfo, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(ui_LabelEasterEggInfo, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(ui_LabelEasterEggInfo, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_line_space(ui_LabelEasterEggInfo, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(ui_LabelEasterEggInfo, LV_ALIGN_CENTER, 0, 0);
-
-    // ---- OTA button (the BUILD tag already lives in the info block above) ----
-    lv_obj_t *btn_ota = lv_btn_create(ui_ScreenPageEasterEgg);
-    lv_obj_set_style_clip_corner(btn_ota, true, 0);
-    lv_obj_set_size(btn_ota, 140, 32);
-    lv_obj_align(btn_ota, LV_ALIGN_BOTTOM_MID, 0, -56);
-    lv_obj_set_style_bg_color(btn_ota, lv_color_hex(0x00AA55), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(btn_ota, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(btn_ota, 16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(btn_ota, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_t *lbl_ota = lv_label_create(btn_ota);
-    lv_label_set_text(lbl_ota, "OTA Mode");
-    lv_obj_set_style_text_font(lbl_ota, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(lbl_ota, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_center(lbl_ota);
-    lv_obj_add_event_cb(btn_ota, ui_event_easter_egg_ota_button, LV_EVENT_CLICKED, NULL);
-
-
+    lv_obj_t *ota = rmc_pill(scr, "WI-FI UPDATE", true, 196, ui_event_easter_egg_ota_button);
+    lv_obj_align(ota, LV_ALIGN_BOTTOM_MID, 0, -56);
+    ui_LabelEasterEggInfo = NULL;   // the old one-block text is gone (ui.c skips it)
     imageEasterEgg = NULL;
 
     // Gesture event on screen for page navigation
-    lv_obj_add_event_cb(ui_ScreenPageEasterEgg, ui_event_easter_egg_background, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(scr, ui_event_easter_egg_background, LV_EVENT_ALL, NULL);
 }

@@ -793,40 +793,8 @@ void my_timerMain(lv_timer_t * timer)
         }
     }
 
-    /* Dynamically update the EasterEgg (device info) page: role + OBD link state + build tag. */
-    if (scr == ui_ScreenPageEasterEgg && ui_LabelEasterEggInfo) {
-        static char s_last_easteregg_info[192];
-        char info_text[192];
-        const char *mode_str = is_slave ? "SLAVE"
-                             : (user_cfg->device_role == ESPNOW_ROLE_MASTER) ? "MASTER" : "STANDALONE";
-        const char *conn_label, *conn_name;
-
-        if (is_slave) {
-            const char *mname = espnow_link_get_master_name();
-            conn_label = "SLAVE";
-            conn_name  = (ble_now && mname[0]) ? mname : "--";
-        } else {
-            const char *dev_name = elm327_ble_get_connected_name();
-            if(!dev_name || dev_name[0] == '\0') dev_name = "Not set";
-            conn_label = "BLE";
-            conn_name  = dev_name;
-        }
-
-        snprintf(info_text, sizeof(info_text),
-            "MODE: %s\n"
-            "%s: %s\n"
-            "Status: %s\n"
-            "BUILD %s",
-            mode_str, conn_label, conn_name,
-            ble_now ? (is_slave ? "Linked" : "Connected")
-                    : (is_slave ? "Waiting" : "Disconnected"),
-            OBD_GAUGE_BUILD_TAG);
-        if (strcmp(s_last_easteregg_info, info_text) != 0) {
-            strncpy(s_last_easteregg_info, info_text, sizeof(s_last_easteregg_info));
-            s_last_easteregg_info[sizeof(s_last_easteregg_info) - 1] = '\0';
-            lv_label_set_text(ui_LabelEasterEggInfo, s_last_easteregg_info);
-        }
-    }
+    /* Device info page: role and OBD link (screens/ui_ScreenPageEasterEgg.c) */
+    if (scr == ui_ScreenPageEasterEgg) ui_device_info_refresh();
 
     /* OTA mode screen: refresh connection status */
     ui_ota_mode_refresh();
@@ -1269,16 +1237,16 @@ void ui_ota_mode_refresh(void)
     if (ui_LabelOTAModeStatus == NULL) return;
 
     if (ota_wifi_server_is_busy()) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "Receiving update...");
+        lv_label_set_text(ui_LabelOTAModeStatus, "RECEIVING THE UPDATE...");
         lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
     } else if (ota_wifi_server_get_state() == OTA_WIFI_STATE_READY) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "WiFi ready — connect your phone");
+        lv_label_set_text(ui_LabelOTAModeStatus, "READY: OPEN THE RACING MY CAR APP");
         lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
     } else if (ota_wifi_server_get_state() == OTA_WIFI_STATE_IDLE) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "Starting WiFi...");
+        lv_label_set_text(ui_LabelOTAModeStatus, "STARTING WI-FI...");
         lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
     } else if (ota_wifi_server_get_state() == OTA_WIFI_STATE_ERROR) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "WiFi error");
+        lv_label_set_text(ui_LabelOTAModeStatus, "WI-FI ERROR");
         lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 }
@@ -1408,7 +1376,7 @@ void ui_event_ble_scan_background(lv_event_t * e)
                 elm327_ble_scan_only_stop();
             }
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+            ui_menu_open();   // opened from the menu (OBD): back to it
         }
     }
 }
