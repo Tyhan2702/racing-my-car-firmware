@@ -134,7 +134,8 @@ static void build(void)
     for (int i = 0; i < n; i++) {              // a few extra openings (loops)
         int x = 1 + 2 * rnd_int((n - 1) / 2), y = 1 + 2 * rnd_int((n - 1) / 2);
         int dx = gc_rand() < 0.5f ? 1 : 0, dy = 1 - dx;
-        if (y + dy < n && x + dx < n && s_map[y + dy][x + dx] == 1 && x + dx < n - 1 && y + dy < n - 1) s_map[y + dy][x + dx] = 0;
+        int tx = x + dx, ty = y + dy;
+        if (tx > 0 && ty > 0 && tx < n - 1 && ty < n - 1 && tx < MAXN && ty < MAXN && s_map[ty][tx] == 1) s_map[ty][tx] = 0;
     }
     s_map[n - 2][n - 2] = 2;
     s_px = 1.5f; s_py = 1.5f;
