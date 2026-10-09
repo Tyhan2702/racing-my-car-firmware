@@ -60,7 +60,7 @@ static void begin(void)
 {
     for (int i = 0; i < CITY_N; i++) s_city[i] = 40 + gc_rand() * 60;
     sky_rows();
-    s_score_l = gc_label(&ui_font_FontTypoderSize28, 0xFFFFFF, LV_ALIGN_CENTER, 0, 46 - GC_H / 2);
+    s_score_l = gc_label(&ui_font_FontTypoderSize24, 0xFFFFFF, LV_ALIGN_CENTER, 0, 46 - GC_H / 2);
     s_title = gc_label(&ui_font_FontTypoderSize24, 0xFFDD00, LV_ALIGN_CENTER, 0, -24);
     s_hint = gc_label(&ui_font_FontTypoderSize16, 0xFFFFFF, LV_ALIGN_CENTER, 0, 22);
     lv_obj_set_style_bg_color(s_hint, rgb(0x000000), 0);
