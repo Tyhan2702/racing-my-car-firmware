@@ -22,7 +22,7 @@
 #include "cJSON.h"
 
 #define IDLE_MS 60000      // a minute without a touch on the menu pages -> back to the gauge
-#define STAY_MS 4000       // on a theme page this long -> it becomes the page shown at boot
+#define STAY_MS 1500       // on a theme page this long -> it becomes the page shown at boot
 #define BTN 76             // button diameter
 #define COL 95             // distance between button columns
 #define ROW1 128           // button centre rows

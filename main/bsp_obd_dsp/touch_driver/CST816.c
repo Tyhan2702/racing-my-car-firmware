@@ -8,6 +8,8 @@
 #define DATA_START_REG      (0x02)
 #define CHIP_ID_REG         (0xA7)
 #define AutoSleep_REG       (0xFE)
+#define AutoReset_REG       (0xFB)   // seconds of touch without a gesture before the chip resets itself (0: never)
+#define LongPressTime_REG   (0xFC)   // seconds of long press before the chip resets itself (0: never)
 
 static const char *TAG = "CST816";
 
@@ -84,6 +86,11 @@ esp_err_t esp_lcd_touch_new_i2c_cst816(i2c_master_bus_handle_t i2c_bus, const es
     ESP_GOTO_ON_ERROR(read_id(cst816s), err, TAG, "Read version failed");
     *tp = cst816s;
     AutoSleep(cst816s, false);
+    // The chip resets itself after a few seconds of a finger held still (default ~5 s) and then reports the finger
+    // as lifted: a still finger must stay a touch (games are left by holding still for 5 s, screens/game_core.c).
+    uint8_t never = 0;
+    i2c_write_bytes(cst816s, AutoReset_REG, &never, 1);
+    i2c_write_bytes(cst816s, LongPressTime_REG, &never, 1);
     return ESP_OK;
 err:
     if (cst816s) {

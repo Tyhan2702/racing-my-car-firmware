@@ -942,6 +942,17 @@ void ui_event_gear_background(lv_event_t * e)
     }
 }
 
+// Shows theme page ui_theme_gauge_page_index in place of the current one, which is freed once the new one is up
+// (before, every swipe left the old page in memory until the gauge ran out of it).
+static void theme_page_show(void)
+{
+    lv_obj_t *old = ui_ScreenPageThemeGauge;
+    ui_ScreenPageThemeGauge = NULL;
+    ui_ScreenPageThemeGauge_screen_init();
+    lv_scr_load_anim(ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, old && lv_scr_act() == old);
+    if (old && lv_scr_act() != old) lv_obj_del(old);
+}
+
 // Theme-provided gauge page: swipe left/right moves to the next/prev page
 // declared by the active theme. Swiping left past the last theme page goes
 // to the Info page (version/settings). Swiping right from the first theme
@@ -958,13 +969,11 @@ void ui_event_theme_gauge_background(lv_event_t * e)
             if (ui_theme_gauge_page_index + 1 < page_count) {
                 // Move to next theme page
                 ui_theme_gauge_page_index++;
-                ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
+                theme_page_show();
             } else {
                 // past the last theme page: back to the first (the menu opens only with a swipe up)
                 ui_theme_gauge_page_index = 0;
-                ui_ScreenPageThemeGauge = NULL;
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
+                theme_page_show();
             }
         }
         else if(dir == LV_DIR_TOP) {
@@ -977,13 +986,11 @@ void ui_event_theme_gauge_background(lv_event_t * e)
             if (ui_theme_gauge_page_index > 0) {
                 // Move to previous theme page
                 ui_theme_gauge_page_index--;
-                ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
+                theme_page_show();
             } else {
                 // before the first theme page: to the last one
                 ui_theme_gauge_page_index = page_count ? page_count - 1 : 0;
-                ui_ScreenPageThemeGauge = NULL;
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
+                theme_page_show();
             }
         }
     }

@@ -210,15 +210,42 @@ void gc_dirty_all(void) { gc_dirty(0, 0, GC_W - 1, GC_H - 1); }
 // Leaving a game: hold a finger still on the screen for 5 seconds, then tap EXIT. Swipes never leave a game (they
 // are the games' own controls), so a game is not quit by accident while playing. The game pauses while asking.
 #define HOLD_EXIT_US 5000000
-#define HOLD_SLOP 24                 // px the finger may wander and still count as holding
-static lv_obj_t *s_exit_box;
+#define HOLD_SLOP 30                 // px the finger may wander and still count as holding
+#define HOLD_GAP_US 400000           // a touch that drops out this briefly is still the same hold
+#define HOLD_SHOW_US 1000000         // after this, a countdown shows that holding works
+static lv_obj_t *s_exit_box, *s_hold_label;
 static int64_t s_hold_us;            // when the finger went down (0: not holding)
+static int64_t s_up_us;              // when the finger last lifted during a hold (0: still down)
 static lv_point_t s_hold_at;
+
+static void hold_stop(void)
+{
+    s_hold_us = 0;
+    s_up_us = 0;
+    if (s_hold_label) { lv_obj_del(s_hold_label); s_hold_label = NULL; }
+}
+static void hold_show(int64_t held)
+{
+    if (held < HOLD_SHOW_US) return;
+    if (!s_hold_label) {
+        s_hold_label = lv_label_create(lv_layer_top());
+        lv_obj_set_style_text_font(s_hold_label, &ui_font_FontTypoderSize20, 0);
+        lv_obj_set_style_text_color(s_hold_label, lv_color_hex(0x111111), 0);
+        lv_obj_set_style_bg_color(s_hold_label, lv_color_hex(0xFFDD00), 0);
+        lv_obj_set_style_bg_opa(s_hold_label, LV_OPA_COVER, 0);
+        lv_obj_set_style_pad_hor(s_hold_label, 14, 0);
+        lv_obj_set_style_pad_ver(s_hold_label, 8, 0);
+        lv_obj_set_style_radius(s_hold_label, 18, 0);
+        lv_obj_align(s_hold_label, LV_ALIGN_TOP_MID, 0, 40);
+    }
+    int left = (int)((HOLD_EXIT_US - held + 999999) / 1000000);
+    lv_label_set_text_fmt(s_hold_label, "EXIT IN %d", left < 1 ? 1 : left);
+}
 
 static void leave_game(void)
 {
     s_exit_box = NULL;               // deleted with the game screen
-    s_hold_us = 0;
+    hold_stop();
     if (s_timer) { lv_timer_del(s_timer); s_timer = NULL; }
     if (!ui_ScreenPageGames) ui_ScreenPageGames_screen_init();
     lv_scr_load_anim(ui_ScreenPageGames, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, true);   // deletes the game screen
@@ -277,7 +304,11 @@ static void tick(lv_timer_t *t)
     (void)t;
     if (car_moving()) { leave_game(); gc_toast("PARK TO PLAY"); return; }   // never while driving
     int64_t now = esp_timer_get_time();
-    if (s_hold_us && now - s_hold_us >= HOLD_EXIT_US) { s_hold_us = 0; s_gestured = true; exit_ask(); }
+    if (s_hold_us && s_up_us && now - s_up_us >= HOLD_GAP_US) hold_stop();   // really lifted
+    else if (s_hold_us && !s_up_us) {
+        if (now - s_hold_us >= HOLD_EXIT_US) { hold_stop(); s_gestured = true; exit_ask(); }
+        else hold_show(now - s_hold_us);
+    }
     if (s_exit_box) { s_last_us = now; return; }                           // paused while asking
     float dt = (now - s_last_us) / 1e6f;
     s_last_us = now;
@@ -295,15 +326,17 @@ static void on_touch(lv_event_t *e)
         s_gestured = false;
         lv_point_t p;
         lv_indev_get_point(lv_indev_get_act(), &p);
-        s_hold_us = esp_timer_get_time();
-        s_hold_at = p;
+        int64_t now = esp_timer_get_time();
+        // a touch that dropped out for a moment carries on the same hold
+        if (!(s_hold_us && s_up_us && now - s_up_us < HOLD_GAP_US)) { hold_stop(); s_hold_us = now; s_hold_at = p; }
+        s_up_us = 0;
         if (s_game->input) s_game->input(GC_PRESS, p);
         return;
     }
     if (code == LV_EVENT_PRESSING) {
         lv_point_t p;
         lv_indev_get_point(lv_indev_get_act(), &p);
-        if (LV_ABS(p.x - s_hold_at.x) > HOLD_SLOP || LV_ABS(p.y - s_hold_at.y) > HOLD_SLOP) s_hold_us = 0;   // moving: not a hold
+        if (s_hold_us && (LV_ABS(p.x - s_hold_at.x) > HOLD_SLOP || LV_ABS(p.y - s_hold_at.y) > HOLD_SLOP)) hold_stop();   // moving: not a hold
         if (s_game->input) s_game->input(GC_DRAG, p);
         return;
     }
@@ -311,13 +344,13 @@ static void on_touch(lv_event_t *e)
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         s_gestured = true;
         lv_point_t p = {0, 0};
-        s_hold_us = 0;
+        hold_stop();
         // every swipe is the game's (no swipe leaves a game: hold 5 s instead)
         if (s_game->input) s_game->input(dir == LV_DIR_TOP ? GC_SWIPE_UP : dir == LV_DIR_BOTTOM ? GC_SWIPE_DOWN :
                                          dir == LV_DIR_LEFT ? GC_SWIPE_LEFT : GC_SWIPE_RIGHT, p);
         return;
     }
-    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) s_hold_us = 0;
+    if ((code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) && s_hold_us) s_up_us = esp_timer_get_time();
     if (code == LV_EVENT_RELEASED && s_game && s_game->input) {
         lv_point_t p;
         lv_indev_get_point(lv_indev_get_act(), &p);
@@ -329,6 +362,8 @@ static void on_touch(lv_event_t *e)
 static void on_delete(lv_event_t *e)
 {
     (void)e;
+    hold_stop();
+    s_exit_box = NULL;
     if (s_timer) { lv_timer_del(s_timer); s_timer = NULL; }
     if (s_game && s_game->end) s_game->end();
     if (gc_buf) { heap_caps_free(gc_buf); gc_buf = NULL; }
@@ -359,7 +394,7 @@ static void play(const game_def_t *g)
     gc_dirty_all();
     s_last_us = esp_timer_get_time();
     s_exit_box = NULL;
-    s_hold_us = 0;
+    hold_stop();
     s_timer = lv_timer_create(tick, FRAME_MS, NULL);
     lv_scr_load_anim(gc_scr, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, false);
     gc_toast("HOLD 5 SEC TO EXIT");
