@@ -21,11 +21,13 @@
 #define ICON 132
 
 extern const game_def_t game_run, game_ring, game_snake, game_blocks, game_pong, game_bricks, game_hop, game_defender,
-    game_road, game_maze;
+    game_road, game_maze,
+    game_chase, game_pinball, game_rocks, game_gems, game_stack, game_merge;
 // The position is the game's bit in the installed mask (NVS), so it never changes: retired games leave a NULL slot
 // (1 LIGHTS OUT, 2 PERFECT SHIFT, 4 SIGNAL MEMORY) and new games are added at the end.
 static const game_def_t *const GAMES[] = {&game_run, NULL, NULL, &game_ring, NULL, &game_snake, &game_blocks, &game_pong,
-                                          &game_bricks, &game_hop, &game_defender, &game_road, &game_maze};
+                                          &game_bricks, &game_hop, &game_defender, &game_road, &game_maze,
+                                          &game_chase, &game_pinball, &game_rocks, &game_gems, &game_stack, &game_merge};
 #define GAME_COUNT (int)(sizeof(GAMES) / sizeof(GAMES[0]))
 
 lv_color_t *gc_buf;
