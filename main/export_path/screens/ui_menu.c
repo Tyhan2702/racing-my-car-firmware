@@ -51,13 +51,15 @@ static void open_ota(void);
 static void open_info(void);
 static void open_boot(void);
 
+// default order, by how often a driver needs them: connect the car, adjust the gauge, play when parked; then the
+// occasional ones, with the version last
 static const menu_item_t ITEMS[] = {
-    {"games",    "GAMES",    &imgMenu_games,    open_games},
-    {"settings", "SETTINGS", &imgMenu_settings, open_settings},
     {"obd",      "OBD",      &imgMenu_obd,      open_obd},
+    {"settings", "SETTINGS", &imgMenu_settings, open_settings},
+    {"games",    "GAMES",    &imgMenu_games,    open_games},
+    {"boot",     "BOOT",     &imgMenu_boot,     open_boot},
     {"ota",      "UPDATE",   &imgMenu_ota,      open_ota},
     {"info",     "VERSION",  &imgMenu_info,     open_info},
-    {"boot",     "BOOT",     &imgMenu_boot,     open_boot},
 };
 #define ITEM_COUNT (int)(sizeof(ITEMS) / sizeof(ITEMS[0]))
 
@@ -266,7 +268,9 @@ static void ui_ScreenPageMenu_screen_init(void)
 
     lv_obj_t *logo = lv_img_create(scr);
     lv_img_set_src(logo, &imgRmcMarkSmall);
-    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 44);
+    lv_img_set_pivot(logo, 42, 15);
+    lv_img_set_zoom(logo, 218);                      // 85 %
+    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 46);
     lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_ext_click_area(logo, 12);
     lv_obj_add_event_cb(logo, on_logo, LV_EVENT_CLICKED, NULL);
