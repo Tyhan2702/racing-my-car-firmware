@@ -12,8 +12,9 @@
 #define GC_H 360
 
 // GC_PRESS: the moment a finger touches (timing games); GC_TAP: released without swiping (games that also use swipes);
-// GC_DRAG: the finger moved while pressed (paddles follow it), with its position
-typedef enum { GC_PRESS, GC_TAP, GC_SWIPE_UP, GC_SWIPE_LEFT, GC_SWIPE_RIGHT, GC_DRAG } gc_input_t;
+// GC_DRAG: the finger moved while pressed (paddles follow it), with its position; GC_RELEASE: the finger lifted
+// (always, swipe or not; only sent to games with wants_release, for hold / aim-and-release controls)
+typedef enum { GC_PRESS, GC_TAP, GC_SWIPE_UP, GC_SWIPE_LEFT, GC_SWIPE_RIGHT, GC_DRAG, GC_RELEASE } gc_input_t;
 
 typedef struct {
     const char *name;            // shown on the GAMES page, e.g. "NIGHT RUN"
@@ -21,6 +22,7 @@ typedef struct {
     const char *key;             // NVS key of the best score (<= 15 chars)
     const char *unit;            // after the best score, e.g. "MS" (may be "")
     bool lower_is_better;        // reaction times: the smallest is best
+    bool wants_release;          // also send GC_RELEASE when the finger lifts
     void (*icon)(lv_color_t *buf, int size);          // paints the GAMES page icon (size x size)
     void (*begin)(void);                               // canvas and screen ready: build labels, reset
     void (*frame)(float dt);                           // every ~30 ms: update and draw
