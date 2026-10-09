@@ -20,8 +20,12 @@
 #define PARKED_KMH 3
 #define ICON 132
 
-extern const game_def_t game_run, game_lights, game_shift, game_ring, game_memory;
-static const game_def_t *const GAMES[] = {&game_run, &game_lights, &game_shift, &game_ring, &game_memory};
+extern const game_def_t game_run, game_ring, game_snake, game_blocks, game_pong, game_bricks, game_hop, game_defender,
+    game_road, game_maze;
+// The position is the game's bit in the installed mask (NVS), so it never changes: retired games leave a NULL slot
+// (1 LIGHTS OUT, 2 PERFECT SHIFT, 4 SIGNAL MEMORY) and new games are added at the end.
+static const game_def_t *const GAMES[] = {&game_run, NULL, NULL, &game_ring, NULL, &game_snake, &game_blocks, &game_pong,
+                                          &game_bricks, &game_hop, &game_defender, &game_road, &game_maze};
 #define GAME_COUNT (int)(sizeof(GAMES) / sizeof(GAMES[0]))
 
 lv_color_t *gc_buf;
@@ -37,8 +41,8 @@ static bool s_gestured;
 static lv_area_t s_dirty[MAX_DIRTY];
 static int s_dirty_n;
 static int s_pick;                      // position in the installed list shown on the GAMES page
-static int s_inst[8], s_inst_n;         // installed games, as indexes into GAMES
-static lv_obj_t *s_icon, *s_name, *s_hint, *s_best, *s_dots[8], *s_tile, *s_arrows[2], *s_empty;
+static int s_inst[GAME_COUNT], s_inst_n;         // installed games, as indexes into GAMES
+static lv_obj_t *s_icon, *s_name, *s_hint, *s_best, *s_dots[GAME_COUNT], *s_tile, *s_arrows[2], *s_empty;
 static lv_color_t *s_icon_buf;
 
 // ---------- installed games (set from the app) ----------
@@ -54,6 +58,7 @@ char *games_list_json(void)
     uint32_t mask = installed_mask();
     cJSON *o = cJSON_CreateObject(), *av = cJSON_AddArrayToObject(o, "available"), *in = cJSON_AddArrayToObject(o, "installed");
     for (int i = 0; i < GAME_COUNT; i++) {
+        if (!GAMES[i]) continue;
         cJSON_AddItemToArray(av, cJSON_CreateString(GAMES[i]->key));
         if (mask & (1u << i)) cJSON_AddItemToArray(in, cJSON_CreateString(GAMES[i]->key));
     }
@@ -70,7 +75,7 @@ bool games_install_json(const char *json)
     cJSON *v = NULL;
     cJSON_ArrayForEach(v, list) {
         if (!cJSON_IsString(v)) continue;
-        for (int i = 0; i < GAME_COUNT; i++) if (strcmp(v->valuestring, GAMES[i]->key) == 0) mask |= 1u << i;
+        for (int i = 0; i < GAME_COUNT; i++) if (GAMES[i] && strcmp(v->valuestring, GAMES[i]->key) == 0) mask |= 1u << i;
     }
     cJSON_Delete(o);
     nvs_handle_t h;
@@ -226,6 +231,12 @@ static void on_touch(lv_event_t *e)
         if (s_game->input) s_game->input(GC_PRESS, p);
         return;
     }
+    if (code == LV_EVENT_PRESSING) {
+        lv_point_t p;
+        lv_indev_get_point(lv_indev_get_act(), &p);
+        if (s_game->input) s_game->input(GC_DRAG, p);
+        return;
+    }
     if (code == LV_EVENT_GESTURE) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         s_gestured = true;
@@ -282,7 +293,7 @@ static void refresh_installed(void)
 {
     uint32_t mask = installed_mask();
     s_inst_n = 0;
-    for (int i = 0; i < GAME_COUNT; i++) if (mask & (1u << i)) s_inst[s_inst_n++] = i;
+    for (int i = 0; i < GAME_COUNT; i++) if (GAMES[i] && (mask & (1u << i))) s_inst[s_inst_n++] = i;
     if (s_pick >= s_inst_n) s_pick = 0;
 }
 

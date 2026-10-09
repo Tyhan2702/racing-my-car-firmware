@@ -11,8 +11,9 @@
 #define GC_W 360
 #define GC_H 360
 
-// GC_PRESS: the moment a finger touches (timing games); GC_TAP: released without swiping (games that also use swipes)
-typedef enum { GC_PRESS, GC_TAP, GC_SWIPE_UP, GC_SWIPE_LEFT, GC_SWIPE_RIGHT } gc_input_t;
+// GC_PRESS: the moment a finger touches (timing games); GC_TAP: released without swiping (games that also use swipes);
+// GC_DRAG: the finger moved while pressed (paddles follow it), with its position
+typedef enum { GC_PRESS, GC_TAP, GC_SWIPE_UP, GC_SWIPE_LEFT, GC_SWIPE_RIGHT, GC_DRAG } gc_input_t;
 
 typedef struct {
     const char *name;            // shown on the GAMES page, e.g. "NIGHT RUN"
