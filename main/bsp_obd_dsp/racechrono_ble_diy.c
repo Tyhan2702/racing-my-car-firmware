@@ -1,4 +1,3 @@
-#include "app_obd_dsp/gauge_time.h"
 #include "racechrono_ble_diy.h"
 
 #include <string.h>
@@ -147,17 +146,6 @@ static uint8_t s_adv_raw[] = {
     0x02, 0x01, 0x06,                    // Flags: LE General Discoverable + BR/EDR not supported
     0x05, 0x03, 0xF8, 0x1F, 0xF9, 0x1F   // Complete List of 16-bit Service UUIDs: 0x1FF8 (RC), 0x1FF9 (Pair)
 };
-// While the gauge does not know the time (gauge_time.c: it lost power), the advert also lists 0x1FFC so the Racing My
-// Car app, scanning for it in the background, connects and sets the clock ("OTA1"+5). Gauges that are otherwise
-// invisible (no RaceChrono) advertise for TIME_BEACON_US after boot for this.
-#define TIME_BEACON_UUID 0x1FFC
-#define TIME_BEACON_US (5LL * 60 * 1000000)
-static bool s_time_beacon;
-static esp_timer_handle_t s_beacon_timer;
-static uint8_t s_adv_rc_beacon[] = {
-    0x02, 0x01, 0x06,
-    0x07, 0x03, 0xF8, 0x1F, 0xF9, 0x1F, 0xFC, 0x1F   // 0x1FF8 (RC), 0x1FF9 (Pair), 0x1FFC (needs the time)
-};
 // OTA advert is built at runtime (the name varies by role): Flags + Info/OTA UUIDs +
 // Complete Local Name. The name lives in the MAIN advert packet (not only in the scan
 // response) so every phone OS / Web Bluetooth scanner can match namePrefix filters
@@ -218,16 +206,15 @@ static uint32_t build_scan_rsp_with_name(void)
 // Build the OTA advert: Flags + Info/OTA service UUIDs + Complete Local Name.
 static void build_ota_adv_data(void)
 {
-    size_t name_len = strlen(s_adv_name), max_name = s_time_beacon ? 18 : 20;
-    if (name_len > max_name) {
-        name_len = max_name;   // keep total <= 31: 3 (flags) + 6 or 8 (uuid list) + 2 (name header) + name
+    size_t name_len = strlen(s_adv_name);
+    if (name_len > 20) {
+        name_len = 20;   // keep total <= 31: 3 (flags) + 6 (uuid list) + 2 (name header) + name
     }
     uint8_t *p = s_adv_raw_ota;
     *p++ = 0x02; *p++ = 0x01; *p++ = 0x06;          // Flags
-    *p++ = s_time_beacon ? 0x07 : 0x05; *p++ = 0x03; // Complete List of 16-bit Service UUIDs
+    *p++ = 0x05; *p++ = 0x03;                        // Complete List of 16-bit Service UUIDs
     *p++ = 0xFA; *p++ = 0x1F;                        // 0x1FFA device info
     *p++ = 0xFB; *p++ = 0x1F;                        // 0x1FFB OTA
-    if (s_time_beacon) { *p++ = 0xFC; *p++ = 0x1F; } // 0x1FFC needs the time
     *p++ = (uint8_t)(1 + name_len); *p++ = 0x09;     // Complete Local Name
     memcpy(p, s_adv_name, name_len);
     p += name_len;
@@ -248,9 +235,6 @@ static void request_adv_config(void)
         build_ota_adv_data();
         adv_data = s_adv_raw_ota;
         adv_len = s_adv_raw_ota_len;
-    } else if (s_time_beacon) {
-        adv_data = s_adv_rc_beacon;
-        adv_len = sizeof(s_adv_rc_beacon);
     } else {
         adv_data = s_adv_raw;
         adv_len = sizeof(s_adv_raw);
@@ -633,56 +617,6 @@ static void stream_task(void *arg)
     }
 }
 
-static void go_silent(void)
-{
-    s_adv_raw_done = false;
-    s_scan_rsp_raw_done = false;
-    s_adv_config_done = false;
-    s_adv_start_pending = false;
-    s_adv_cfg_pending = false;
-    esp_ble_gap_stop_advertising();
-}
-
-void racechrono_ble_diy_set_time_beacon(bool on)
-{
-    if (!s_started || s_time_beacon == on) {
-        return;
-    }
-    s_time_beacon = on;
-    bool otherwise_silent = !s_rc_enabled && !s_ota_mode && nvs_cfg_get()->device_role != ESPNOW_ROLE_MASTER;
-    ESP_LOGI(RC_TAG, "time beacon %s", on ? "on" : "off");
-    if (on || !otherwise_silent) {
-        esp_ble_gap_stop_advertising();   // re-publish the advert with / without 0x1FFC
-        request_adv_config();
-    } else {
-        go_silent();
-    }
-    if (on && s_beacon_timer) {
-        esp_timer_stop(s_beacon_timer);
-        esp_timer_start_once(s_beacon_timer, TIME_BEACON_US);
-    }
-}
-
-static void beacon_off_cb(void *arg) { (void)arg; racechrono_ble_diy_set_time_beacon(false); }
-static void beacon_on_cb(void *arg)
-{
-    (void)arg;
-    if (!gauge_time_valid()) racechrono_ble_diy_set_time_beacon(true);
-}
-static void arm_time_beacon(void)   // a moment after the services exist, so a connecting phone finds the OTA service
-{
-    static esp_timer_handle_t on_timer;
-    if (!s_beacon_timer) {
-        const esp_timer_create_args_t a = {.callback = beacon_off_cb, .name = "time_beacon_off"};
-        esp_timer_create(&a, &s_beacon_timer);
-    }
-    if (!on_timer) {
-        const esp_timer_create_args_t a = {.callback = beacon_on_cb, .name = "time_beacon_on"};
-        esp_timer_create(&a, &on_timer);
-    }
-    if (on_timer) esp_timer_start_once(on_timer, 3000000);
-}
-
 static void start_advertising_if_ready(void)
 {
     if (!s_adv_config_done) {
@@ -763,7 +697,6 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             esp_ble_gatts_start_service(h[IDX_INFO_SVC]);
             ESP_LOGD(RC_TAG, "Info attr table ready, service handle=0x%04X", h[IDX_INFO_SVC]);
             ota_update_ble_start(gatts_if);
-            arm_time_beacon();                // the clock is unknown after a power loss: let the app find us
         } else if (param->add_attr_tab.svc_uuid.uuid.uuid16 == OBD_OTA_SERVICE_UUID) {
             // The OTA attribute table is owned by ota_update_ble (it already handled
             // this event in ota_update_ble_on_gatts_event); nothing to do here.
@@ -952,13 +885,13 @@ void racechrono_ble_diy_set_ota_mode(bool enable)
         return;
     }
 
-    // Leaving OTA mode on a RaceChrono-less device: go silent (unless the time beacon is still on).
-    if (s_time_beacon) {
-        esp_ble_gap_stop_advertising();
-        request_adv_config();
-        return;
-    }
-    go_silent();
+    // Leaving OTA mode on a RaceChrono-less device: go silent.
+    s_adv_raw_done = false;
+    s_scan_rsp_raw_done = false;
+    s_adv_config_done = false;
+    s_adv_start_pending = false;
+    s_adv_cfg_pending = false;
+    esp_ble_gap_stop_advertising();
 }
 
 const char *racechrono_ble_diy_get_adv_name(void)
