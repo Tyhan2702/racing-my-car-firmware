@@ -211,10 +211,8 @@ static void on_saved_device_delete(lv_event_t *e) {
         nvs_cfg_set(&cfg);
         ESP_LOGI(TAG_BLE_UI, "Unbound saved master");
     } else {
-        // If currently connected, disconnect BLE first
-        if (elm327_ble_is_connected()) {
-            elm327_ble_disconnect();
-        }
+        // Forget the adapter in the BLE client too (otherwise it reconnects to it right away), drop the link
+        elm327_ble_forget_target();
         nvs_user_cfg_t cfg = *nvs_cfg_get();
         cfg.ble_device_name[0] = '\0';
         memset(cfg.ble_obd_mac, 0, sizeof(cfg.ble_obd_mac));
@@ -226,15 +224,17 @@ static void on_saved_device_delete(lv_event_t *e) {
     if (s_label_saved_hdr) lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
     if (s_label_status)   lv_label_set_text(s_label_status, "Saved device removed");
 
-    if (s_slave_mode) {
-        s_scanning = false;   // the native scan window expiry does not reset via callback; reset before forcing a rescan (same reason as on_pair_result)
-        start_scan();         // Slave: rescan immediately after deleting the binding, so a new master can be paired
-    }
+    s_scanning = false;   // the native scan window expiry does not reset via callback; reset before forcing a rescan
+    start_scan();         // list nearby devices again so a new one can be picked straight away
 }
+
+static uint32_t s_scan_started_ms;
+static lv_timer_t *s_page_timer;
 
 static void start_scan(void) {
     if (s_scanning) return;
     s_scanning = true;
+    s_scan_started_ms = lv_tick_get();
 
     if (s_list) lv_obj_clean(s_list);
     if (s_label_status) lv_label_set_text(s_label_status, "Scanning...");
@@ -247,6 +247,54 @@ static void start_scan(void) {
         s_obd_mac_count = 0;
         elm327_ble_scan_only_start(15, scan_result_cb);
     }
+}
+
+// Saved device row from NVS (the page is built once and shown again later, so it is refreshed on every visit).
+static void refresh_saved(void)
+{
+    if (s_slave_mode) return;
+    const nvs_user_cfg_t *cfg = nvs_cfg_get();
+    bool has = cfg->ble_device_name[0] != '\0';
+    if (s_saved_name_lbl) lv_label_set_text(s_saved_name_lbl, has ? cfg->ble_device_name : "");
+    if (s_saved_panel) { if (has) lv_obj_clear_flag(s_saved_panel, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(s_saved_panel, LV_OBJ_FLAG_HIDDEN); }
+    if (s_label_saved_hdr) { if (has) lv_obj_clear_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN); }
+}
+
+// Twice a second: whether the saved adapter is connected, and the end of the 15 s list scan.
+static void page_tick(lv_timer_t *t)
+{
+    (void)t;
+    if (lv_scr_act() != ui_ScreenPageBLEScan) return;
+    if (!s_slave_mode && s_label_saved_hdr && nvs_cfg_get()->ble_device_name[0] != '\0')
+        lv_label_set_text(s_label_saved_hdr, elm327_ble_is_connected() ? "SAVED DEVICE  -  CONNECTED" : "SAVED DEVICE  -  CONNECTING...");
+    if (s_scanning && lv_tick_elaps(s_scan_started_ms) > 15500) {
+        s_scanning = false;
+        if (!s_slave_mode) elm327_ble_scan_only_stop();
+        if (s_spinner) lv_obj_add_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
+        if (s_label_status) lv_label_set_text(s_label_status, "Tap NEARBY to scan again");
+    }
+}
+
+// Every visit: show the saved device as it is now and list the devices nearby again.
+static void on_page_event(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_SCREEN_LOAD_START) {
+        refresh_saved();
+        s_scanning = false;
+        start_scan();
+    } else if (code == LV_EVENT_DELETE && s_page_timer) {
+        lv_timer_del(s_page_timer);
+        s_page_timer = NULL;
+    }
+}
+
+static void on_rescan(lv_event_t *e)
+{
+    (void)e;
+    if (!s_slave_mode) elm327_ble_scan_only_stop();
+    s_scanning = false;
+    start_scan();
 }
 
 void ui_ScreenPageBLEScan_screen_init(void)
@@ -265,7 +313,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
 
     // Title
     lv_obj_t *label_title = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(label_title, s_slave_mode ? "FIND MASTER" : "BLE SCAN");
+    lv_label_set_text(label_title, s_slave_mode ? "FIND MASTER" : "OBD DEVICE");
     lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize20, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 30);
@@ -348,7 +396,10 @@ void ui_ScreenPageBLEScan_screen_init(void)
 
     // ==== NEARBY SCAN SECTION ====
     lv_obj_t *label_nearby = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(label_nearby, "NEARBY");
+    lv_label_set_text(label_nearby, "NEARBY  -  TAP TO SCAN");
+    lv_obj_add_flag(label_nearby, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(label_nearby, 12);
+    lv_obj_add_event_cb(label_nearby, on_rescan, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_text_font(label_nearby, &ui_font_FontTypoderSize16, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_nearby, lv_color_hex(0x888888), LV_PART_MAIN);
     lv_obj_align(label_nearby, LV_ALIGN_TOP_MID, 0, 134);
@@ -366,7 +417,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
 
     // Hint text at bottom
     lv_obj_t *label_hint = lv_label_create(ui_ScreenPageBLEScan);
-    lv_label_set_text(label_hint, "Tap to connect  Slide to back");
+    lv_label_set_text(label_hint, "Tap a device to connect   Slide to go back");
     lv_obj_set_style_text_font(label_hint, &lv_font_montserrat_12, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_align(label_hint, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -375,8 +426,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
     // Gesture event for navigation
     lv_obj_move_foreground(spinner_ring);   // bring the ring to the front
     lv_obj_add_event_cb(ui_ScreenPageBLEScan, ui_event_ble_scan_background, LV_EVENT_GESTURE, NULL);
-
-    // Start scanning
-    start_scan();
+    lv_obj_add_event_cb(ui_ScreenPageBLEScan, on_page_event, LV_EVENT_ALL, NULL);   // rescans on every visit
+    if (!s_page_timer) s_page_timer = lv_timer_create(page_tick, 500, NULL);
 }
 

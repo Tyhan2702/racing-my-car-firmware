@@ -87,6 +87,9 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name);
 bool elm327_ble_is_connected(void);
 void elm327_ble_disconnect(void);
 
+// Forget the bound adapter (no more auto-reconnect) and drop the connection if there is one.
+void elm327_ble_forget_target(void);
+
 // WiFi OTA pause/resume: drop the ELM327 link and suppress auto-reconnect +
 // polling during OTA, so the SoftAP gets the full 2.4GHz radio; re-arm
 // auto-reconnect on exit. Call from the OTA-mode screen, not the BLE OTA path.

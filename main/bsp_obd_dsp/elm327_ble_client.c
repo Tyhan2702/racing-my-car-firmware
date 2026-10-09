@@ -54,6 +54,9 @@ static bool s_target_bda_valid = false;
 
 // ---- Scan mode related ----
 static bool s_scan_only_mode = false;  // true=scan only, no connect
+// A scan that could not start (another scan was still running or stopping) is retried once the radio reports
+// the stop: s_want_scan_s = the scan last asked for, s_pending_scan_s = the one to start on SCAN_STOP_COMPLETE.
+static int s_want_scan_s, s_pending_scan_s, s_scan_retries;
 static ble_scan_found_cb_t s_scan_cb = NULL;
 static ble_scan_result_t s_scan_list[BLE_SCAN_MAX_DEVICES];
 static int s_scan_count = 0;
@@ -1397,8 +1400,13 @@ static bool extract_mode21_oil_temp(const uint32_t *d, int count, int32_t *oil_c
     return false;
 }
 
+static void request_scan(int seconds) {
+    s_want_scan_s = seconds;
+    esp_ble_gap_start_scanning(seconds);   // result comes back as SCAN_START_COMPLETE (retried there if refused)
+}
+
 static void start_scan(void) {
-    esp_ble_gap_start_scanning(10); // 10s
+    request_scan(10); // 10s
 }
 
 static bool match_device_target(const esp_ble_gap_cb_param_t *pr, const char *target_name,
@@ -1589,7 +1597,23 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         }
         break;
     }
+    case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
+        if (param->scan_start_cmpl.status != ESP_BT_STATUS_SUCCESS && s_want_scan_s > 0 && s_scan_retries < 3) {
+            // refused (usually: the previous scan is still running/stopping): stop it and start again on STOP_COMPLETE
+            s_scan_retries++;
+            s_pending_scan_s = s_want_scan_s;
+            esp_ble_gap_stop_scanning();
+        } else {
+            s_scan_retries = 0;
+        }
+        break;
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
+        if (s_pending_scan_s > 0) {
+            int seconds = s_pending_scan_s;
+            s_pending_scan_s = 0;
+            if (s_scan_only_mode || (s_target_bda_valid && !s_connected && !s_ota_paused)) request_scan(seconds);
+        }
+        break;
     default:
         break;
     }
@@ -2315,12 +2339,15 @@ void elm327_ble_scan_only_start(int duration_s, ble_scan_found_cb_t cb) {
     s_scan_count = 0;
     memset(s_scan_list, 0, sizeof(s_scan_list));
     ESP_LOGD(TAG, "Starting scan-only mode (%ds)...", duration_s);
-    esp_ble_gap_start_scanning(duration_s);
+    s_scan_retries = 0;
+    request_scan(duration_s);
 }
 
 void elm327_ble_scan_only_stop(void) {
-    esp_ble_gap_stop_scanning();
     s_scan_only_mode = false;
+    // leaving the device list: go back to looking for the bound adapter once the list scan has stopped
+    s_pending_scan_s = (s_target_bda_valid && !s_connected && !s_ota_paused) ? 10 : 0;
+    esp_ble_gap_stop_scanning();
     ESP_LOGD(TAG, "Scan-only stopped. Found %d devices.", s_scan_count);
 }
 
@@ -2352,8 +2379,14 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name) {
         s_cbs.on_parsed_manifold_pressure = default_on_parsed_manifold_pressure;
         s_cbs.on_parsed_afr = default_on_parsed_afr;
     }
-    // Start scanning; auto-connect once found
-    esp_ble_gap_start_scanning(15);
+    // Switching from a connected adapter: drop it first; the DISCONNECT handler then scans for the new target.
+    // Otherwise scan now (retried after the list scan has stopped if the radio refuses).
+    s_scan_retries = 0;
+    if (s_connected) {
+        elm327_ble_disconnect();
+    } else {
+        request_scan(15);
+    }
     // Create the poll task (if not already created)
     if (!s_poll_task_started) {
         xTaskCreate(obd_poll_task, "obd_poll", 4096, NULL, 4, NULL);
@@ -2363,6 +2396,16 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name) {
 
 bool elm327_ble_is_connected(void) {
     return s_connected;
+}
+
+void elm327_ble_forget_target(void) {
+    // "Delete saved device": no target any more, so neither the DISCONNECT handler nor a finished scan reconnects
+    s_target_bda_valid = false;
+    memset(s_target_bda, 0, sizeof(s_target_bda));
+    s_target_name[0] = '\0';
+    s_pending_scan_s = 0;
+    if (s_connected) elm327_ble_disconnect();
+    else if (!s_scan_only_mode) esp_ble_gap_stop_scanning();
 }
 
 void elm327_ble_disconnect(void) {
