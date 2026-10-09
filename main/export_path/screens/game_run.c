@@ -129,7 +129,7 @@ static void reset_run(void)
 {
     memset(s_obj, 0, sizeof(s_obj));
     s_pos = 0; s_kmh = 120; s_lane = 0; s_px = lane_x(PLAYER_Y, 0); s_curve = 0; s_curve_t = 0;
-    s_spawn = 0; s_turbo = 100; s_turbo_left = 0; s_score = 0 s_dist = 0;
+    s_spawn = 0; s_turbo = 100; s_turbo_left = 0; s_score = 0; s_dist = 0;
 }
 
 static void begin(void)
