@@ -1,4 +1,3 @@
-#include "app_obd_dsp/gauge_time.h"
 #include "ota_update_ble.h"
 
 #include <stdio.h>
@@ -759,17 +758,6 @@ static void parse_control_write(const uint8_t *buf, uint16_t len)
         bootmedia_session_reset(true);
         notify_status("idle", "none", "transfer cancelled", 0, 0);
         ota_abort_current();
-    }
-
-    if (command == 5 && len >= 15) {
-        // set the clock from the phone: int64 UTC seconds + int16 time-zone minutes, little endian
-        int64_t utc = 0;
-        int16_t zone = 0;
-        memcpy(&utc, buf + 5, 8);
-        memcpy(&zone, buf + 13, 2);
-        gauge_time_set(utc, zone);
-        notify_status("idle", "none", "time set", 0, 0);
-        return;
     }
 
     if (command == 4) {

@@ -5,7 +5,6 @@
 // The UI theme is named PINK_CAT (pink cat): main color pink, secondary color purple
 #include "ui.h"
 #include "screens/ui_menu.h"
-#include "screens/clock_faces.h"
 #include "ui_helpers.h"
 #include "ui_ext.h"
 #include "ui_disp_item.h"
@@ -969,9 +968,8 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
                 _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
             } else {
-                // Past the last theme page → the installed clock faces, then the Info page (version/settings)
-                if (clock_installed_count() > 0) ui_clock_show_installed(0, false);
-                else _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+                // Past the last theme page → go to Info page (version/settings)
+                _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
             }
         }
         else if(dir == LV_DIR_TOP) {
@@ -1213,12 +1211,8 @@ void ui_event_easter_egg_background(lv_event_t * e)
         }
         else if(dir == LV_DIR_RIGHT) {
             lv_indev_wait_release(lv_indev_get_act());
-            // the installed clock faces sit between the theme pages and this page
-            if (clock_installed_count() > 0) {
-                ui_clock_show_installed(clock_installed_count() - 1, true);
-            }
             // If a custom theme with pages is loaded, swipe left/right returns to theme pages
-            else if (theme_page_list_count() > 0) {
+            if (theme_page_list_count() > 0) {
                 // Right swipe goes to last theme page, left swipe goes to first
                 ui_theme_gauge_page_index = (dir == LV_DIR_RIGHT) ? (theme_page_list_count() - 1) : 0;
                 if (ui_ScreenPageThemeGauge) {

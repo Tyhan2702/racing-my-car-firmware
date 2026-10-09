@@ -23,7 +23,6 @@
 
 /* Waveshare BSP drivers */
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
-#include "app_obd_dsp/gauge_time.h"
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
 #include "bsp_obd_dsp/exio/TCA9554PWR.h"
 #endif
@@ -214,7 +213,6 @@ void app_main(void)
 
     /* 2. I2C bus init (used by the TCA9554 IO expander + CST816 touch on V1, CST816 touch only on V2/V3) */
     I2C_Init();
-    gauge_time_init();          // PCF85063 RTC -> system clock, if it kept time
 
     /* 3. IO expander init (TCA9554PWR, I2C address 0x20) — V1 board only; V2/V3 have no expander */
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
