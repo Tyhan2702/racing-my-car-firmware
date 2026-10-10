@@ -18,16 +18,16 @@ typedef struct {
     uint8_t protocol;      // OBD protocol: 0=auto, 1~9=fixed
     theme_cfg_t theme_cfg;   // theme config
     char    ble_device_name[32]; // last connected BLE device name, empty = not configured
-    uint8_t default_page;   // default boot page: 0=Temp, 1=Info, 2=Chart, 3=Needle, 4=Gear, 5=RPM, 6=Speed
+    uint8_t default_page;   // unused (the firmware's own gauge pages were removed in v49); kept for the saved layout
     uint8_t brightness_day; // brightness 10-100, 0=unset (use 100)
     uint8_t vehicle_profile_idx; // vehicle profile index, 0=OBD2 Generic (full list in vehicle_profiles.c)
-    uint16_t brake_temp_warn_c; // brake temp warning threshold, °C (x1)
-    uint16_t oil_pressure_warn_x10; // oil pressure warning threshold, 0.1bar
-    uint8_t temp_display_map[3]; // TEMP page, 3 rows display-item mapping
-    uint8_t info_display_map[5]; // INFO page, 5-cell display-item mapping
-    uint8_t needle_source_idx;   // needle page data source (disp_item_t value, default 0=CLT)
+    uint16_t brake_temp_warn_c; // unused since v49 (warning pages removed); kept for the saved layout
+    uint16_t oil_pressure_warn_x10; // unused since v49 (warning pages removed); kept for the saved layout
+    uint8_t temp_display_map[3]; // unused since v49 (TEMP page removed); kept for the saved layout
+    uint8_t info_display_map[5]; // unused since v49 (INFO page removed); kept for the saved layout
+    uint8_t needle_source_idx;   // unused since v49 (needle page removed); kept for the saved layout
     uint8_t device_role;         // multi-gauge role: 0=master (reads ELM327), 1=slave (receives master data)
-    uint8_t chart_source_idx;    // chart page data item (disp_item_t value, default 8=OILP)
+    uint8_t chart_source_idx;    // unused since v49 (chart page removed); kept for the saved layout
     uint16_t rpm_warn_threshold; // RPM warning threshold (rpm), 0=unset (default 6000)
     uint8_t rpm_warn_anim_en;    // RPM warning flash enable: 0=off, 1=on
     uint8_t espnow_master_mac[6];// master MAC a slave is bound to (all-zero = unbound / accept any)
@@ -57,10 +57,6 @@ esp_err_t nvs_storage_init(void);
 /* User config accessors */
 const nvs_user_cfg_t * nvs_cfg_get(void);
 esp_err_t nvs_cfg_set(const nvs_user_cfg_t *cfg);
-
-// Per-item alarm threshold for the chart page (raw units; value>=threshold alarms; 32767=off). item = disp_item_t value.
-int16_t nvs_chart_alarm_get(uint8_t item);
-void    nvs_chart_alarm_set(uint8_t item, int16_t raw_threshold);
 
 // Multi-gauge boot animation: 0=OFF, 1=RACE AS ONE, 2=VIDEO. Stored as a separate blob, not in the cfg struct.
 uint8_t nvs_intro_enable_get(void);           // 0=OFF 2=VIDEO (the boot animation installed from the app)

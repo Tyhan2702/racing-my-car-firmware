@@ -13,9 +13,6 @@
 #define TAG                   "nvs_storage"
 #define NS_CFG                "cfg"
 #define KEY_CFG               "settings"
-#define KEY_CHART_ALARM       "chartalarm"
-#define CHART_ALARM_N         12   // = DISP_ITEM_COUNT (must stay in sync with disp_item_t in ui.c)
-#define CHART_ALARM_OFF       32767 // "off" sentinel for alarm thresholds (unreachable, avoids false alarms)
 #define KEY_MG_EXTRA          "mgextra"   // multi-gauge boot animation settings
 #define KEY_CFG_VERSION       "cfgver"    // config version (missing = v0)
 #define CFG_VERSION_CURRENT   3           // current version; bump on field add/semantic change (migration in nvs_storage_init)
@@ -26,10 +23,6 @@ static nvs_user_cfg_t s_cfg =   {
                         .theme_cfg.user_theme_domiant_color = COLOR_DOMIANT_PINK,// legacy, unused (kept for struct layout)
                         .theme_cfg.user_theme_secondary_color = COLOR_SECONDARY_PINK,// legacy, unused
                         .ble_device_name = "", // empty = use default "OBDII"
-                        .temp_display_map = {0, 1, 2}, // CLT, IAT, OIL
-                        .info_display_map = {0, 2, 3, 4, 1}, // CLT, OIL, LOAD, TPS, IAT
-                        .brake_temp_warn_c = 600,
-                        .oil_pressure_warn_x10 = 80,
                         .device_role = ESPNOW_ROLE_STANDALONE, // new devices (no cfg in NVS) default to standalone (no WiFi/ESP-NOW); existing devices are overridden by load_blob
                         .rpm_warn_threshold = 6000,
                         .rpm_warn_anim_en = 0,
@@ -37,14 +30,6 @@ static nvs_user_cfg_t s_cfg =   {
                     };
 static nvs_stat_t     s_stat = {0};   // runtime-only stats, not persisted (reset every boot to save flash)
 static SemaphoreHandle_t s_mux;
-
-// Per-item alarm thresholds (raw units), index = disp_item_t: CLT,IAT,OIL,LOD,TPS,RPM,SPD,BAT,OIP,BKT,BST
-// By default only oil pressure (8.0bar = x10 80) and brake temp (600°C = x10 6000) keep an alarm; the rest are off.
-static int16_t s_chart_alarm[CHART_ALARM_N] = {
-    CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF,
-    CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF,
-    80, 6000, CHART_ALARM_OFF
-};
 
 // Multi-gauge boot animation settings (separate blob):
 // intro_enable 0=OFF 1=RACE 2=VIDEO (the single boot_block flashed via the phone app; default)
@@ -71,14 +56,7 @@ esp_err_t nvs_storage_init(void)
     load_blob(NS_CFG, KEY_CFG, &s_cfg, sizeof(s_cfg));
 
     // Mileage/trip stats are no longer persisted (see s_stat declaration); stay {0} and start fresh each boot.
-    {   // Chart alarm thresholds: load if present in NVS; otherwise keep static defaults (don't overwrite to 0).
-        nvs_handle_t h; size_t sz = sizeof(s_chart_alarm);
-        if (nvs_open(NS_CFG, NVS_READONLY, &h) == ESP_OK) {
-            nvs_get_blob(h, KEY_CHART_ALARM, s_chart_alarm, &sz);
-            nvs_close(h);
-        }
-    }
-    {   // Multi-gauge boot animation settings: same as above, load if present else keep defaults.
+    {   // Multi-gauge boot animation settings: load if present else keep defaults.
         nvs_handle_t h; size_t sz = sizeof(s_mg);
         if (nvs_open(NS_CFG, NVS_READONLY, &h) == ESP_OK) {
             nvs_get_blob(h, KEY_MG_EXTRA, &s_mg, &sz);
@@ -146,29 +124,13 @@ esp_err_t nvs_storage_init(void)
 
     /* Default-value repair for new fields (old NVS data has rsv[x] all zero) */
     if(s_cfg.brightness_day < 10) s_cfg.brightness_day = 100; // valid range 10-100; 0/unset/out-of-range all become 100
-    if(s_cfg.default_page > 6) s_cfg.default_page = 0; // 0=Temp,1=Info,2=Chart,3=Needle,4=Gear,5=Rpm,6=Speed (brake temp merged into Chart)
-    if(s_cfg.needle_source_idx >= 11) s_cfg.needle_source_idx = 0; // DISP_ITEM_COUNT=11 (CLT..BOOST)
     if(s_cfg.device_role > 2) s_cfg.device_role = ESPNOW_ROLE_STANDALONE; // role: 0=master 1=slave 2=standalone; out-of-range -> standalone
-    if(s_cfg.chart_source_idx >= 11) s_cfg.chart_source_idx = 8; // chart item out-of-range -> default OILP (old NVS byte 0=CLT is also fine, unify to OILP)
     // Clamp vehicle profile index to the registered profile count (out-of-range -> index 0)
     uint8_t vehicle_count = 0;
     vehicle_profile_get_all(&vehicle_count);
     if(vehicle_count > 0 && s_cfg.vehicle_profile_idx >= vehicle_count) s_cfg.vehicle_profile_idx = 0;
-    if(s_cfg.brake_temp_warn_c < 10 || s_cfg.brake_temp_warn_c > 1200) s_cfg.brake_temp_warn_c = 600;
-    if(s_cfg.oil_pressure_warn_x10 > 100) s_cfg.oil_pressure_warn_x10 = 80;
-    // 0=unset/legacy out-of-range -> default 6000; clamped here centrally so callers (ui.c / ui_ScreenPageRpmWarn.c) don't repeat the check
+    // 0=unset/legacy out-of-range -> default 6000; clamped here centrally so callers (SETTINGS, the RPM warning in ui_ext.c) don't repeat the check
     if(s_cfg.rpm_warn_threshold < 1000) s_cfg.rpm_warn_threshold = 6000;
-
-    // Validate TEMP/INFO custom display-item maps: 0..(DISP_ITEM_COUNT-1)
-    for (int i = 0; i < 3; ++i) {
-        if (s_cfg.temp_display_map[i] > 11) s_cfg.temp_display_map[i] = (uint8_t)i;
-    }
-    for (int i = 0; i < 5; ++i) {
-        if (s_cfg.info_display_map[i] > 11) {
-            static const uint8_t def_map[5] = {0, 2, 3, 4, 1};
-            s_cfg.info_display_map[i] = def_map[i];
-        }
-    }
 
     s_mux = xSemaphoreCreateMutex();
     return ESP_OK;
@@ -183,17 +145,6 @@ esp_err_t nvs_cfg_set(const nvs_user_cfg_t *cfg)
     if(memcmp(cfg,&s_cfg,sizeof(s_cfg))==0) return ESP_OK;
     s_cfg=*cfg;
     return save_blob(NS_CFG, KEY_CFG, &s_cfg, sizeof(s_cfg));
-}
-
-/* Chart alarm thresholds */
-int16_t nvs_chart_alarm_get(uint8_t item){
-    return (item < CHART_ALARM_N) ? s_chart_alarm[item] : CHART_ALARM_OFF;
-}
-void nvs_chart_alarm_set(uint8_t item, int16_t raw_threshold){
-    if(item >= CHART_ALARM_N) return;
-    if(s_chart_alarm[item] == raw_threshold) return;
-    s_chart_alarm[item] = raw_threshold;
-    save_blob(NS_CFG, KEY_CHART_ALARM, s_chart_alarm, sizeof(s_chart_alarm));
 }
 
 /* Multi-gauge boot animation settings */

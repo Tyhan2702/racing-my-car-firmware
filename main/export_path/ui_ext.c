@@ -352,10 +352,7 @@ void ui_ext_no_signal_update(bool signal_ok)
     static bool s_no_signal_visible = false;
     lv_obj_t *act = lv_scr_act();
     // only warn on the pages that actually display gauge data; settings/scan/boot-animation pages don't need it
-    bool on_gauge_page = (act == ui_ScreenPageTemp || act == ui_ScreenPageInfo ||
-                           act == ui_ScreenPageOilPressure || act == ui_ScreenPageNeedle ||
-                           act == ui_ScreenPageGear || act == ui_ScreenPageRpm ||
-                           act == ui_ScreenPageSpeed);
+    bool on_gauge_page = act && act == ui_ScreenPageThemeGauge;
     bool show = s_boot_done && on_gauge_page && !signal_ok;
 
     if (show) {
@@ -392,10 +389,7 @@ void ui_ext_doors_update(void)
     static lv_obj_t *s_lbl;
     static int16_t s_shown = -2;
     lv_obj_t *act = lv_scr_act();
-    bool on_gauge_page = (act == ui_ScreenPageTemp || act == ui_ScreenPageInfo ||
-                           act == ui_ScreenPageOilPressure || act == ui_ScreenPageNeedle ||
-                           act == ui_ScreenPageGear || act == ui_ScreenPageRpm ||
-                           act == ui_ScreenPageSpeed);
+    bool on_gauge_page = act && act == ui_ScreenPageThemeGauge;
     int16_t doors = obd_data_get_doors();
     int16_t want = (s_boot_done && on_gauge_page && doors > 0) ? doors : 0;
     if (want == s_shown) return;
@@ -449,7 +443,6 @@ void ui_ext_tick(void)
 
 // RPM warning test mode
 volatile int s_rpm_flash_test_ticks = 0;
-void ui_rpm_flash_test_start(void) { s_rpm_flash_test_ticks = 60; }  // ~2s test flash
 // Note: the RPM ramp for the multi-gauge linked test is driven centrally by the master (espnow_link.c writes the RPM override layer and broadcasts it);
 //     this unit only renders per its own position, no local simulation, keeping all three gauges in sync.
 
