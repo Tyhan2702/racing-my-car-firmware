@@ -1,5 +1,5 @@
-// App menu (see ui_menu.h): the RMC mark on top and round outlined buttons with their names, like a car's centre
-// screen. A tap opens a button, a tap on the mark or a swipe down goes back to the gauge. The platform shows the
+// App menu (see ui_menu.h): the RMC mark in the middle and a ring of round yellow-outlined buttons with their names,
+// like a car's centre screen. A tap opens a button, a tap on the mark or a swipe down goes back to the gauge. The platform shows the
 // same menu (web/gauge-menu.js). It opens only with a swipe up on a theme page; left/right stays among the themes.
 // Without a theme the gauge shows the "no theme" page here instead of the firmware's own gauge pages, which come
 // from the upstream project and are not Racing My Car's.
@@ -23,13 +23,12 @@
 
 #define IDLE_MS 60000      // a minute without a touch on the menu pages -> back to the gauge
 #define STAY_MS 1500       // on a theme page this long -> it becomes the page shown at boot
-#define BTN 76             // button diameter
-#define COL 95             // distance between button columns
-#define ROW1 128           // button centre rows
-#define ROW2 244
-#define C_IDLE 0x3A3A3C    // button ring, resting
-#define C_TEXT 0x8E8E93    // label, resting
-#define C_PICK 0xFFDD00    // the chosen button: ring, icon and label in RMC yellow
+#define BTN 50             // button diameter
+#define RING_R 118         // the buttons sit on this circle, the first at the top, then clockwise
+#define RING_Y 172         // its centre (above the screen's: the names hang under the buttons)
+#define MARK_Y 186         // the RMC mark, a little lower than the ring's centre so it sits in the middle of it all
+#define C_TEXT 0xBDBDBD    // label, resting
+#define C_PICK 0xFFDD00    // RMC yellow: rings and icons; the chosen button is filled with it
 
 lv_obj_t *ui_ScreenPageMenu;
 
@@ -203,8 +202,8 @@ void ui_menu_go_home(void)
 
 
 // ---------- the menu screen ----------
-// Like a car's centre screen: the RMC mark on top, round outlined buttons in rows of three with their names under
-// them. The button last opened is shown in RMC yellow, and so is the one under the finger.
+// Like a car's centre screen: the RMC mark in the middle, a ring of round yellow-outlined buttons with their names
+// under them. The button last opened is filled with RMC yellow, and so is the one under the finger.
 static EXT_RAM_BSS_ATTR lv_obj_t *s_btn[ITEM_COUNT], *s_icon[ITEM_COUNT], *s_label[ITEM_COUNT];
 static EXT_RAM_BSS_ATTR int s_btn_item[ITEM_COUNT], s_btn_n;
 static int s_last = -1;                 // item last opened from the menu (kept while the gauge runs)
@@ -212,9 +211,8 @@ static bool s_closing;
 
 static void paint(int b, bool pick)
 {
-    lv_obj_set_style_border_color(s_btn[b], lv_color_hex(pick ? C_PICK : C_IDLE), 0);
-    lv_obj_set_style_border_width(s_btn[b], pick ? 2 : 1, 0);
-    lv_obj_set_style_img_recolor(s_icon[b], lv_color_hex(pick ? C_PICK : 0xFFFFFF), 0);
+    lv_obj_set_style_bg_color(s_btn[b], lv_color_hex(pick ? C_PICK : 0x000000), 0);
+    lv_obj_set_style_img_recolor(s_icon[b], lv_color_hex(pick ? 0x000000 : C_PICK), 0);
     lv_obj_set_style_text_color(s_label[b], lv_color_hex(pick ? C_PICK : C_TEXT), 0);
 }
 static void highlight(int item)
@@ -268,30 +266,26 @@ static void ui_ScreenPageMenu_screen_init(void)
 
     lv_obj_t *logo = lv_img_create(scr);
     lv_img_set_src(logo, &imgRmcMarkSmall);
-    lv_img_set_pivot(logo, 42, 15);
-    lv_img_set_zoom(logo, 218);                      // 85 %
-    lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 46);
+    lv_img_set_zoom(logo, 300);                      // 117 %
+    lv_obj_align(logo, LV_ALIGN_CENTER, 0, MARK_Y - 180);
     lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_ext_click_area(logo, 12);
     lv_obj_add_event_cb(logo, on_logo, LV_EVENT_CLICKED, NULL);
 
     s_btn_n = s_order_n < ITEM_COUNT ? s_order_n : ITEM_COUNT;
     if (s_last < 0 && s_btn_n) s_last = s_order[0];
-    // rows of three; more than six buttons: three rows, the buttons a little smaller so all fit the round screen
-    bool three = s_btn_n > 6;
-    int bs = three ? 58 : BTN, cs = three ? 104 : COL;
     for (int b = 0; b < s_btn_n; b++) {
-        int row = b / 3, in_row = s_btn_n - row * 3 < 3 ? s_btn_n - row * 3 : 3, col = b % 3;
-        static const int rows3[3] = {108, 194, 280};
-        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * cs), y = three ? rows3[row] : (row ? ROW2 : ROW1);
+        float a = (-90.0f + b * 360.0f / s_btn_n) * 3.14159265f / 180.0f;
+        int x = 180 + (int)lroundf(RING_R * cosf(a)), y = RING_Y + (int)lroundf(RING_R * sinf(a)), bs = BTN;
         int item = s_btn_item[b] = s_order[b];
         lv_obj_t *btn = s_btn[b] = lv_obj_create(scr);
         lv_obj_remove_style_all(btn);
         lv_obj_set_size(btn, bs, bs);
         lv_obj_set_pos(btn, x - bs / 2, y - bs / 2);
         lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0x141416), 0);
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(btn, lv_color_hex(C_PICK), 0);
+        lv_obj_set_style_border_width(btn, 2, 0);
         lv_obj_set_style_border_opa(btn, LV_OPA_COVER, 0);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
@@ -307,7 +301,7 @@ static void ui_ScreenPageMenu_screen_init(void)
         lv_label_set_long_mode(l, LV_LABEL_LONG_CLIP);       // one line
         lv_obj_set_width(l, 110);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_pos(l, x - 55, y + bs / 2 + (three ? 3 : 6));
+        lv_obj_set_pos(l, x - 55, y + bs / 2 + 3);
     }
     highlight(s_last);
 }

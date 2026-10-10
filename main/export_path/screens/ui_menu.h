@@ -1,5 +1,5 @@
 #pragma once
-// The app menu: the RMC mark and eight round buttons (OBD, DATA, TEST, SETTINGS, GAMES, BOOT, UPDATE, VERSION, a fixed order set by
+// The app menu: the RMC mark in the middle of a ring of eight round buttons (OBD, DATA, TEST, SETTINGS, GAMES, BOOT, UPDATE, VERSION, a fixed order set by
 // Racing My Car), opened by swiping up on a theme page and closed by swiping down. It also remembers the theme page the driver settles on (shown again at boot) and
 // brings the gauge back to it after a minute without a touch on the menu pages.
 

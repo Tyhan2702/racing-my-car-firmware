@@ -449,14 +449,14 @@ static void run_tick(lv_timer_t *t)
         if (el >= 3000000) { s_state = R_GO; s_t_start = now; }
         else {
             snprintf(big, sizeof(big), "%d", 3 - (int)(el / 1000000));
-            show(big, &ui_font_FontTypoderSize140, 0xFFFFFF, T->name, "", "HOLD 5 SEC TO EXIT");
+            show(big, &ui_font_FontTypoderSize140, 0xFFFFFF, T->name, "", "HOLD TO EXIT");
             return;
         }
     }
     if (s_state == R_GO) {
         if (now - s_t_start > 30000000) { finish(false, "NO START"); return; }
         if (!s_last_sample_us && now - s_t_start > 3000000) { finish(false, "NO OBD DATA"); return; }   // no speed at all
-        show("GO", &ui_font_FontTypoderSize56, RMC_GREEN, T->name, "", "HOLD 5 SEC TO EXIT");
+        show("GO", &ui_font_FontTypoderSize56, RMC_GREEN, T->name, "", "HOLD TO EXIT");
         return;
     }
     // running
@@ -466,7 +466,7 @@ static void run_tick(lv_timer_t *t)
     if (!from) {
         if (T->from) snprintf(big, sizeof(big), "%d", (int)(s_v + 0.5f));
         else strcpy(big, "0.00");
-        show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, T->from ? "TO 60 KM/H" : mid, "", "HOLD 5 SEC TO EXIT");
+        show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, T->from ? "TO 60 KM/H" : mid, "", "HOLD TO EXIT");
         return;
     }
     int64_t cs = (now - from) / 10000;
@@ -479,7 +479,7 @@ static void run_tick(lv_timer_t *t)
         size_t k = strlen(sp);
         snprintf(sp + k, sizeof(sp) - k, "%s%s  %lld.%02lld", k ? "\n" : "", T->split[i], (long long)(d / 100), (long long)(d % 100));
     }
-    show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, mid, sp, "HOLD 5 SEC TO EXIT");
+    show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, mid, sp, "HOLD TO EXIT");
 }
 
 static void on_run(lv_event_t *e)
