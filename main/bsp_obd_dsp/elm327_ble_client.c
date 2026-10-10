@@ -2010,8 +2010,10 @@ bool elm327_ble_send_ascii_blocking(const char *ascii_cmd)
     elm_wait_ready();
     {   // which mode 01 PID we asked for last (replies to other PIDs come from another tester); noted only now, after
         // the previous reply has been read, or that reply would look like someone else's
-        unsigned pid;
-        if (strncmp(ascii_cmd, "01 ", 3) == 0 && sscanf(ascii_cmd + 3, "%x", &pid) == 1) s_sent01 = (int)pid;
+        // by hand, not sscanf: this runs in the poll task for every command, and sscanf needs more stack than it has
+        const char *h = ascii_cmd + 3;
+        if (strncmp(ascii_cmd, "01 ", 3) == 0 && isxdigit((unsigned char)h[0]) && isxdigit((unsigned char)h[1]))
+            s_sent01 = (int)strtol((char[3]){h[0], h[1], 0}, NULL, 16);
         else if (strncmp(ascii_cmd, "AT", 2) != 0) s_sent01 = -1;
     }
     s_elm_ready = false;
@@ -2949,7 +2951,7 @@ void elm327_ble_start_default(const char *target_name, const uint8_t mac[6]) {
     }
     elm327_ble_init_and_start(target_name, &cbs);
     if (!s_poll_task_started) {
-        xTaskCreate(obd_poll_task, "obd_poll", 4096, NULL, 4, NULL);
+        xTaskCreate(obd_poll_task, "obd_poll", 8192, NULL, 4, NULL);   // brand methods, scan and ext requests nest deep
         s_poll_task_started = true;
     }
 }
@@ -3025,7 +3027,7 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name) {
     }
     // Create the poll task (if not already created)
     if (!s_poll_task_started) {
-        xTaskCreate(obd_poll_task, "obd_poll", 4096, NULL, 4, NULL);
+        xTaskCreate(obd_poll_task, "obd_poll", 8192, NULL, 4, NULL);   // brand methods, scan and ext requests nest deep
         s_poll_task_started = true;
     }
 }
