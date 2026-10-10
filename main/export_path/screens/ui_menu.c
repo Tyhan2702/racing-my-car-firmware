@@ -66,77 +66,20 @@ static const menu_item_t ITEMS[] = {
 };
 #define ITEM_COUNT (int)(sizeof(ITEMS) / sizeof(ITEMS[0]))
 
-// ---------- settings (NVS "rmc_ui") ----------
-static EXT_RAM_BSS_ATTR int s_order[ITEM_COUNT], s_order_n;   // visible items in order
-
-static int item_index(const char *key)
-{
-    for (int i = 0; i < ITEM_COUNT; i++) if (strcmp(ITEMS[i].key, key) == 0) return i;
-    return -1;
-}
-
-// "games,obd,-ota,info,boot": the order, '-' = hidden. Items the stored list lacks (newer firmware) come last.
+// ---------- the buttons: always all of them, in the order above (owners cannot rearrange the menu) ----------
+static EXT_RAM_BSS_ATTR int s_order[ITEM_COUNT], s_order_n;
 static void load_order(void)
 {
-    char text[96] = "";
-    size_t len = sizeof(text);
-    nvs_handle_t h;
-    if (nvs_open("rmc_ui", NVS_READONLY, &h) == ESP_OK) { if (nvs_get_str(h, "menu", text, &len) != ESP_OK) text[0] = 0; nvs_close(h); }
-    bool seen[ITEM_COUNT] = {0};
-    s_order_n = 0;
-    char *save = NULL;
-    for (char *tok = strtok_r(text, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
-        bool hidden = tok[0] == '-';
-        int i = item_index(hidden ? tok + 1 : tok);
-        if (i < 0 || seen[i]) continue;
-        seen[i] = true;
-        if (!hidden) s_order[s_order_n++] = i;
+    static bool cleared;
+    if (!cleared) {   // a layout saved by firmware v23-v36 (platform menu editor, removed) is dropped once
+        cleared = true;
+        nvs_handle_t h;
+        if (nvs_open("rmc_ui", NVS_READWRITE, &h) == ESP_OK) {
+            if (nvs_erase_key(h, "menu") == ESP_OK) nvs_commit(h);
+            nvs_close(h);
+        }
     }
-    for (int i = 0; i < ITEM_COUNT; i++) if (!seen[i]) s_order[s_order_n++] = i;
-}
-
-char *menu_config_json(void)
-{
-    load_order();
-    char text[96] = "";
-    size_t len = sizeof(text);
-    nvs_handle_t h;
-    if (nvs_open("rmc_ui", NVS_READONLY, &h) == ESP_OK) { if (nvs_get_str(h, "menu", text, &len) != ESP_OK) text[0] = 0; nvs_close(h); }
-    cJSON *o = cJSON_CreateObject(), *av = cJSON_AddArrayToObject(o, "available"), *ord = cJSON_AddArrayToObject(o, "order"),
-          *hid = cJSON_AddArrayToObject(o, "hidden");
-    for (int i = 0; i < ITEM_COUNT; i++) cJSON_AddItemToArray(av, cJSON_CreateString(ITEMS[i].key));
-    for (int k = 0; k < s_order_n; k++) cJSON_AddItemToArray(ord, cJSON_CreateString(ITEMS[s_order[k]].key));
-    char *save = NULL;
-    for (char *tok = strtok_r(text, ",", &save); tok; tok = strtok_r(NULL, ",", &save))
-        if (tok[0] == '-' && item_index(tok + 1) >= 0) cJSON_AddItemToArray(hid, cJSON_CreateString(tok + 1));
-    char *out = cJSON_PrintUnformatted(o);
-    cJSON_Delete(o);
-    return out;
-}
-
-bool menu_config_set_json(const char *json)
-{
-    cJSON *o = json ? cJSON_Parse(json) : NULL, *ord = o ? cJSON_GetObjectItem(o, "order") : NULL, *hid = o ? cJSON_GetObjectItem(o, "hidden") : NULL;
-    if (!cJSON_IsArray(ord)) { cJSON_Delete(o); return false; }
-    char text[96] = "";
-    bool used[ITEM_COUNT] = {0};
-    cJSON *v = NULL;
-    cJSON_ArrayForEach(v, ord) {
-        int i = cJSON_IsString(v) ? item_index(v->valuestring) : -1;
-        if (i < 0 || used[i]) continue;
-        used[i] = true;
-        bool hidden = false;
-        cJSON *hv = NULL;
-        if (cJSON_IsArray(hid)) cJSON_ArrayForEach(hv, hid) if (cJSON_IsString(hv) && strcmp(hv->valuestring, ITEMS[i].key) == 0) hidden = true;
-        size_t n = strlen(text);
-        snprintf(text + n, sizeof(text) - n, "%s%s%s", n ? "," : "", hidden ? "-" : "", ITEMS[i].key);
-    }
-    cJSON_Delete(o);
-    nvs_handle_t h;
-    if (nvs_open("rmc_ui", NVS_READWRITE, &h) != ESP_OK) return false;
-    bool ok = nvs_set_str(h, "menu", text) == ESP_OK && nvs_commit(h) == ESP_OK;
-    nvs_close(h);
-    return ok;
+    for (s_order_n = 0; s_order_n < ITEM_COUNT; s_order_n++) s_order[s_order_n] = s_order_n;
 }
 
 // ---------- remembered theme page ----------

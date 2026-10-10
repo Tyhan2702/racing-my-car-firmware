@@ -1,7 +1,7 @@
 // USB mailbox: settings the platform writes over a USB cable (web/usb-flash.js mailboxFiles), where it cannot reach
 // NVS. One 4 KB flash sector outside every partition (between phy_init and ota_0) holds "RMCBOX1\n" + JSON +
-// NUL, e.g. {"games":{"installed":[…]},"menu":{"order":[…],"hidden":[…]}}. At boot it is applied like the Wi-Fi
-// POST /ota/games and /ota/menu, then erased so it is applied once.
+// NUL, e.g. {"games":{"installed":[…]}}. At boot it is applied like the Wi-Fi POST /ota/games, then erased so it is
+// applied once.
 #include <string.h>
 #include <stdlib.h>
 #include "esp_flash.h"
@@ -10,7 +10,6 @@
 #include "cJSON.h"
 #include "usb_mailbox.h"
 #include "export_path/screens/game_core.h"
-#include "export_path/screens/ui_menu.h"
 
 #define BOX_ADDR 0x1F000
 #define BOX_SIZE 0x1000
@@ -37,7 +36,6 @@ void usb_mailbox_apply(void)
     cJSON *o = cJSON_Parse(buf + sizeof(MAGIC) - 1);
     if (o) {
         apply(o, "games", games_install_json);
-        apply(o, "menu", menu_config_set_json);
         cJSON_Delete(o);
     } else {
         ESP_LOGW(TAG, "unreadable mailbox, cleared");

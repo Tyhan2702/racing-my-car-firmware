@@ -194,7 +194,7 @@ void app_main(void)
 
     /* 1. NVS init (must be first) */
     nvs_storage_init();
-    usb_mailbox_apply();   // games / menu the platform wrote over a USB cable
+    usb_mailbox_apply();   // games the platform wrote over a USB cable
 
     /* 1.5 Task watchdog: 10s timeout, idle task not subscribed (avoids false triggers when BLE blocks) */
     esp_task_wdt_config_t wdt_cfg = {
