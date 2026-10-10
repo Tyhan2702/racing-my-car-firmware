@@ -5,7 +5,7 @@
 #ifdef SIMULATOR
 #include <zlib.h>
 #else
-#include "rom/miniz.h"
+#include "miniz.h"          // esp_rom/include: the ROM inflater (tinfl_decompress at a fixed ROM address)
 #endif
 
 void *rmc_inflate(const uint8_t *z, size_t z_len, size_t raw_len)
