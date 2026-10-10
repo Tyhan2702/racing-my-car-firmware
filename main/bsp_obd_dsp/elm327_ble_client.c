@@ -203,17 +203,27 @@ static inline uint8_t oil_mode_to_poll_idx(oil_temp_query_mode_t mode) {
     }
 }
 
+static bool proto_is_can(void) { return s_active_protocol >= 6 && s_active_protocol <= 9; }
+static bool proto_is_can29(void) { return s_active_protocol == 7 || s_active_protocol == 9; }
+
+// The request header for the active protocol, or NULL when the adapter's default must stay: K-line / J1850 cars
+// (older Proton Campro, older Perodua, pre-2008 Japanese cars) need the ELM's own header (a CAN header there breaks
+// every request), and so does protocol 0 (the ELM searches by itself, so the bus is not known yet).
 static const char *get_vehicle_fixed_header_cmd(void) {
+    if (!proto_is_can()) return NULL;
     const vehicle_profile_t *vp = vehicle_profile_get_active();
-    if (vp && vp->obd_functional_addr) {
-        // 29-bit CAN functional broadcast (Honda Integra/Civic 11th gen and similar vehicles)
-        if (vp->obd_29bit_functional || (vp->auto_29bit_functional && (s_active_protocol == 7 || s_active_protocol == 9))) {
-            return "ATSH18DB33F1\r";
-        }
-        // 11-bit functional addressing (vehicle-wide broadcast), same as phone apps; BMW needs this
-        return "ATSH7DF\r";
+    bool functional = vp && vp->obd_functional_addr;
+    if (proto_is_can29()) {
+        // 29-bit CAN: functional broadcast 18DB33F1 (Honda Civic 11th gen and similar), physical engine ECU 18DA10F1
+        return (functional || !vp) ? "ATSH18DB33F1\r" : "ATSH18DA10F1\r";
     }
-    return "ATSH7E0\r";     // physical addressing to the engine ECU; Subaru/default
+    // 11-bit CAN: functional broadcast 7DF (same as phone apps; BMW needs it), physical engine ECU 7E0 (Subaru/default)
+    return functional ? "ATSH7DF\r" : "ATSH7E0\r";
+}
+// Puts the fixed header back after a brand or profile request; nothing on buses that keep the adapter's default
+static void send_fixed_header(void) {
+    const char *h = get_vehicle_fixed_header_cmd();
+    if (h) elm327_ble_send_ascii_blocking(h);
 }
 
 // Initialize the oil-temp query strategy (reads the primary/secondary/tertiary priority chain from the vehicle profile config)
@@ -402,8 +412,10 @@ static int elm327_auto_detect_protocol(void) {
     vTaskDelay(pdMS_TO_TICKS(200));
 
     // Try the ELM327 protocols, most likely first: 6 (CAN 11-bit 500k, almost every car since 2008), 8 (CAN 11-bit
-    // 250k), 7 and 9 (29-bit), then the older K-line / J1850 ones (slow to time out). 10/11 are not ATSP codes.
-    static const int PROTOCOLS[] = {6, 8, 7, 9, 1, 2, 3, 4, 5};
+    // 250k), 7 and 9 (29-bit), then K-line: 5 (KWP fast init: older Proton Campro, older Perodua, early-2000s
+    // Japanese cars), 4 (KWP slow init), 3 (ISO 9141: older Toyota/Honda/Nissan), then J1850 (US cars) last.
+    // 10/11 are not ATSP codes.
+    static const int PROTOCOLS[] = {6, 8, 7, 9, 5, 4, 3, 1, 2};
     for (size_t n = 0; n < sizeof(PROTOCOLS) / sizeof(PROTOCOLS[0]); n++) {
         int proto = PROTOCOLS[n];
         // Abort immediately on BLE disconnect — without this check, a disconnect mid-detect
@@ -430,9 +442,9 @@ static int elm327_auto_detect_protocol(void) {
         ESP_LOGD(TAG, "[DETECT] Sent 01 0C, waiting...");
         esp_log_level_set(TAG, prev_level);
 
-        // Wait for a response, up to 2 seconds
-        uint32_t wait_ms = 0;
-        while (wait_ms < 2000) {
+        // Wait for a response: 2 s on CAN/J1850; K-line needs its bus init first (slow init alone takes ~3 s)
+        uint32_t wait_ms = 0, wait_max = (proto >= 3 && proto <= 5) ? 7000 : 2000;
+        while (wait_ms < wait_max) {
             if (!s_connected) { ESP_LOGW(TAG, "[DETECT] BLE disconnected, aborting"); s_protocol_detect_idx = -1; return 0; }
             esp_task_wdt_reset();  // feed the watchdog in the 2s wait loop (11 protocols × 2s could otherwise exceed TWDT)
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -887,8 +899,8 @@ static void do_elm_init(void) {
             nvs_cfg_set(&new_cfg);
             ESP_LOGD(TAG, "Protocol auto-detect SUCCESS! Saving protocol %d to NVS", protocol_to_use);
         } else {
-            protocol_to_use = 6;
-            ESP_LOGW(TAG, "Protocol auto-detect FAILED, using fallback protocol 6");
+            protocol_to_use = 0;   // let the ELM search by itself (it also knows K-line slow/fast init); not saved
+            ESP_LOGW(TAG, "Protocol auto-detect FAILED, falling back to the adapter's own search (ATSP0)");
         }
     }
 
@@ -908,6 +920,7 @@ static void do_elm_init(void) {
     };
     for (size_t i = 0; i < (sizeof(init_cmds) / sizeof(init_cmds[0])); ++i) {
         if (!s_connected) { ESP_LOGW(TAG, "BLE disconnected during ELM init seq, aborting"); return; }
+        if (!init_cmds[i]) continue;   // no fixed header on K-line / J1850 / unknown bus (never send an empty line: the ELM repeats the last command)
         elm327_ble_send_ascii_blocking(init_cmds[i]);
         vTaskDelay(pdMS_TO_TICKS(30));
     }
@@ -1087,15 +1100,16 @@ static void obd_poll_task(void *arg) {
 
                     if (oil_f && oil_f->type != OIL_SPECIAL) {
                         char cmd_buf[24];
-                        const char *uds_hdr = (s_ov && s_ov->uds_header_cmd) ? s_ov->uds_header_cmd : NULL;
-                        bool need_phys = !uds_hdr && s_ov && s_ov->functional_addr && oil_f->type == OIL_UDS_22;
+                        bool can11 = s_active_protocol == 6 || s_active_protocol == 8;   // the profile headers below are 11-bit CAN ones
+                        const char *uds_hdr = (can11 && s_ov && s_ov->uds_header_cmd) ? s_ov->uds_header_cmd : NULL;
+                        bool need_phys = can11 && !uds_hdr && s_ov && s_ov->functional_addr && oil_f->type == OIL_UDS_22;
                         if (uds_hdr) elm327_ble_send_ascii_blocking(uds_hdr);
                         else if (need_phys) elm327_ble_send_ascii_blocking("ATSH7E0\r");
                         if (oil_formula_build_cmd(oil_f, cmd_buf, sizeof(cmd_buf))) {
                             elm327_ble_send_ascii_blocking(cmd_buf);
                         }
-                        if (uds_hdr) elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
-                        else if (need_phys) elm327_ble_send_ascii_blocking("ATSH7DF\r");
+                        if (uds_hdr) send_fixed_header();
+                        else if (need_phys) send_fixed_header();
                         s_expect_mode21 = false;
                     } else if (oil_f && oil_f->type == OIL_SPECIAL && oil_f->special_id == 0) {
                         elm327_ble_send_ascii_blocking("21 01\r");
@@ -1128,11 +1142,12 @@ static void obd_poll_task(void *arg) {
                             bool need_phys = (mode == OIL_TEMP_MODE_BMW_22_03F3 ||
                                               mode == OIL_TEMP_MODE_BMW_G_22_4402 ||
                                               mode == OIL_TEMP_MODE_BMW_22_D002 ||
-                                              mode == OIL_TEMP_MODE_BMW_22_111F);
+                                              mode == OIL_TEMP_MODE_BMW_22_111F) &&
+                                             (s_active_protocol == 6 || s_active_protocol == 8);
                             if (need_phys) elm327_ble_send_ascii_blocking("ATSH7E0\r");
                             if (oil_formula_build_cmd(&legacy_f, cmd_buf, sizeof(cmd_buf)))
                                 elm327_ble_send_ascii_blocking(cmd_buf);
-                            if (need_phys) elm327_ble_send_ascii_blocking("ATSH7DF\r");
+                            if (need_phys) send_fixed_header();
                         }
                         s_oil_query_mode = poll_idx;
                     }
@@ -1172,7 +1187,7 @@ static void obd_poll_task(void *arg) {
                 if (mv_query(MV_OIL_PRESSURE)) break;   // brand method list
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_oil_pressure_did != 0) {
+                    if (vp && vp->obd_oil_pressure_did != 0 && (s_active_protocol == 6 || s_active_protocol == 8)) {
                         const vehicle_override_t *ov = vehicle_profile_get_override();
                         const char *phys_hdr = (ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r";
                         char cmd[16];
@@ -1180,7 +1195,7 @@ static void obd_poll_task(void *arg) {
                         snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
                                  (vp->obd_oil_pressure_did >> 8) & 0xFF, vp->obd_oil_pressure_did & 0xFF);
                         elm327_ble_send_ascii_blocking(cmd);
-                        elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
+                        send_fixed_header();
                     }
                 }
                 break;
@@ -1188,7 +1203,7 @@ static void obd_poll_task(void *arg) {
                 if (mv_query(MV_GEAR)) break;   // brand method list
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_gear_did != 0) {
+                    if (vp && vp->obd_gear_did != 0 && (s_active_protocol == 6 || s_active_protocol == 8)) {
                         const vehicle_override_t *ov = vehicle_profile_get_override();
                         const char *gear_hdr = (ov && ov->obd_gear_header_cmd) ? ov->obd_gear_header_cmd
                                              : ((ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r");
@@ -1209,7 +1224,7 @@ static void obd_poll_task(void *arg) {
                             elm327_ble_send_ascii_blocking(cmd);
                         }
                         if (rx_filter) elm327_ble_send_ascii_blocking("ATCRA\r");
-                        elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
+                        send_fixed_header();
                     }
                 }
                 break;
@@ -1291,7 +1306,14 @@ static const obd_method_set_t *mv_set(int sig)
     const vehicle_profile_t *vp = vehicle_profile_get_active();
     return (vp && vp->methods[sig].count) ? &vp->methods[sig] : NULL;
 }
-static bool mv_usable(const obd_method_t *m) { return !m->need_29bit || s_active_protocol == 7 || s_active_protocol == 9; }
+// A method with its own header only runs on the CAN bus it was written for (11-bit 7E0/700/708, 29-bit 18DAxxF1);
+// header-less standard ones (01 5C) run anywhere
+static bool mv_usable(const obd_method_t *m)
+{
+    if (m->need_29bit) return proto_is_can29();
+    if (m->hdr) return s_active_protocol == 6 || s_active_protocol == 8;
+    return true;
+}
 static const obd_method_t *mv_current(int sig)
 {
     const obd_method_set_t *set = mv_set(sig);
@@ -1327,7 +1349,7 @@ static bool mv_query(int sig)
     s_mv_pending = (int8_t)sig;                          // cleared by the reply handler (the send returns before the reply)
     elm327_ble_send_ascii_blocking(cmd);
     if (m->rx) elm327_ble_send_ascii_blocking("ATCRA\r");
-    if (m->hdr) elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
+    if (m->hdr) send_fixed_header();
     return true;
 }
 // The reply to mv_query: find the echo, take the bytes, convert, check the range, hand the value on
