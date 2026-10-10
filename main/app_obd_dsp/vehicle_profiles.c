@@ -25,6 +25,10 @@ static const vehicle_profile_t s_profiles[] = {
             .tertiary = OIL_TEMP_MODE_NONE,
         },
         .has_boost = false,                // Generic defaults to NA; turbo cars can still use standard 010B (manual enable)
+        // Standard OBD-II talks to the 7DF functional address: every car answers mode 01 there (it is what phone
+        // scan apps use). The physical engine address 7E0 is not answered by many ECUs (BMW E/F/G, others), so a
+        // generic profile on 7E0 read nothing on those cars until the owner picked a brand profile.
+        .obd_functional_addr = true,
     },
     {
         // BRZ ZC6 Gen1 (2013-2020, FA20 NA, Gen1)

@@ -398,8 +398,11 @@ static int elm327_auto_detect_protocol(void) {
 
     vTaskDelay(pdMS_TO_TICKS(200));
 
-    // Try protocols 1-11
-    for (int proto = 1; proto <= 11; proto++) {
+    // Try the ELM327 protocols, most likely first: 6 (CAN 11-bit 500k, almost every car since 2008), 8 (CAN 11-bit
+    // 250k), 7 and 9 (29-bit), then the older K-line / J1850 ones (slow to time out). 10/11 are not ATSP codes.
+    static const int PROTOCOLS[] = {6, 8, 7, 9, 1, 2, 3, 4, 5};
+    for (size_t n = 0; n < sizeof(PROTOCOLS) / sizeof(PROTOCOLS[0]); n++) {
+        int proto = PROTOCOLS[n];
         // Abort immediately on BLE disconnect — without this check, a disconnect mid-detect
         // would blindly cycle 11 protocols × 2s = up to 22s without feeding the watchdog → TWDT reboot.
         if (!s_connected) { ESP_LOGW(TAG, "[DETECT] BLE disconnected, aborting"); s_protocol_detect_idx = -1; return 0; }
