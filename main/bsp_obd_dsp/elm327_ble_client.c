@@ -171,9 +171,9 @@ static int64_t s_zc6_can_temp_probe_last_us = 0;    // last time we briefly ente
 // Side listening for OBD profiles that also read a few broadcast frames (Toyota doors): a filtered ATMA window that
 // closes as soon as the frame arrives; after CAN_SIDE_GIVE_UP empty windows the bus does not carry it (gateway, body
 // bus not on the OBD port) and the link stops listening, so OBD polling is never slowed for nothing.
-#define CAN_SIDE_INTERVAL_US 2000000LL
-#define CAN_SIDE_WINDOW_MS   1100u
-#define CAN_SIDE_GIVE_UP     5
+#define CAN_SIDE_INTERVAL_US 8000000LL       // doors change rarely: a short look every 8 s keeps the gauge's data flowing
+#define CAN_SIDE_WINDOW_MS   300u
+#define CAN_SIDE_GIVE_UP     3
 static volatile bool s_can_side_seen = false;
 // ---- Supported PIDs and fallbacks ----
 // 01 00 / 01 20 / 01 40 tell which mode 01 PIDs the car answers (bitmaps of every ECU that replies, OR-ed). A PID the
@@ -1403,6 +1403,10 @@ static void obd_poll_task(void *arg) {
                 }
                 break;
             case 11:// Transmission gear (Mode 22 DID, per-profile: DA2E=BMW EGS) — only for OBD-gear profiles
+                {   // Toyota: lever position and gear number in turn (the gear number alone when there is no lever list)
+                    static uint8_t turn;
+                    if ((turn++ & 1) && mv_query(MV_SHIFT)) break;
+                }
                 if (mv_query(MV_GEAR)) break;   // brand method list
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
@@ -1513,6 +1517,14 @@ static int parse_reply_data(const char *p, uint8_t *out, int max_out) {
 // method of the list is tried (round and round, so a car woken later is still found).
 #define MV_GIVE_UP 4
 static uint8_t s_mv_idx[MV_COUNT], s_mv_miss[MV_COUNT];
+// A value this car never answered (every method of its list tried twice over) is no longer asked on this link: no
+// timeout per round for nothing, so the values it does give refresh faster.
+static uint16_t s_mv_fails[MV_COUNT];
+static bool s_mv_ok_ever[MV_COUNT];
+// Toyota gear: the lever position (21 25) and the gear number (21 85) together, like the car's own dash
+static char s_shift;                 // 'P' 'R' 'N' 'D' 'M' (sport / manual), 0 unknown
+static int64_t s_shift_us;
+static int8_t s_tq_gear = -100;      // last gear number from the ECU
 static volatile int8_t s_mv_pending = -1;   // value whose reply is awaited
 static const obd_method_set_t *mv_set(int sig)
 {
@@ -1542,27 +1554,54 @@ static void mv_result(int sig, bool ok)
 {
     const obd_method_set_t *set = mv_set(sig);
     if (!set) return;
-    if (ok) { s_mv_miss[sig] = 0; return; }
+    if (ok) { s_mv_miss[sig] = 0; s_mv_ok_ever[sig] = true; return; }
+    if (!s_mv_ok_ever[sig] && s_mv_fails[sig] < 0xFFFF) s_mv_fails[sig]++;
     if (++s_mv_miss[sig] >= MV_GIVE_UP) {
         s_mv_miss[sig] = 0;
         s_mv_idx[sig] = (uint8_t)((s_mv_idx[sig] + 1) % set->count);
     }
 }
-static void mv_reset(void) { memset(s_mv_idx, 0, sizeof(s_mv_idx)); memset(s_mv_miss, 0, sizeof(s_mv_miss)); s_mv_pending = -1; }
+static void mv_reset(void) { memset(s_mv_idx, 0, sizeof(s_mv_idx)); memset(s_mv_miss, 0, sizeof(s_mv_miss)); s_mv_pending = -1;
+    memset(s_mv_fails, 0, sizeof(s_mv_fails)); memset(s_mv_ok_ever, 0, sizeof(s_mv_ok_ever)); s_shift = 0; s_tq_gear = -100; }
+static bool mv_dead(int sig)
+{
+    const obd_method_set_t *set = mv_set(sig);
+    return set && !s_mv_ok_ever[sig] && s_mv_fails[sig] >= (uint16_t)(set->count * MV_GIVE_UP * 2);
+}
+// The header the adapter has now is the method's own: no switching back and forth (Toyota 7E0 methods on a 7E0 profile)
+static bool mv_same_header(const obd_method_t *m)
+{
+    const char *h = get_vehicle_fixed_header_cmd();
+    return m->hdr && h && strncmp(h + 4, m->hdr, strlen(m->hdr)) == 0 && h[4 + strlen(m->hdr)] == '\r';
+}
+// What the gauge shows as the gear: -2 P, -1 R, 0 N, -3 D (no gear number), 1..8 in S / manual mode
+static void gear_publish(void)
+{
+    bool fresh = s_shift && esp_timer_get_time() - s_shift_us < 3000000;
+    if (!fresh) {                                  // no lever position: the gear number alone (old behaviour)
+        if (s_tq_gear >= 0 && s_cbs.on_parsed_obd_gear) s_cbs.on_parsed_obd_gear((uint8_t)s_tq_gear);
+        return;
+    }
+    int8_t g = s_shift == 'P' ? -2 : s_shift == 'R' ? -1 : s_shift == 'N' ? 0 : s_shift == 'D' ? -3
+             : (s_tq_gear >= 1 && s_tq_gear <= 8 ? s_tq_gear : -3);
+    obd_data_set_gear(g);
+}
 // Sends the current method's request (header and receive filter around it); false when the profile has no list for it
 static bool mv_query(int sig)
 {
+    if (mv_dead(sig)) return false;
     const obd_method_t *m = mv_current(sig);
     if (!m) return false;
     char cmd[24];
-    if (m->hdr) { snprintf(cmd, sizeof(cmd), "ATSH%s\r", m->hdr); elm327_ble_send_ascii_blocking(cmd); }
+    bool switch_hdr = m->hdr && !mv_same_header(m);
+    if (switch_hdr) { snprintf(cmd, sizeof(cmd), "ATSH%s\r", m->hdr); elm327_ble_send_ascii_blocking(cmd); }
     if (m->rx) { snprintf(cmd, sizeof(cmd), "ATCRA%s\r", m->rx); elm327_ble_send_ascii_blocking(cmd); }
     if (m->service == 0x22) snprintf(cmd, sizeof(cmd), "22 %02X %02X\r", (m->pid >> 8) & 0xFF, m->pid & 0xFF);
     else snprintf(cmd, sizeof(cmd), "%02X %02X\r", m->service, m->pid & 0xFF);
     s_mv_pending = (int8_t)sig;                          // cleared by the reply handler (the send returns before the reply)
     elm327_ble_send_ascii_blocking(cmd);
     if (m->rx) elm327_ble_send_ascii_blocking("ATCRA\r");
-    if (m->hdr) send_fixed_header();
+    if (switch_hdr) send_fixed_header();
     return true;
 }
 // The reply to mv_query: find the echo, take the bytes, convert, check the range, hand the value on
@@ -1584,7 +1623,13 @@ static void mv_handle(int sig, const char *buf)
         uint8_t gear = (uint8_t)raw;
         if (m->kind == MV_GEAR_HONDA) gear = raw == 0 || raw == 14 ? 0 : raw >= 1 && raw <= 9 ? (uint8_t)raw : 0xFF;
         ok = raw <= 15;                                        // larger values are not a gear (seen on Mazda 22 1E1F)
-        if (ok && s_cbs.on_parsed_obd_gear) s_cbs.on_parsed_obd_gear(gear);
+        if (ok && m->kind == MV_GEAR_PLAIN && mv_set(MV_SHIFT)) { s_tq_gear = (int8_t)raw; gear_publish(); }   // Toyota: with the lever
+        else if (ok && s_cbs.on_parsed_obd_gear) s_cbs.on_parsed_obd_gear(gear);
+    } else if (m->kind == MV_SHIFT_TOYOTA) {
+        uint8_t lever = (uint8_t)(raw >> 8), mode = (uint8_t)raw;
+        char c = lever & 0x80 ? 'P' : lever & 0x40 ? 'R' : lever & 0x20 ? 'N' : lever & 0x10 ? (mode & 0x80 ? 'M' : 'D') : 0;
+        ok = c != 0;
+        if (ok) { s_shift = c; s_shift_us = esp_timer_get_time(); gear_publish(); }
     } else {
         int32_t v = raw * m->mul / (m->div ? m->div : 1) + m->add;
         if (sig == MV_OIL_TEMP) {

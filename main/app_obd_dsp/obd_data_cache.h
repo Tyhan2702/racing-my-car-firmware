@@ -60,7 +60,7 @@ void obd_data_set_bat_mv(int32_t mv);        // battery voltage mV (e.g. 12000 =
 void obd_data_set_oil_pressure_x10(int16_t pressure_x10); // oil pressure, 0.1bar, -1=invalid
 void obd_data_set_boost_x10(int16_t boost_x10); // boost gauge pressure, 0.1bar (can be negative), -32768=invalid
 void obd_data_set_brake_temp_x10(int16_t temp_x10); // brake temp, 0.1°C
-void obd_data_set_gear(int8_t gear);               // direct gear value: -1=R, 0=N, 1+=forward gear, 127=invalid
+void obd_data_set_gear(int8_t gear);               // direct gear value: -3=D (no number), -2=P, -1=R, 0=N, 1+=forward gear, 127=invalid
 void obd_data_set_brake_rs485_status(brake_rs485_status_t status);
 void obd_data_set_afr_x100(int16_t afr_x100);      // air-fuel ratio AFR, ×100 (1470=14.7:1), -1=invalid
 // ---- Extra data for themes: asked of the car only while a gauge page shows it (obd_data_set_wanted) ----

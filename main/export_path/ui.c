@@ -180,6 +180,7 @@ void my_timerMain(lv_timer_t * timer)
     static uint16_t ucSpeed = 0;  // uint16_t so sweep can reach 999
     static enGear eGear = GEAR_NEUTRAL;
     static bool  s_gear_unknown = false;   // OBD-gear profile can't read a valid gear → show "--" (no ratio-calc fallback)
+    static int8_t s_gear_word = 127;       // read from the car: -3 D, -2 P, -1 R (themes show the letter); 127 none
     // rpm flash state (red/black toggle, strobing flag, linked ramp) moved to ui_ext.c
     // Sweep animation detection; sweep state lives in ui_ext.c now
     #define IN_SWEEP (ui_ext_sweep_active())
@@ -221,8 +222,12 @@ void my_timerMain(lv_timer_t * timer)
         usRpm     = obd.rpm;
         ucSpeed   = obd.speed;
         int8_t decoded_gear = obd.gear;
+        s_gear_word = decoded_gear >= -3 && decoded_gear <= -1 ? decoded_gear : 127;
         if (decoded_gear >= 0 && decoded_gear <= GEAR_8) {
             eGear = (enGear)decoded_gear;
+            s_gear_unknown = false;
+        } else if (s_gear_word != 127) {
+            eGear = GEAR_NEUTRAL;           // the theme gets the letter (s_gear_word)
             s_gear_unknown = false;
         } else if (vehicle_profile_get_active()->obd_gear_did != 0 || vehicle_profile_get_active()->methods[MV_GEAR].count != 0 ||
                    vehicle_profile_get_active()->gear_count == 0) {
@@ -258,6 +263,7 @@ void my_timerMain(lv_timer_t * timer)
         obd_snapshot_t theme_snap;
         ui_build_theme_snapshot(&theme_snap, clt, oil, oilp_x10, bat_mv, boost_x10, afr_x100,
                                  usRpm, ucSpeed, tps, eGear, s_gear_unknown);
+        if (s_gear_word != 127 && !IN_SWEEP) theme_snap.gear = s_gear_word;   // P / R / D from the lever
         theme_update_data(&theme_snap);
     }
     /* Device info page: role and OBD link (screens/ui_ScreenPageEasterEgg.c) */

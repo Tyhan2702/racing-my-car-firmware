@@ -51,11 +51,12 @@ typedef struct {
 // A way to read a value the standard OBD-II PIDs don't carry, recorded on many models in OBDb (github.com/OBDb, CC BY-SA
 // 4.0). A brand profile lists several per value; the gauge tries them in order, keeps the first one the car answers and
 // moves on after a few unanswered requests (elm327_ble_client.c, mv_*), so one profile covers a brand's models and years.
-typedef enum { MV_OIL_TEMP = 0, MV_GEAR, MV_OIL_PRESSURE, MV_TRANS_TEMP, MV_KNOCK, MV_FUEL_LEVEL, MV_FUEL_PRESSURE, MV_COUNT } mv_signal_t;
+typedef enum { MV_OIL_TEMP = 0, MV_GEAR, MV_OIL_PRESSURE, MV_TRANS_TEMP, MV_KNOCK, MV_FUEL_LEVEL, MV_FUEL_PRESSURE, MV_SHIFT, MV_COUNT } mv_signal_t;
 typedef enum {
     MV_LINEAR = 0,     // value = raw * mul / div + add  (°C for oil temp, kPa for oil pressure)
     MV_GEAR_PLAIN,     // raw = gear (0 = neutral), above 8 = not a forward gear
     MV_GEAR_HONDA,     // Honda 22 3086: 0 P, 1..9 D1..D9, 14 N, 15 R
+    MV_SHIFT_TOYOTA,   // Toyota 21 25 bytes 3-4: lever P 0x80, R 0x40, N 0x20, D 0x10 (byte 3); sport/manual mode 0x80 (byte 4)
 } mv_kind_t;
 typedef struct {
     const char *hdr;       // ATSH for the request ("7E0", "700", "18DA10F1"); NULL = the profile's own header

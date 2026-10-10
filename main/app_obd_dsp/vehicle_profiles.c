@@ -22,6 +22,11 @@ static const obd_method_t TOYOTA_GEAR[] = {
     {"700", "708", 0x22, 0x1621, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false}, // 156 my / 30 models
     {"7E0", NULL,  0x21, 0xDA,   0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false}, // 150 my / 23 models
 };
+// The shift lever (P R N D, and S / manual mode): the gear number of 21 85 only means something in S / manual mode
+// (in P and N the ECU reports 1); 2014 Corolla, 2008-2019 KWP-style ECUs (OBDb Toyota-Corolla, 7E0 21 25)
+static const obd_method_t TOYOTA_SHIFT[] = {
+    {"7E0", NULL,  0x21, 0x25,   3, 2, false, 1, 1, 0, MV_SHIFT_TOYOTA, false},
+};
 static const obd_method_t TOYOTA_OIL_P[] = {
     {"700", "708", 0x22, 0x1074, 0, 2, false, 10, 128, 0, MV_LINEAR, false},  // kPa, 168 my / 30 models
 };
@@ -492,7 +497,9 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_timeout = 0x19,
         .methods = { [MV_OIL_TEMP] = MV_SET(TOYOTA_OIL_T), [MV_GEAR] = MV_SET(TOYOTA_GEAR), [MV_OIL_PRESSURE] = MV_SET(TOYOTA_OIL_P),
                      [MV_TRANS_TEMP] = MV_SET(TOYOTA_TRANS_T), [MV_KNOCK] = MV_SET(TOYOTA_KNOCK),
-                     [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P) },
+                     [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P),
+                     [MV_SHIFT] = MV_SET(TOYOTA_SHIFT) },
+        .poll_gap_ms = 5,                  // the engine ECU answers quickly on CAN: a short gap keeps the RPM lively
     },
     {
         // Honda / Acura 2000-2026 (Civic, City, Accord, CR-V, HR-V, Jazz/Fit, ...). Standard PIDs on 7DF, or on the

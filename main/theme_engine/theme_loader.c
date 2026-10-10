@@ -528,6 +528,8 @@ static const char *gear_word(lv_obj_t *label, int32_t value)
     if (value == 127) return font_has(f, '-') ? "-" : "";
     if (value == 0 && font_has(f, 'N')) return "N";
     if (value == -1 && font_has(f, 'R')) return "R";
+    if (value == -2) return font_has(f, 'P') ? "P" : font_has(f, '-') ? "-" : "";   // park / drive: no number to fall back on
+    if (value == -3) return font_has(f, 'D') ? "D" : font_has(f, '-') ? "-" : "";
     return NULL;
 }
 // The label's printf format with its one number conversion replaced by a word (prefix and suffix kept)

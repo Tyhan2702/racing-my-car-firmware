@@ -48,7 +48,9 @@ static void derived(int id, char *o, size_t ol)
     case D_OIL_P: if ((v = obd_data_get_oil_pressure_x10()) >= 0) snprintf(o, ol, "%.1f BAR", v / 10.0f); break;
     case D_GEAR:
         v = obd_data_get_gear();
-        if (v == -1) strcpy(o, "R");
+        if (v == -3) strcpy(o, "D");
+        else if (v == -2) strcpy(o, "P");
+        else if (v == -1) strcpy(o, "R");
         else if (v == 0) strcpy(o, "N");
         else if (v > 0 && v < 127) snprintf(o, ol, "%ld", (long)v);
         break;
