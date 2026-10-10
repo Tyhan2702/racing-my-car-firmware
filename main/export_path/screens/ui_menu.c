@@ -63,7 +63,7 @@ static const menu_item_t ITEMS[] = {
     {"obd",      "OBD",      &imgMenu_obd,      open_obd},
     {"data",     "DATA",     &imgMenu_data,     open_data},
     {"test",     "TEST",     &imgMenu_test,     open_test},
-    {"settings", "SETTINGS", &imgMenu_settings, open_settings},
+    {"settings", "SET",      &imgMenu_settings, open_settings},   // short on the button (the page says SETTINGS)
     {"games",    "GAMES",    &imgMenu_games,    open_games},
     {"boot",     "BOOT",     &imgMenu_boot,     open_boot},
     {"ota",      "UPDATE",   &imgMenu_ota,      open_ota},
