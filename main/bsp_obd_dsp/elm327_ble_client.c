@@ -16,6 +16,8 @@
 #include "racechrono_ble_diy.h"
 #include "ble_adv_util.h"
 #include "esp_task_wdt.h"
+#include "esp_attr.h"
+#include "app_obd_dsp/obd_pid_table.h"
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -178,9 +180,20 @@ static volatile bool s_can_side_seen = false;
 // car says it lacks, or that got no answer 5 times while the bus was alive, is replaced by the next one that measures
 // the same thing: battery 01 42 → the adapter's own voltmeter (ATRV); AFR 01 44 (commanded) → 01 34 → 01 24
 // (wide-range O2 sensor 1, measured λ); throttle 01 11 → 01 45 (relative). Never applied to RPM/speed/coolant.
-static uint32_t s_pid_sup[3];
+static uint32_t s_pid_sup[7];
 static uint8_t s_pid_sup_known;          // bit r: the 01 (r*0x20) bitmap arrived
-static uint8_t s_pid_fail[0x60];
+static uint8_t s_pid_fail[0xE1];
+// ---- DATA page (menu → DATA): every PID the car answers, the brand methods, ATRV and the VIN, round and round ----
+#define SCAN_RAW 14
+static EXT_RAM_BSS_ATTR uint8_t s_scan_d[0xE1][SCAN_RAW];
+static EXT_RAM_BSS_ATTR uint8_t s_scan_n[0xE1];
+static EXT_RAM_BSS_ATTR int64_t s_scan_us[0xE1];
+static volatile bool s_scan_active;
+static uint8_t s_scan_bitmaps;           // bit r: still to ask 01 (r*0x20)
+static uint16_t s_scan_i;
+static char s_vin[18];
+static uint8_t s_vin_tries;
+static volatile bool s_expect_vin;
 static volatile uint8_t s_expect_pid;    // the 01 PID whose reply comes next (0 = none)
 static volatile bool s_expect_atrv;
 static int64_t s_can_side_last_us = 0;
@@ -733,7 +746,7 @@ static void can_side_listen(const vehicle_override_t *ov)
 
 static bool pid_ok(uint8_t pid)
 {
-    if (pid == 0 || pid >= 0x60) return true;
+    if (pid == 0 || pid > 0xE0) return true;
     if (s_pid_fail[pid] >= 5) return false;
     uint8_t r = (uint8_t)((pid - 1) / 32);
     if (!(s_pid_sup_known & (1u << r))) return true;      // car never said: just ask
@@ -793,7 +806,63 @@ static void pid_support_reset(void)
     memset(s_pid_fail, 0, sizeof(s_pid_fail));
     s_expect_pid = 0;
     s_expect_atrv = false;
+    s_expect_vin = false;
+    s_scan_bitmaps = 0x78;               // 01 60 / 80 / A0 / C0 too, for the DATA page
+    memset(s_scan_n, 0, sizeof(s_scan_n));
+    s_vin_tries = 0;
 }
+
+// The DATA page: one request per call. First the higher supported-PID bitmaps, then every PID the car lists (or, when
+// it never said, every PID of the table, dropped after two misses), the brand methods, the adapter voltmeter, the VIN.
+static void scan_step(void)
+{
+    for (int r = 3; r < 7; r++) if (s_scan_bitmaps & (1u << r)) {
+        s_scan_bitmaps &= (uint8_t)~(1u << r);
+        if (r == 3 || (s_pid_sup_known & (1u << (r - 1)) && (s_pid_sup[r - 1] & 1u))) {   // the previous range says it goes on
+            char cmd[8];
+            snprintf(cmd, sizeof(cmd), "01 %02X\r", r * 0x20);
+            elm327_ble_send_ascii_blocking(cmd);
+            return;
+        }
+    }
+    const int total = 0xE0 + MV_COUNT + 2;
+    for (int tries = 0; tries < total; tries++) {
+        int i = s_scan_i++ % total;
+        if (i < 0xE0) {
+            uint8_t pid = (uint8_t)i;
+            if (pid == 0 || pid % 0x20 == 0) continue;               // the bitmaps themselves
+            uint8_t r = (uint8_t)((pid - 1) / 32);
+            bool known = s_pid_sup_known & (1u << r);
+            if (known && !((s_pid_sup[r] >> (31 - ((pid - 1) % 32))) & 1u)) continue;
+            if (!known && !obd_pid_info(pid)) continue;
+            if (s_pid_fail[pid] >= 2) continue;
+            send_pid(pid);
+            return;
+        }
+        i -= 0xE0;
+        if (i < MV_COUNT) { if (mv_query(i)) return; continue; }
+        if (i == MV_COUNT) { s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); return; }
+        if (!s_vin[0] && s_vin_tries < 3) { s_vin_tries++; s_expect_vin = true; elm327_ble_send_ascii_blocking("09 02\r"); return; }
+    }
+}
+
+void elm327_scan_set_active(bool on) { s_scan_active = on; if (on) s_vin_tries = 0; }
+bool elm327_scan_get(uint8_t pid, uint8_t *d, uint8_t *n)
+{
+    if (pid > 0xE0 || !s_scan_n[pid] || esp_timer_get_time() - s_scan_us[pid] > 20000000LL) return false;
+    *n = s_scan_n[pid];
+    memcpy(d, s_scan_d[pid], *n);
+    return true;
+}
+int elm327_scan_supported(uint8_t pid)
+{
+    if (pid == 0 || pid > 0xE0) return -1;
+    uint8_t r = (uint8_t)((pid - 1) / 32);
+    if (!(s_pid_sup_known & (1u << r))) return -1;
+    return (int)((s_pid_sup[r] >> (31 - ((pid - 1) % 32))) & 1u);
+}
+const char *elm327_scan_vin(void) { return s_vin; }
+uint8_t elm327_active_protocol(void) { return s_active_protocol; }
 
 static void zc6_can_monitor_probe_window(uint32_t window_ms)
 {
@@ -1354,7 +1423,10 @@ static void obd_poll_task(void *arg) {
                 break;
         }
 
-        if ((!can_broadcast || can_obd_primary) && tick_count != 0) {
+        if (s_scan_active) {                // DATA page open: two of its requests per slot instead of the extra RPM
+            scan_step();
+            scan_step();
+        } else if ((!can_broadcast || can_obd_primary) && tick_count != 0) {
             send_rpm_request("dup");
         }
 
@@ -2254,7 +2326,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         // supported-PID bitmaps (01 00 / 20 / 40) from every ECU that answered
         for (const char *q = p41; q && s_protocol_detect_idx < 0; q = strstr(q + 3, "41 ")) {
             unsigned pid = 0, a = 0, b = 0, c = 0, d = 0;
-            if (sscanf(q, "41 %x %x %x %x %x", &pid, &a, &b, &c, &d) == 5 && (pid == 0x00 || pid == 0x20 || pid == 0x40)) {
+            if (sscanf(q, "41 %x %x %x %x %x", &pid, &a, &b, &c, &d) == 5 && pid <= 0xC0 && pid % 0x20 == 0) {
                 uint8_t r = (uint8_t)(pid / 0x20);
                 s_pid_sup[r] |= (a << 24) | (b << 16) | (c << 8) | d;
                 s_pid_sup_known |= (uint8_t)(1u << r);
@@ -2265,9 +2337,28 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             char want[8];
             s_expect_pid = 0;
             snprintf(want, sizeof(want), "41 %02X", ep);
-            if (strstr(buf, want)) s_pid_fail[ep] = 0;
+            const char *hit = strstr(buf, want);
+            if (hit && s_scan_active && ep < sizeof(s_scan_n)) {   // the DATA page shows the raw reply
+                uint8_t tmp[SCAN_RAW];
+                int n = parse_reply_data(hit + 5, tmp, SCAN_RAW);
+                if (n > 0) { memcpy(s_scan_d[ep], tmp, (size_t)n); s_scan_n[ep] = (uint8_t)n; s_scan_us[ep] = esp_timer_get_time(); }
+            }
+            if (hit) s_pid_fail[ep] = 0;
             else if (ep < sizeof(s_pid_fail) && s_pid_fail[ep] < 255 &&
                      esp_timer_get_time() - s_last_obd_valid_us < 3000000) s_pid_fail[ep]++;
+        }
+        if (s_expect_vin) {                 // 09 02: "49 02 01" + 17 characters (CAN: "0:" "1:" frames; K-line: 5 lines)
+            s_expect_vin = false;
+            char vin[18] = "";
+            int k = 0;
+            for (const char *q = strstr(buf, "49 02"); q && k < 17; q = strstr(q + 5, "49 02")) {
+                uint8_t b[24];
+                int n = parse_reply_data(q + 5, b, (int)sizeof(b));
+                for (int i = 1; i < n && k < 17; i++)              // b[0]: item count / frame number
+                    if ((b[i] >= '0' && b[i] <= '9') || (b[i] >= 'A' && b[i] <= 'Z')) vin[k++] = (char)b[i];
+                if (strstr(buf, "0:")) break;                       // CAN: one multi-frame message
+            }
+            if (k == 17) { vin[17] = 0; memcpy(s_vin, vin, sizeof(s_vin)); }
         }
         if (s_expect_atrv) {                // "12.6V" from the adapter's own voltmeter
             s_expect_atrv = false;

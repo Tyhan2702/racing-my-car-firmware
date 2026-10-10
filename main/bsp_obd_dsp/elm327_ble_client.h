@@ -91,6 +91,12 @@ void elm327_ble_disconnect(void);
 void elm327_ble_forget_target(void);
 // The car or adapter changed: init the ELM again with the active profile; redetect = look for the protocol again.
 void elm327_ble_request_reinit(bool redetect);
+// DATA page (menu → DATA): while active the poller also walks every PID the car answers, the brand methods, ATRV, VIN
+void elm327_scan_set_active(bool on);
+bool elm327_scan_get(uint8_t pid, uint8_t *d, uint8_t *n);   // last reply's data bytes (up to 14), false when none in 20 s
+int  elm327_scan_supported(uint8_t pid);                     // 1 / 0 from the car's bitmaps, -1 unknown
+const char *elm327_scan_vin(void);                           // "" until read
+uint8_t elm327_active_protocol(void);                        // ATSP number of the link (0 = adapter search)
 
 // WiFi OTA pause/resume: drop the ELM327 link and suppress auto-reconnect +
 // polling during OTA, so the SoftAP gets the full 2.4GHz radio; re-arm
