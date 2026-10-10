@@ -63,6 +63,8 @@ void obd_data_set_brake_temp_x10(int16_t temp_x10); // brake temp, 0.1°C
 void obd_data_set_gear(int8_t gear);               // direct gear value: -1=R, 0=N, 1+=forward gear, 127=invalid
 void obd_data_set_brake_rs485_status(brake_rs485_status_t status);
 void obd_data_set_afr_x100(int16_t afr_x100);      // air-fuel ratio AFR, ×100 (1470=14.7:1), -1=invalid
+void obd_data_set_doors(uint8_t mask);              // open doors from a CAN broadcast (CH_DOORS bits)
+int16_t obd_data_get_doors(void);                   // open doors mask, -1 = unknown (no frame in the last 10 s)
 uint16_t obd_data_get_rpm(void);
 uint8_t  obd_data_get_speed(void);
 int16_t  obd_data_get_coolant_temp(void);

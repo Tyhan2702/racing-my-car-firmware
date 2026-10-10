@@ -20,7 +20,9 @@ extern "C" {
 // ---- Data channels ----
 enum {
     CH_RPM = 0, CH_SPEED, CH_OIL_TEMP, CH_COOLANT,
-    CH_TPS, CH_LOAD, CH_INTAKE, CH_BOOST, CH_GEAR, CH_COUNT
+    CH_TPS, CH_LOAD, CH_INTAKE, CH_BOOST, CH_GEAR,
+    CH_DOORS,   // open doors bit mask: bit0 trunk/back door, bit1 rear left, bit2 rear right, bit3 passenger, bit4 driver
+    CH_COUNT
 };
 
 // ---- CAN frame decode rules ----
@@ -82,6 +84,13 @@ static const can_rule_t can_rules_zc6[] = {
     { 0x140, 48,  8, 100.0f/255, 0.0f, CH_TPS },       // throttle byte6
     { 0x360, 16,  8, 1.0f,      -40.0f, CH_OIL_TEMP },  // oil temp byte2
     { 0x360, 24,  8, 1.0f,      -40.0f, CH_COOLANT },   // coolant temp byte3
+};
+
+// Toyota body broadcast 0x620 (BDB1S01 in Toyota's own CAN database; same layout on the 2009 iQ, 2010 Prius and
+// 2017+ cars): byte 5 bit 1 back door/trunk, bit 2 rear left, bit 3 rear right, bit 4 passenger, bit 5 driver, 1 = open.
+// Everything the engine gauges need still comes from OBD PIDs; this only adds what OBD cannot give.
+static const can_rule_t can_rules_toyota[] = {
+    { 0x620, 41, 5, 1.0f, 0.0f, CH_DOORS },
 };
 
 // ================================================================
@@ -149,6 +158,12 @@ static const oil_formula_t oil_bmw_111f = {
 //  Override table — vehicles not listed here = pure OBD2 standard protocol
 // ================================================================
 static const vehicle_override_t s_vehicle_overrides[] = {
+    {
+        // Toyota: OBD PIDs + brand methods for the gauges, short CAN listening windows for the doors (no RPM from CAN)
+        .match_name      = "Toyota",
+        .can_rules       = can_rules_toyota,
+        .can_rule_count  = 1,
+    },
     {
         // BRZ ZC6 Gen1 (2013-2020, FA20 NA, Gen1)
         // RPM stays on OBD; TPS/coolant/oil come from CAN broadcast frames.

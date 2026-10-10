@@ -384,6 +384,43 @@ void ui_ext_no_signal_update(bool signal_ok)
 }
 
 /* ================================================================
+ *  "DOOR OPEN" overlay: cars whose profile reads the body broadcast (Toyota 0x620) report open doors; shown at the
+ *  bottom of gauge pages while any door, or the trunk, is open. Nothing shows when the car does not send it.
+ * ================================================================ */
+void ui_ext_doors_update(void)
+{
+    static lv_obj_t *s_lbl;
+    static int16_t s_shown = -2;
+    lv_obj_t *act = lv_scr_act();
+    bool on_gauge_page = (act == ui_ScreenPageTemp || act == ui_ScreenPageInfo ||
+                           act == ui_ScreenPageOilPressure || act == ui_ScreenPageNeedle ||
+                           act == ui_ScreenPageGear || act == ui_ScreenPageRpm ||
+                           act == ui_ScreenPageSpeed);
+    int16_t doors = obd_data_get_doors();
+    int16_t want = (s_boot_done && on_gauge_page && doors > 0) ? doors : 0;
+    if (want == s_shown) return;
+    s_shown = want;
+    if (!want) { if (s_lbl) lv_obj_add_flag(s_lbl, LV_OBJ_FLAG_HIDDEN); return; }
+    if (!s_lbl) {
+        s_lbl = lv_label_create(lv_layer_top());
+        lv_obj_clear_flag(s_lbl, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_text_font(s_lbl, &ui_font_FontTypoderSize16, LV_PART_MAIN);
+        lv_obj_set_style_text_color(s_lbl, lv_color_hex(0xFF4D4D), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(s_lbl, lv_color_hex(0x000000), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(s_lbl, 160, LV_PART_MAIN);
+        lv_obj_set_style_pad_hor(s_lbl, 10, LV_PART_MAIN);
+        lv_obj_set_style_pad_ver(s_lbl, 4, LV_PART_MAIN);
+        lv_obj_set_style_radius(s_lbl, 6, LV_PART_MAIN);
+        lv_obj_align(s_lbl, LV_ALIGN_BOTTOM_MID, 0, -34);
+    }
+    int n = 0;
+    for (int b = 1; b < 5; b++) n += (want >> b) & 1;          // doors; bit 0 is the trunk
+    lv_label_set_text(s_lbl, n == 0 ? "TRUNK OPEN" : n == 1 ? "DOOR OPEN" : "DOORS OPEN");
+    lv_obj_clear_flag(s_lbl, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(s_lbl);
+}
+
+/* ================================================================
  *  Lifecycle
  * ================================================================ */
 

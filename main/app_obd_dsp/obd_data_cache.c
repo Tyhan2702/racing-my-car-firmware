@@ -389,3 +389,24 @@ void vMileageDataStatisticTask(void)
         }
     }
 }
+
+// ---- Doors (CAN broadcast, e.g. Toyota 0x620) ----
+static uint8_t s_doors = 0;
+static int64_t s_doors_us = 0;
+
+void obd_data_set_doors(uint8_t mask)
+{
+    portENTER_CRITICAL(&s_mux);
+    s_doors = mask;
+    s_doors_us = esp_timer_get_time();
+    portEXIT_CRITICAL(&s_mux);
+}
+
+int16_t obd_data_get_doors(void)
+{
+    int16_t val;
+    portENTER_CRITICAL(&s_mux);
+    val = (s_doors_us && esp_timer_get_time() - s_doors_us < 10000000LL) ? s_doors : -1;
+    portEXIT_CRITICAL(&s_mux);
+    return val;
+}

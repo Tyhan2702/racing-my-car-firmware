@@ -166,6 +166,15 @@ static uint32_t s_zc6_can_monitor_obd_cycle = 0;   // OBD query cycle counter wh
 #define ZC6_CAN_TEMP_PROBE_WINDOW_MS 120u           // shorter window to reduce RPM disturbance
 #define ZC6_CAN_TEMP_STALE_US 15000000LL            // CAN temp channels stale after 15s without fresh frames
 static int64_t s_zc6_can_temp_probe_last_us = 0;    // last time we briefly entered ATMA to refresh ZC6 CAN temps
+// Side listening for OBD profiles that also read a few broadcast frames (Toyota doors): a filtered ATMA window that
+// closes as soon as the frame arrives; after CAN_SIDE_GIVE_UP empty windows the bus does not carry it (gateway, body
+// bus not on the OBD port) and the link stops listening, so OBD polling is never slowed for nothing.
+#define CAN_SIDE_INTERVAL_US 2000000LL
+#define CAN_SIDE_WINDOW_MS   1100u
+#define CAN_SIDE_GIVE_UP     5
+static volatile bool s_can_side_seen = false;
+static int64_t s_can_side_last_us = 0;
+static uint8_t s_can_side_misses = 0;
 bool elm327_ble_send_ascii_blocking(const char *ascii_cmd);
 static bool can_rules_have_channel(const vehicle_override_t *ov, uint8_t channel);
 
@@ -690,6 +699,27 @@ static void zc6_can_monitor_exit(void)
     elm327_ble_send_ascii_blocking("AT H0\r");
 }
 
+static void can_side_listen(const vehicle_override_t *ov)
+{
+    if (s_can_side_misses >= CAN_SIDE_GIVE_UP) return;
+    if (s_active_protocol != 6 && s_active_protocol != 8) return;     // the rule IDs are 11-bit CAN ones
+    int64_t now_us = esp_timer_get_time();
+    if (s_can_side_last_us && now_us - s_can_side_last_us < CAN_SIDE_INTERVAL_US) return;
+    char filt[16];
+    snprintf(filt, sizeof(filt), "ATCRA%03X\r", ov->can_rules[0].can_id & 0x7FF);   // only the frame we want: no flood
+    elm327_ble_send_ascii_blocking(filt);
+    s_can_side_seen = false;
+    zc6_can_monitor_enter();
+    for (uint32_t t = 0; t < CAN_SIDE_WINDOW_MS && !s_can_side_seen && s_connected; t += 20) {
+        esp_task_wdt_reset();
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    zc6_can_monitor_exit();          // also resets the filter (ATCRA) and headers (ATH0)
+    s_can_side_misses = s_can_side_seen ? 0 : (uint8_t)(s_can_side_misses + 1);
+    if (s_can_side_misses >= CAN_SIDE_GIVE_UP) ESP_LOGW(TAG, "CAN 0x%03X not on this OBD port, stop listening", ov->can_rules[0].can_id);
+    s_can_side_last_us = esp_timer_get_time();
+}
+
 static void zc6_can_monitor_probe_window(uint32_t window_ms)
 {
     if (window_ms == 0) return;
@@ -845,6 +875,7 @@ static bool zc6_can_monitor_parse_line(const char *line)
         s_cbs.on_parsed_throttle_position((uint32_t)channels[CH_TPS]);
     if (channels[CH_GEAR] > 0 && channels[CH_GEAR] < 127 && s_cbs.on_parsed_gear)
         s_cbs.on_parsed_gear((int8_t)channels[CH_GEAR]);
+    if (channels[CH_DOORS] >= 0) { obd_data_set_doors((uint8_t)channels[CH_DOORS]); s_can_side_seen = true; }
 
     mark_obd_data_valid();
     return true;
@@ -937,6 +968,7 @@ static void do_elm_init(void) {
     s_zc_can_obd_phase = false;
     s_zc_can_obd_round_started = false;
     s_zc6_can_temp_probe_last_us = 0;
+    s_can_side_last_us = 0; s_can_side_misses = 0;   // a new link may be another car
     s_last_obd_valid_us = esp_timer_get_time();   // give a fresh "valid data" baseline so self-heal doesn't trigger right after init
 }
 
@@ -1251,6 +1283,9 @@ static void obd_poll_task(void *arg) {
                 s_zc6_can_temp_probe_last_us = esp_timer_get_time();
             }
         }
+        // OBD profiles with broadcast extras (Toyota doors): listen between full OBD rounds
+        if (!can_broadcast && completed_obd_round && ov_poll && ov_poll->can_rules && ov_poll->can_rule_count)
+            can_side_listen(ov_poll);
 
         // Inter-slot idle gap: prefer the override's poll_gap_ms first, then the profile's poll_gap_ms (e.g. ZC/N6, MX-5 ND use 1ms); fall back to the global default 30ms.
         // Too small overwhelms cheap BLE adapters; profiles with fast CAN-bus response can safely go smaller.
@@ -2103,6 +2138,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                     s_cbs.on_parsed_throttle_position((uint32_t)channels[CH_TPS]);
                 if (channels[CH_GEAR] > 0 && channels[CH_GEAR] < 127 && s_cbs.on_parsed_gear)
                     s_cbs.on_parsed_gear((int8_t)channels[CH_GEAR]);
+                if (channels[CH_DOORS] >= 0) obd_data_set_doors((uint8_t)channels[CH_DOORS]);
                 if (channels[CH_LOAD] >= 0 && s_cbs.on_parsed_load_pct)
                     s_cbs.on_parsed_load_pct((int16_t)channels[CH_LOAD]);
 
@@ -2419,6 +2455,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         s_zc_can_obd_phase = false;
         s_zc_can_obd_round_started = false;
         s_zc6_can_temp_probe_last_us = 0;
+        s_can_side_last_us = 0; s_can_side_misses = 0;   // a new link may be another car
         s_got_valid_data = false;                // prevent the stale pre-disconnect flag from being mis-consumed after reconnect
         s_last_mode21_oil = -100;
         s_mode21_hold_cnt = 0;

@@ -825,6 +825,7 @@ void my_timerMain(lv_timer_t * timer)
     ui_ext_rpm_flash_tick(usRpm, IN_SWEEP);
 
     ui_ext_no_signal_update(ble_now);
+    ui_ext_doors_update();
 
     /* ---- Adaptive refresh rate: data pages run fast, static pages stay slow ----
        Only this UI timer's period changes (pure redraw pacing); no OBD/RS485/ESP-NOW query or broadcast is affected. */
