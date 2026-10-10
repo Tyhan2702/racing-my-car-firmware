@@ -3,7 +3,7 @@
 //
 // Two use cases depending on device_role:
 //  - MASTER/STANDALONE: scan and connect to an OBD ELM327 adapter (original logic unchanged)
-//  - SLAVE: scan and pair with the triple-gauge master ("SkyGauge-XXYY" broadcast), see gauge_pair_ble_client.c
+//  - SLAVE: scan and pair with the triple-gauge master ("RMC - 1.85 Gauge XXYY" broadcast), see gauge_pair_ble_client.c
 
 #include "../ui.h"
 #include "ui_menu.h"
@@ -102,7 +102,7 @@ static void scan_result_cb(const ble_scan_result_t *dev, int total_count) {
     }
 }
 
-// BLE scan callback -- slave pairing with a master (SLAVE); only devices with the "SkyGauge" prefix are received (see the filter in gauge_pair_ble_client.c)
+// BLE scan callback -- slave pairing with a master (SLAVE); only devices with the "RMC - 1.85 Gauge" (or older "SkyGauge" prefix are received (see the filter in gauge_pair_ble_client.c)
 static void scan_result_cb_gauge(const gauge_pair_scan_result_t *dev, int total_count) {
     if (!s_list) return;
 

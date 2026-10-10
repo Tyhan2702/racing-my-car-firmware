@@ -2,15 +2,14 @@
 //  ui_ext.c — hand-written extension logic for ui.c
 //
 //  Migration plan: gradually move the hand-written logic from ui.c my_timerMain() into this file.
-//  Migrate one module at a time (showroom / boot_anim / sweep / rpm_warn);
+//  Migrate one module at a time (boot_anim / sweep / rpm_warn);
 //  move the corresponding static variables along with it, ui.c accesses them via the API in ui_ext.h.
 //
 //  Migration completed:
 //  - disp_item system → ui_disp_item.c/h (data-item metadata and helpers)
 //  - rpm warning flash → ui_ext_rpm_flash_tick()
 //  - sweep animation → ui_ext_sweep_*()
-//  - showroom state machine → ui_ext_showroom_*()
-//  - boot animation (RACE/AS/ONE + video) → ui_ext_boot_video_tick() / ui_ext_intro_tick()
+//  - boot animation (the owner's video) → ui_ext_boot_video_tick() / ui_ext_intro_tick()
 // ================================================================
 
 #include "ui_ext.h"
@@ -37,7 +36,6 @@ static const char *TAG = "ui_ext";
  *  Sweep progress only advances inside the LVGL task; the master's espnow TX task
  *  broadcasts it read-only via ui_sweep_get_step().
  *  Values: 0=off, 1~SWEEP_TOTAL=sweep animation running (slaves mirror it as-is),
- *  200~209=current showroom-mode slot (showroom reuses this variable to encode the broadcast value).
  * ================================================================ */
 static volatile int  s_sweep_step = 0;
 static int  s_sweep_bl_last = -1;       // backlight (%) already applied during sweep, -1=not sweeping; write LEDC only on change, restore configured brightness at the end
@@ -45,44 +43,10 @@ static bool s_sweep_pending = false;    // BLE connected while the Logo was show
 static bool s_prev_ble_connected = false;
 
 /* ================================================================
- *  Showroom mode state
- * ================================================================ */
-static volatile bool s_showroom_active = false;
-static uint8_t s_showroom_tap_cnt = 0;
-static uint32_t s_showroom_last_tap_ms = 0;
-#define SHOWROOM_TAP_TIMEOUT_MS  1500
-#define SHOWROOM_TAP_NEED        10
-#define SHOWROOM_SLOT_COUNT      8
-#define SHOWROOM_DATA_PAGES      4   // number of random data pages
-
-// Fixed loop: Logo → animation → rand0 → Needle → rand1 → Chart → rand2 → rand3
-// Ticks per slot (1 tick = 100ms), 0 = wait for the animation to finish
-static const uint8_t s_showroom_slot_ticks[SHOWROOM_SLOT_COUNT] = {
-    20,  // 0: Logo 2s
-    0,   // 1: animation (wait until played)
-    30,  // 2: random[0] 3s
-    30,  // 3: Needle 3s
-    30,  // 4: random[1] 3s
-    30,  // 5: Chart 3s
-    30,  // 6: random[2] 3s
-    30,  // 7: random[3] 3s
-};
-static uint8_t  s_showroom_slot = 0;
-static uint16_t s_showroom_tick = 0;
-static uint8_t  s_showroom_rand_pages[SHOWROOM_DATA_PAGES];  // randomly chosen at startup
-static lv_obj_t *s_showroom_video_scr = NULL;
-// Slave: enter showroom or follow the slot after receiving the master's signal.
-// Only the LVGL task reads/writes these (espnow recv goes through the app_event queue and is handled inside my_timerMain), so volatile is not needed.
-static int  s_showroom_pending_slot = -1;  // -1=none, 0-7=slot to follow
-static bool s_showroom_pending_enter = false;
-
-/* ================================================================
  *  Boot / video / intro state
  * ================================================================ */
 static volatile int s_intro_step = 0;
 static int64_t s_boot_start_us = 0;
-static int64_t s_intro_start_us = 0;
-static bool    s_intro_shown = false;
 static volatile bool s_boot_video_active = false;
 static volatile bool s_boot_video_done = false;
 static volatile bool s_boot_video_ready = false;
@@ -91,7 +55,7 @@ static lv_obj_t *s_boot_video_screen = NULL;
 static lv_timer_t *s_boot_video_timer = NULL;
 static bool    s_boot_done = false;
 
-// Video sync signals (reuses intro_step; values >5 never trigger RACE/AS/ONE rendering)
+// Video sync signals between gauges (reuse intro_step)
 #define VIDEO_SYNC_READY  250
 #define VIDEO_SYNC_PLAY   251
 
@@ -100,107 +64,6 @@ static lv_obj_t *s_no_signal_lbl = NULL;
 
 // Forward declarations
 static void boot_enter_default_page(void);
-
-/* ================================================================
- *  Showroom helpers
- * ================================================================ */
-
-// slot → page index
-static uint8_t showroom_slot_to_page(uint8_t slot)
-{
-    switch (slot) {
-        case 0: return 1;  // Logo
-        case 1: {          // animation: depends on settings
-            uint8_t ie = nvs_intro_enable_get();
-            return (ie == 2) ? 0 : (ie == 1) ? 2 : 3;
-        }
-        case 3: return 8;  // Needle
-        case 5: return 9;  // Chart
-        default: {         // random data page
-            uint8_t ri = (slot == 2) ? 0 : (slot == 4) ? 1 : (slot == 6) ? 2 : 3;
-            return s_showroom_rand_pages[ri];
-        }
-    }
-}
-
-static void showroom_load_slot(uint8_t slot)
-{
-    uint8_t page = showroom_slot_to_page(slot);
-    if (page == 0) {
-        // Video page
-        if (s_boot_video_ready || s_boot_video_active) return;  // already loaded
-        // Single boot animation slot: the boot_block flashed via the phone app.
-        boot_block_player_set_paths("/bootmedia/boot_block.txt", "/bootmedia/boot_block.bin");
-        if (boot_media_mount()) {
-            if (s_showroom_video_scr) { lv_obj_del(s_showroom_video_scr); s_showroom_video_scr = NULL; }
-            s_showroom_video_scr = lv_obj_create(NULL);
-            lv_obj_set_style_bg_color(s_showroom_video_scr, lv_color_black(), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(s_showroom_video_scr, 255, LV_PART_MAIN);
-            lv_obj_set_style_border_width(s_showroom_video_scr, 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(s_showroom_video_scr, 360, LV_PART_MAIN);
-            lv_obj_clear_flag(s_showroom_video_scr, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_t *canvas = NULL;
-            if (boot_block_player_create(s_showroom_video_scr, &canvas)) {
-                s_boot_video_ready = true;
-            } else {
-                lv_obj_del(s_showroom_video_scr);
-                s_showroom_video_scr = NULL;
-            }
-        }
-    } else if (page == 2) {
-        // RACE/AS/ONE: start the animation directly
-        s_intro_step = 1;
-        s_intro_shown = false;
-        s_intro_start_us = esp_timer_get_time();
-        if (ui_ScreenPageIntro == NULL) ui_ScreenPageIntro_screen_init();
-        lv_scr_load_anim(ui_ScreenPageIntro, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, false);
-    } else {
-        // Regular pages
-        static const struct { lv_obj_t **scr; void (*init)(void); } pages[] = {
-            { NULL, NULL },  // 0 unused
-            { &ui_ScreenPageLogo,       ui_ScreenPageLogo_screen_init },
-            { NULL, NULL },  // 2 handled above
-            { &ui_ScreenPageGear,       ui_ScreenPageGear_screen_init },
-            { &ui_ScreenPageRpm,        ui_ScreenPageRpm_screen_init },
-            { &ui_ScreenPageSpeed,      ui_ScreenPageSpeed_screen_init },
-            { &ui_ScreenPageTemp,       ui_ScreenPageTemp_screen_init },
-            { &ui_ScreenPageInfo,       ui_ScreenPageInfo_screen_init },
-            { &ui_ScreenPageNeedle,     ui_ScreenPageNeedle_screen_init },
-            { &ui_ScreenPageOilPressure,ui_ScreenPageOilPressure_screen_init },
-        };
-        if (page < 10 && pages[page].init) {
-            if (*pages[page].scr == NULL) pages[page].init();
-            lv_scr_load_anim(*pages[page].scr, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, false);
-        }
-    }
-}
-
-// Fake data generation (random walk)
-static void showroom_fake_data(void) {
-    static float fake_rpm = 2500, fake_spd = 60, fake_clt = 90, fake_oil = 95;
-    static float fake_iat = 35, fake_load = 65, fake_tps = 40, fake_boost = 5;
-    static float fake_afr = 14.7;
-    fake_rpm  += ((float)(esp_random() % 200) - 100) * 2;  if (fake_rpm < 800) fake_rpm = 800; if (fake_rpm > 7500) fake_rpm = 7500;
-    fake_spd  += ((float)(esp_random() % 20) - 10) * 0.5f; if (fake_spd < 0) fake_spd = 0; if (fake_spd > 200) fake_spd = 200;
-    fake_clt  += ((float)(esp_random() % 4) - 2) * 0.1f;   if (fake_clt < 80) fake_clt = 80; if (fake_clt > 105) fake_clt = 105;
-    fake_oil  += ((float)(esp_random() % 6) - 3) * 0.2f;   if (fake_oil < 80) fake_oil = 80; if (fake_oil > 130) fake_oil = 130;
-    fake_iat  += ((float)(esp_random() % 4) - 2) * 0.1f;   if (fake_iat < 20) fake_iat = 20; if (fake_iat > 50) fake_iat = 50;
-    fake_load += ((float)(esp_random() % 20) - 10);         if (fake_load < 10) fake_load = 10; if (fake_load > 100) fake_load = 100;
-    fake_tps  += ((float)(esp_random() % 16) - 8);          if (fake_tps < 0) fake_tps = 0; if (fake_tps > 100) fake_tps = 100;
-    fake_boost+= ((float)(esp_random() % 10) - 5) * 0.1f;  if (fake_boost < -5) fake_boost = -5; if (fake_boost > 20) fake_boost = 20;
-    fake_afr  += ((float)(esp_random() % 10) - 5) * 0.04f; if (fake_afr < 10.0) fake_afr = 10.0; if (fake_afr > 18.0) fake_afr = 18.0;
-    obd_data_set_rpm((uint16_t)fake_rpm);
-    obd_data_set_speed((uint8_t)fake_spd);
-    obd_data_set_coolant_temp((int16_t)fake_clt);
-    obd_data_set_oil_temp((int16_t)fake_oil);
-    obd_data_set_intake_temp((int16_t)fake_iat);
-    obd_data_set_load_pct((int16_t)fake_load);
-    obd_data_set_tps((int16_t)fake_tps);
-    obd_data_set_boost_x10((int16_t)(fake_boost * 10));
-    obd_data_set_oil_pressure_x10((int16_t)(30 + (esp_random() % 40)));
-    obd_data_set_brake_temp_x10((int16_t)(200 + (esp_random() % 300)));
-    obd_data_set_afr_x100((int16_t)(fake_afr * 100));
-}
 
 /* ================================================================
  *  Boot / video helpers
@@ -220,11 +83,8 @@ static void boot_video_timer_cb(lv_timer_t *t)
         boot_block_player_destroy();
         if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
 
-        if (s_showroom_active) {
-            // showroom mode: don't switch pages, keep the last frame, let the carousel move on
-            // Keep bootmedia mounted for OTA (unmount would require 400ms+ remount during BLE callback)
-        } else {
-            // normal boot: go straight to the default page
+        {
+            // go straight to the theme
             s_boot_video_done = true;
             boot_enter_default_page();
             // Keep bootmedia mounted for OTA
@@ -296,155 +156,17 @@ static void boot_enter_default_page(void)
  * ================================================================ */
 
 int  ui_sweep_get_step(void) { return s_sweep_step; }
-bool ui_showroom_is_active(void) { return s_showroom_active; }
 int  ui_intro_get_step(void) { return s_intro_step; }
 
-void ui_showroom_set_active(bool en) {
-    s_showroom_active = en;
-    s_showroom_tap_cnt = 0;
-    if (en) {
-        ESP_LOGD("showroom", "ENTER role=%d", nvs_cfg_get()->device_role);
-        s_sweep_step = 0;
-        // pick 4 random data pages; the position offset guarantees the three gauges differ
-        static const uint8_t pool[] = { 3, 4, 5, 6, 7 };
-        uint8_t pos = nvs_device_position_get();
-        if (pos < 1 || pos > 3) pos = 1;
-        for (int i = 0; i < SHOWROOM_DATA_PAGES; i++)
-            s_showroom_rand_pages[i] = pool[(i * 3 + pos - 1) % 5];
-        // start from slot 0
-        s_showroom_slot = 0;
-        s_showroom_tick = 0;
-        showroom_load_slot(0);
-    } else {
-        ESP_LOGD("showroom", "EXIT");
-    }
+// The master's sweep progress arrives via the app_event queue; slaves mirror it as-is (no self-increment; driven by
+// the master's per-frame broadcast), keeping the backlight flash in sync with the master.
+void ui_sweep_set_from_sync(int sweep_step) {
+    s_sweep_step = (sweep_step > 0 && sweep_step <= SWEEP_TOTAL) ? sweep_step : 0;
 }
 
-// Master's broadcast values arrive via the app_event queue; slaves follow them here.
-void ui_showroom_set_page_from_sync(int sweep_step) {
-    if (sweep_step >= 200 && sweep_step < 210) {
-        // follow the master's slot
-        s_showroom_pending_slot = sweep_step - 200;
-        if (!s_showroom_active) {
-            // Joining showroom mode mid-way: enter via slot 0 (Logo) first; the next real slot
-            // broadcast by the master corrects it shortly (~100ms). That one switch is an expected brief transition, not a bug.
-            s_showroom_pending_slot = -1;
-            s_showroom_pending_enter = true;
-            s_sweep_step = 0;
-        }
-    } else if (sweep_step >= 100 && sweep_step < 200 && !s_showroom_active) {
-        s_showroom_pending_enter = true;
-        s_sweep_step = 0;
-    } else if (!s_showroom_active) {
-        // 0~SWEEP_TOTAL: the master's real sweep progress (triggered the moment OBD connects). Slaves mirror it as-is
-        // (no self-increment; driven by the master's per-frame broadcast), keeping the backlight flash in sync with the master.
-        s_sweep_step = (sweep_step > 0 && sweep_step <= SWEEP_TOTAL) ? sweep_step : 0;
-    }
-}
-
-// Triple-gauge boot animation sync: the master drives s_intro_step along the timeline and broadcasts it; slaves follow via espnow recv writes.
-//   0=not started/still on logo, 1=TC, 2=+-, 3=+OFF, 4=all shown (hold), 255=done→enter page
+// Boot timing sync between gauges: the master broadcasts s_intro_step, slaves follow (255 = boot done → enter page).
 void ui_intro_set_step(int step) {
-    // In showroom mode each gauge self-drives its intro animation and ignores master overrides
-    if (s_showroom_active) return;
     s_intro_step = step;
-}
-
-/* ================================================================
- *  Showroom API (called from my_timerMain / ui_event_easter_egg_background)
- * ================================================================ */
-
-bool ui_ext_showroom_is_active(void) { return s_showroom_active; }
-
-// Tap counting (shared by the version page / any page)
-void ui_ext_showroom_handle_tap(void) {
-    if (s_showroom_active) return;  // already inside, ignore taps
-    uint32_t now = lv_tick_get();
-    if (now - s_showroom_last_tap_ms > SHOWROOM_TAP_TIMEOUT_MS) s_showroom_tap_cnt = 0;
-    s_showroom_last_tap_ms = now;
-    s_showroom_tap_cnt++;
-    if (s_showroom_tap_cnt >= SHOWROOM_TAP_NEED) {
-        s_showroom_tap_cnt = 0;
-        ui_showroom_set_active(true);  // enter only, never exit; leave via power cycle
-    }
-}
-
-// The whole showroom state machine (moved out of my_timerMain):
-// master drives slots, slaves follow; fake data + page switching + video slot playback + slot broadcast.
-void ui_ext_showroom_tick(bool is_slave)
-{
-    // Slave: enter showroom
-    if (!s_showroom_active && s_showroom_pending_enter) {
-        s_showroom_pending_enter = false;
-        s_boot_done = true;
-        ui_showroom_set_active(true);
-    }
-    // Slave: follow the master's slot
-    if (s_showroom_active && is_slave && s_showroom_pending_slot >= 0) {
-        uint8_t new_slot = (uint8_t)s_showroom_pending_slot;
-        s_showroom_pending_slot = -1;
-        if (new_slot != s_showroom_slot) {
-            // clean up the current slot
-            uint8_t old_page = showroom_slot_to_page(s_showroom_slot);
-            if (old_page == 0 && s_boot_video_active) {
-                s_boot_video_active = false; s_boot_video_ready = false;
-                boot_block_player_destroy();
-                // Keep bootmedia mounted for OTA
-                if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
-            }
-            if (old_page == 2) { s_intro_step = 0; s_intro_shown = false; }
-            // jump to the master's slot
-            s_showroom_slot = new_slot;
-            s_showroom_tick = 0;
-            showroom_load_slot(s_showroom_slot);
-        }
-    }
-    if (s_showroom_active && !ui_ext_sweep_active()) {
-        if (!is_slave) showroom_fake_data();
-
-        // animation slot: start playing automatically once the video is ready (runs on both master and slave)
-        uint8_t cur_page = showroom_slot_to_page(s_showroom_slot);
-        if (s_showroom_slot == 1 && cur_page == 0 && s_boot_video_ready && !s_boot_video_active) {
-            lv_scr_load(s_showroom_video_scr);
-            s_boot_video_active = true;
-            s_boot_video_start_us = esp_timer_get_time();
-            if (!s_boot_video_timer)
-                s_boot_video_timer = lv_timer_create(boot_video_timer_cb, 33, NULL);
-        }
-
-        // Local tick page switching:
-        //   master: runs for all slots
-        //   slave: only Logo(0) and animation(1) run local ticks (keeps animation switching in sync);
-        //          other slots purely follow the master's broadcast (avoids flash-through)
-        bool should_tick = !is_slave || s_showroom_slot <= 1;
-        if (should_tick) {
-            bool anim_playing = (cur_page == 0 && s_boot_video_active) ||
-                                (cur_page == 2 && s_intro_step > 0 && s_intro_step < 255);
-            if (!anim_playing) {
-                s_showroom_tick++;
-            }
-            uint8_t max_t = s_showroom_slot_ticks[s_showroom_slot];
-            if (max_t == 0) {
-                max_t = anim_playing ? 255 : 1;
-            }
-            if (s_showroom_tick >= max_t) {
-                // clean up when leaving the current slot
-                if (cur_page == 0 && s_boot_video_active) {
-                    s_boot_video_active = false;
-                    s_boot_video_ready = false;
-                    boot_block_player_destroy();
-                    // Keep bootmedia mounted for OTA
-                    if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
-                }
-                if (cur_page == 2) { s_intro_step = 0; s_intro_shown = false; }
-                s_showroom_slot = (s_showroom_slot + 1) % SHOWROOM_SLOT_COUNT;
-                s_showroom_tick = 0;
-                showroom_load_slot(s_showroom_slot);
-            }
-        }
-        // master broadcasts the current slot (slaves use it to correct drift)
-        if (!is_slave) s_sweep_step = 200 + s_showroom_slot;
-    }
 }
 
 /* ================================================================
@@ -466,7 +188,7 @@ void ui_ext_sweep_trigger(bool ble_now, bool is_slave)
     if (is_slave) return;
     if (ble_now && !s_prev_ble_connected) {
         if (s_boot_done) {
-            s_sweep_step = 1;       // boot animations (Logo/SKY GAUGE/RACE AS ONE) all finished, sweep immediately
+            s_sweep_step = 1;       // boot animations all finished, sweep immediately
         } else {
             s_sweep_pending = true; // boot animation still playing; defer and fire when the default page loads
         }
@@ -521,7 +243,7 @@ bool ui_ext_boot_video_tick(void)
 {
     uint8_t intro_val = nvs_intro_enable_get();
     bool want_video = (intro_val == 2);
-    if (s_boot_done || s_showroom_active || s_boot_video_done || !want_video) return false;
+    if (s_boot_done || s_boot_video_done || !want_video) return false;
 
     // show the Logo for 1 second first, then enter the video
     static int64_t s_video_logo_start_us = 0;
@@ -607,68 +329,16 @@ bool ui_ext_boot_video_tick(void)
     return false;
 }
 
-// Boot flow / Showroom Intro playback (RACE/AS/ONE).
+// Boot flow: after the Logo (and the owner's boot animation, if any), enter the theme. The master and standalone
+// gauges go on after 1 s; a slave waits for the master's signal (255), at most 5 s.
 void ui_ext_intro_tick(bool is_slave)
 {
-    bool run_intro = (!s_boot_done && !s_showroom_active) ||
-                     (s_showroom_active && showroom_slot_to_page(s_showroom_slot) == 2);
-    if (run_intro)
-    {
-        int64_t now_us = esp_timer_get_time();
-        if (s_boot_start_us == 0) s_boot_start_us = now_us;
-        int64_t boot_el = now_us - s_boot_start_us;
-        bool intro_en = nvs_intro_enable_get();
-        bool in_showroom_intro = s_showroom_active && showroom_slot_to_page(s_showroom_slot) == 2;
-
-        if (!is_slave || in_showroom_intro) {
-            if (s_intro_step == 0) {
-                if (in_showroom_intro || (intro_en == 1 && espnow_master_online_slaves() > 0)) {
-                    s_intro_start_us = now_us;
-                    s_intro_step = 1;
-                } else if ((intro_en != 1 && boot_el > 1000000) ||
-                           (intro_en == 1 && boot_el > 3000000)) {
-                    s_intro_step = 255;
-                }
-            } else if (s_intro_step != 255) {
-                int64_t el = now_us - s_intro_start_us;
-                s_intro_step = (el < 500000) ? 1 : (el < 1000000) ? 2 : (el < 1500000) ? 3
-                             : (el < 2000000) ? 4 : (el < 3000000) ? 5 : 255;
-            }
-        } else {
-            // slave: wait for the master's sync signal; only jump to the default page after a 5s timeout
-            if (s_intro_step == 0) {
-                if (boot_el > 5000000) s_intro_step = 255;
-            }
-        }
-
-        // Rendering + screen switch
-        if (s_intro_step >= 1 && s_intro_step <= 5) {
-            static int8_t s_last_intro_word = -1;
-
-            if (!s_intro_shown) {
-                s_last_intro_word = -1;
-                if (ui_ScreenPageIntro == NULL) ui_ScreenPageIntro_screen_init();
-                if (!in_showroom_intro) {
-                    lv_scr_load_anim(ui_ScreenPageIntro, LV_SCR_LOAD_ANIM_FADE_ON, 150, 0, false);
-                    ui_ScreenPageLogo = NULL; imageLogo = NULL;
-                }
-                s_intro_shown = true;
-            }
-            if (ui_LabelIntroWord) {
-                static const char *words[] = {"", "RACE", "AS", "ONE"};
-                uint8_t pos = nvs_device_position_get();
-                if (pos < 1 || pos > 3) pos = 1;
-                int8_t word_idx = (s_intro_step >= pos + 1) ? (int8_t)pos : 0;
-                if (word_idx != s_last_intro_word) {
-                    s_last_intro_word = word_idx;
-                    lv_label_set_text(ui_LabelIntroWord, words[word_idx]);
-                }
-            }
-        } else if (s_intro_step == 255 && !in_showroom_intro) {
-            boot_enter_default_page();   // enter the default page only at boot; showroom doesn't jump away
-        }
-        // s_intro_step==0: still waiting on the Logo
-    }
+    if (s_boot_done) return;
+    int64_t now_us = esp_timer_get_time();
+    if (s_boot_start_us == 0) s_boot_start_us = now_us;
+    int64_t boot_el = now_us - s_boot_start_us;
+    if (s_intro_step == 0 && boot_el > (is_slave ? 5000000 : 1000000)) s_intro_step = 255;
+    if (s_intro_step == 255) boot_enter_default_page();
 }
 
 /* ================================================================
@@ -723,7 +393,7 @@ void ui_ext_init(void)
 
 void ui_ext_tick(void)
 {
-    // The showroom / boot-animation / sweep / rpm-warn logic previously planned to live
+    // The boot-animation / sweep / rpm-warn logic previously planned to live
     // here now runs inside my_timerMain through the dedicated ui_ext_* functions above,
     // so the old ui_ext_tick() hook is intentionally empty. Kept as a no-op hook for the
     // ui_event_easter_egg_background / OTA-screen call sites.
@@ -783,35 +453,6 @@ void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
     s_rpm_flashing = over;
 
     // Background image flash: img1→black→img2→black→img3→black loop; UI widgets keep showing above the image
-#if USE_CUSTOM_RPM_FLASH == 1
-    static int8_t s_flash_step = -1;
-    static const lv_img_dsc_t *s_flash_imgs[3] = { &imgRpmFlash1, &imgRpmFlash2, &imgRpmFlash3 };
-
-    if (over) {
-        if (s_flash_step < 0) s_flash_step = 0;
-        lv_obj_t *scr = lv_scr_act();
-        if (s_flash_step & 1) {
-            lv_obj_set_style_bg_img_src(scr, NULL, LV_PART_MAIN);
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
-        } else {
-            lv_obj_set_style_bg_img_src(scr, s_flash_imgs[(s_flash_step / 2) % 3], LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
-        }
-        s_flash_step = (s_flash_step + 1) % 6;
-        s_rpm_flash_red = true;
-    } else {
-        if (s_flash_step >= 0) {
-            lv_obj_t *scr = lv_scr_act();
-            // Restore the theme background (and its dial-face artwork, if any).
-            // Hardcoding black here would blank a themed dial face for good.
-            ui_helpers_style_screen_bg(scr);
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
-            s_flash_step = -1;
-        }
-        s_rpm_flash_red = false;
-    }
-#else
     if (over) {
         s_rpm_flash_red = !s_rpm_flash_red;
         lv_obj_t *scr = lv_scr_act();
@@ -828,7 +469,6 @@ void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
             s_rpm_flash_red = false;
         }
     }
-#endif
 
     // ---- Multi-gauge linked strobe (triple-gauge mode) ----
     {

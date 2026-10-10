@@ -930,12 +930,6 @@ static void obd_poll_task(void *arg) {
     while (1)
     {
         esp_task_wdt_reset();  // feed the watchdog
-        // Showroom mode: pause OBD polling to avoid overwriting the dummy data
-        extern bool ui_showroom_is_active(void);
-        if (ui_showroom_is_active()) {
-            vTaskDelay(pdMS_TO_TICKS(500));
-            continue;
-        }
         // WiFi OTA: keep the ELM327 polling quiet so BLE stops competing for the radio.
         if (s_ota_paused) {
             vTaskDelay(pdMS_TO_TICKS(200));
@@ -1543,7 +1537,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
         // Only auto-start scanning when a target MAC is actually bound. Stack-only inits
         // (no OBD device bound) must not scan: scanning duty-cycles the radio and degrades
-        // the SkyGauge pairing advert on MASTER devices.
+        // the gauge pairing advert on MASTER devices.
         if (s_target_bda_valid && !s_scan_only_mode && !s_ota_paused) {
             start_scan();
         }
@@ -2326,7 +2320,7 @@ static void ble_ensure_init(void) {
     elm327_ble_init_and_start(NULL, NULL);
 }
 
-// For callers that only need peripheral BLE advertising (RaceChrono DIY / SkyGauge pairing) without connecting an OBD device right now:
+// For callers that only need peripheral BLE advertising (RaceChrono DIY / gauge pairing) without connecting an OBD device right now:
 // idempotently bring up the controller + Bluedroid + GAP/GATTC callbacks, without starting any ELM327 scan/connect.
 void elm327_ble_ensure_stack_init(void) {
     ble_ensure_init();

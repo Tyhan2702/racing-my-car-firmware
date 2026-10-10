@@ -28,7 +28,7 @@ extern int  ui_intro_get_step(void);
 #define ESPNOW_MAGIC            0x4F42  // 'OB' packet-header magic
 #define ESPNOW_VER              5       // v5: added afr_x100 (air-fuel ratio)
 #define MASTER_NAME_LEN         12
-static const char MASTER_NAME[] = "SkyGauge";   // name the master broadcasts (shown on slaves); could become configurable later
+static const char MASTER_NAME[] = "RMC Gauge";  // name the master broadcasts (shown on slaves), fits MASTER_NAME_LEN
 #define BROADCAST_INTERVAL_MS   100     // master broadcast period (10Hz, plenty for gauges)
 #define PRESENCE_INTERVAL_MS    500     // slave "presence" report period
 #define MG_MAX_SLAVES           4       // max slaves the master tracks

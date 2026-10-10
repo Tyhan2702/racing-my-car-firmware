@@ -26,7 +26,7 @@
 #define RC_TAG "racechrono_diy"
 
 #define RC_APP_ID 0x52
-#define RC_DEVICE_NAME "SkyGarageRC"
+#define RC_DEVICE_NAME "RMC - 1.85 Gauge"   // until build_adv_identity() adds the gauge's 4 hex digits
 
 #define RC_SERVICE_UUID  0x1FF8
 #define RC_CHAR_CAN_MAIN 0x0001
@@ -139,8 +139,10 @@ static uint8_t s_manifest_blob[512] = {0};
 static uint16_t s_manifest_len = 0;
 static uint16_t s_handle_manifest = 0;
 
-// Advertising/GAP device name: the MASTER role advertises "SkyGauge-XXYY" (for slave-gauge pairing discovery), otherwise keeps "SkyGarageRC" (for the RaceChrono phone app).
-static char s_adv_name[20] = RC_DEVICE_NAME;
+// Advertising/GAP device name, every role: "RMC - 1.85 Gauge XXYY" (the Racing My Car app and slave gauges find it by
+// that prefix; RaceChrono finds the gauge by its service, not its name). Only a MASTER answers slave pairing.
+#define RMC_GAUGE_NAME "RMC - 1.85 Gauge"
+static char s_adv_name[32] = RC_DEVICE_NAME;
 
 static uint8_t s_adv_raw[] = {
     0x02, 0x01, 0x06,                    // Flags: LE General Discoverable + BR/EDR not supported
@@ -167,16 +169,11 @@ static void prepare_device_info_manifest(void)
 static void build_adv_identity(void)
 {
     const nvs_user_cfg_t *cfg = nvs_cfg_get();
-    if (cfg->device_role == ESPNOW_ROLE_MASTER) {
-        uint8_t mac[6] = {0};
-        esp_read_mac(mac, ESP_MAC_WIFI_STA);
-        memcpy(s_pair_mac, mac, sizeof(s_pair_mac));
-        snprintf(s_adv_name, sizeof(s_adv_name), "SkyGauge-%02X%02X", mac[4], mac[5]);
-    } else {
-        memset(s_pair_mac, 0, sizeof(s_pair_mac));
-        strncpy(s_adv_name, RC_DEVICE_NAME, sizeof(s_adv_name) - 1);
-        s_adv_name[sizeof(s_adv_name) - 1] = '\0';
-    }
+    uint8_t mac[6] = {0};
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    snprintf(s_adv_name, sizeof(s_adv_name), RMC_GAUGE_NAME " %02X%02X", mac[4], mac[5]);
+    if (cfg->device_role == ESPNOW_ROLE_MASTER) memcpy(s_pair_mac, mac, sizeof(s_pair_mac));
+    else memset(s_pair_mac, 0, sizeof(s_pair_mac));
 }
 
 static esp_ble_adv_params_t s_adv_params = {
@@ -203,18 +200,18 @@ static uint32_t build_scan_rsp_with_name(void)
     return (uint32_t)(2 + name_len);
 }
 
-// Build the OTA advert: Flags + Info/OTA service UUIDs + Complete Local Name.
+// Build the OTA advert: Flags + the Info service UUID + Complete Local Name. Only 0x1FFA is listed (the apps match
+// on it; 0x1FFB is found after connecting) so the full 21-character name "RMC - 1.85 Gauge XXYY" fits in 31 bytes.
 static void build_ota_adv_data(void)
 {
     size_t name_len = strlen(s_adv_name);
-    if (name_len > 20) {
-        name_len = 20;   // keep total <= 31: 3 (flags) + 6 (uuid list) + 2 (name header) + name
+    if (name_len > 22) {
+        name_len = 22;   // keep total <= 31: 3 (flags) + 4 (uuid list) + 2 (name header) + name
     }
     uint8_t *p = s_adv_raw_ota;
     *p++ = 0x02; *p++ = 0x01; *p++ = 0x06;          // Flags
-    *p++ = 0x05; *p++ = 0x03;                        // Complete List of 16-bit Service UUIDs
+    *p++ = 0x03; *p++ = 0x03;                        // Complete List of 16-bit Service UUIDs
     *p++ = 0xFA; *p++ = 0x1F;                        // 0x1FFA device info
-    *p++ = 0xFB; *p++ = 0x1F;                        // 0x1FFB OTA
     *p++ = (uint8_t)(1 + name_len); *p++ = 0x09;     // Complete Local Name
     memcpy(p, s_adv_name, name_len);
     p += name_len;

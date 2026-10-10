@@ -10,43 +10,13 @@ void ui_ScreenPageLogo_screen_init(void)
 {
     ui_ScreenPageLogo = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_ScreenPageLogo, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(ui_ScreenPageLogo, 360, LV_PART_MAIN | LV_STATE_DEFAULT);
-    ui_helpers_style_screen_bg(ui_ScreenPageLogo);
+    lv_obj_set_style_bg_color(ui_ScreenPageLogo, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_ScreenPageLogo, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-#if USE_CUSTOM_BOOT_LOGO == 1
+    // the Racing My Car logo on black (images/imgBootLogoCustom.c)
     LV_IMG_DECLARE(imgBootLogoCustom);
-    // Customer-defined boot image (static picture, centered)
     imageLogo = lv_img_create(ui_ScreenPageLogo);
     lv_img_set_src(imageLogo, &imgBootLogoCustom);
     lv_obj_align(imageLogo, LV_ALIGN_CENTER, 0, 0);
-
-    // White border ring (consistent with the other pages)
-    lv_obj_t *spinnerLogo = ui_helpers_create_ring(ui_ScreenPageLogo, 10);   // white ring: static circular border
-#elif USE_GIF_LOGO == 1
-    imageLogo = lv_gif_create(ui_ScreenPageLogo);
-    lv_gif_set_src(imageLogo, &gifSnake400);
-    lv_obj_align(imageLogo, LV_ALIGN_CENTER, 0, 0);
-#else
-    // SKY GAUGE text logo using Conthrax font
-    lv_obj_t *label_sky = lv_label_create(ui_ScreenPageLogo);
-    lv_label_set_text(label_sky, "SKY");
-    lv_obj_set_style_text_font(label_sky, &ui_font_FontTypoderSize56, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_sky, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_letter_space(label_sky, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_sky, LV_ALIGN_CENTER, 0, -20);
-
-    lv_obj_t *label_gauge = lv_label_create(ui_ScreenPageLogo);
-    lv_label_set_text(label_gauge, "GAUGE");
-    lv_obj_set_style_text_font(label_gauge, &ui_font_FontTypoderSize36, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_gauge, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_letter_space(label_gauge, 12, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_gauge, LV_ALIGN_CENTER, 0, 30);
-
-    imageLogo = NULL; // No image logo anymore
-
-    // White border ring (same as Gear page style)
-    lv_obj_t *spinnerLogo = ui_helpers_create_ring(ui_ScreenPageLogo, 10);   // white ring: static circular border, replaces the rotating spinner, removes the arc seam gap
-#endif
     lv_obj_add_event_cb(ui_ScreenPageLogo, ui_event_logo_background, LV_EVENT_ALL, NULL);
 
     // Racing My Car locked boot animation plays on top of the logo at every power-on (see locked_boot.h).

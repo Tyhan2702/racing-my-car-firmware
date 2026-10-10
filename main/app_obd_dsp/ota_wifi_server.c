@@ -52,7 +52,7 @@
 
 static const char *TAG = "ota_wifi";
 
-#define WIFI_SSID_PREFIX    "OBD-Gauge-OTA-"
+#define WIFI_SSID_PREFIX    "RMC - 1.85 Gauge "   // + 2 MAC bytes, e.g. "RMC - 1.85 Gauge 3F2A" (the apps join by this prefix)
 #define WIFI_PORT           80
 #define WIFI_MAX_STA        1
 #define WIFI_CHANNEL        1              // match ESP-NOW channel: single-radio AP+STA must share a channel

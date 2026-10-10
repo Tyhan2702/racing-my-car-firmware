@@ -19,8 +19,7 @@ void racechrono_ble_diy_start(bool enable_racechrono);
 // previous advertising state when leaving.
 void racechrono_ble_diy_set_ota_mode(bool enable);
 
-// Current advertising/GAP device name (role dependent: "SkyGauge-XXYY" on MASTER,
-// "SkyGarageRC" elsewhere). Valid after GATTS registration.
+// Current advertising/GAP device name ("RMC - 1.85 Gauge XXYY"). Valid after GATTS registration.
 const char *racechrono_ble_diy_get_adv_name(void);
 
 // Forward GAP callbacks from the app's single BLE GAP callback.

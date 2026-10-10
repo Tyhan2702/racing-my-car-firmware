@@ -115,7 +115,7 @@ static void on_vehicle(lv_event_t *e)
 // ---------- several gauges: mode, position, boot intro (were the firmware's own MULTI-GAUGE page) ----------
 static lv_obj_t *s_mode_val, *s_pos_val, *s_intro_val;
 static const char *const MODES[] = {"MASTER", "SLAVE", "ALONE"};    // device_role 0/1/2
-static const char *const INTROS[] = {"OFF", "RACE", "VIDEO"};       // intro_enable 0/1/2 (VIDEO: the app's boot animation)
+static const char *const INTROS[] = {"OFF", "VIDEO", "VIDEO"};      // intro_enable 0/(1)/2 (VIDEO: the app's boot animation)
 static void show_multi(void)
 {
     uint8_t role = nvs_cfg_get()->device_role, intro = nvs_intro_enable_get(), pos = nvs_device_position_get();
@@ -144,7 +144,8 @@ static void on_intro(lv_event_t *e)
 {
     int step = (int)(intptr_t)lv_event_get_user_data(e);
     uint8_t v = nvs_intro_enable_get();
-    nvs_intro_enable_set((uint8_t)(((v <= 2 ? v : 2) + 3 + step) % 3));
+    (void)step;
+    nvs_intro_enable_set(v == 0 ? 2 : 0);   // OFF <-> VIDEO
     show_multi();
 }
 static lv_obj_t *choice_card(const char *title, lv_event_cb_t cb)

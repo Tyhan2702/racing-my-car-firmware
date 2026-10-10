@@ -21,13 +21,13 @@ typedef struct {
     int     rssi;
 } gauge_pair_scan_result_t;
 
-// Called once for each newly discovered device (advertising name starts with "SkyGauge")
+// Called once for each newly discovered device (advertising name starts with "RMC - 1.85 Gauge", or "SkyGauge" before v36)
 typedef void (*gauge_pair_scan_cb_t)(const gauge_pair_scan_result_t *dev, int total_count);
 
 // Pairing result callback; name/mac are valid when success=true
 typedef void (*gauge_pair_result_cb_t)(bool success, const char *name, const uint8_t mac[6]);
 
-// Slave gauge: scan for nearby master gauge devices advertising the "SkyGauge" prefix (for duration_s seconds)
+// Slave gauge: scan for nearby master gauge devices advertising the "RMC - 1.85 Gauge" prefix (for duration_s seconds)
 void gauge_pair_ble_scan_start(int duration_s, gauge_pair_scan_cb_t cb);
 void gauge_pair_ble_scan_stop(void);
 

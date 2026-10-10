@@ -23,7 +23,7 @@ jobs:
           name: firmware-${{ github.sha }}
           path: |
             build/merged-firmware.bin
-            build/obd_brz_gauge.bin
+            build/rmc_gauge.bin
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
             build/ota_data_initial.bin

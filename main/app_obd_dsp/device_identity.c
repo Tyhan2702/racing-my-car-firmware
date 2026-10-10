@@ -24,7 +24,7 @@ static const char *TAG = "device_identity";
 #endif
 
 #define OBD_GAUGE_BOARD_NAME        "Waveshare ESP32-S3-Touch-LCD-1.85"
-#define OBD_GAUGE_BOARD_VARIANT     "obd_brz_gauge"
+#define OBD_GAUGE_BOARD_VARIANT     "rmc_gauge_185"   // the platform treats the old "obd_brz_gauge" as the same hardware
 #define OBD_GAUGE_LCD_NAME          "ST77916"
 #define OBD_GAUGE_FLASH_MB          16u
 #define OBD_GAUGE_PSRAM_MB          8u

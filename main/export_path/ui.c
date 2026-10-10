@@ -171,9 +171,6 @@ lv_obj_t * ui_ScreenPageChartConfig;
 void ui_ScreenPageChartAlarm_screen_init(void);
 lv_obj_t * ui_ScreenPageChartAlarm;
 
-// SCREEN: ui_ScreenPageIntro (triple-gauge boot animation RACE/AS/ONE)
-void ui_ScreenPageIntro_screen_init(void);
-lv_obj_t * ui_ScreenPageIntro;
 
 // SCREEN: ui_ScreenPageODBProtocal
 void ui_ScreenPageODBProtocal_screen_init(void);
@@ -229,12 +226,12 @@ static inline int32_t anim_step_i32(int32_t displayed, int32_t target, int32_t t
 // LVGL task handle (set by app_main); priority is temporarily raised to own the CPU while flashing
 TaskHandle_t g_lvgl_task_handle = NULL;
 
-// ===== Showroom mode / boot-video state =====
-// Moved to ui_ext.c (see ui_ext_showroom_* / ui_ext_boot_video_tick / ui_ext_intro_tick).
+// ===== Boot-video state =====
+// Moved to ui_ext.c (see ui_ext_boot_video_tick / ui_ext_intro_tick).
 
-// (showroom_load_slot / boot_video_timer_cb moved to ui_ext.c)
+// (boot_video_timer_cb moved to ui_ext.c)
 
-// (ui_sweep_get_step / ui_showroom_* / ui_intro_* accessors moved to ui_ext.c)
+// (ui_sweep_get_step / ui_intro_* accessors moved to ui_ext.c)
 static int16_t s_oil_pressure_trend[OIL_PRESS_TREND_POINTS];
 static bool s_oil_pressure_trend_ready = false;
 static uint32_t s_oil_pressure_trend_tick = 0;
@@ -434,8 +431,7 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
         return 16;
     }
     if (scr == ui_ScreenPageTemp || scr == ui_ScreenPageInfo ||
-        scr == ui_ScreenPageOilPressure || scr == ui_ScreenPageLogo ||
-        scr == ui_ScreenPageIntro) {
+        scr == ui_ScreenPageOilPressure || scr == ui_ScreenPageLogo) {
         return 33;
     }
     if (scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
@@ -501,13 +497,10 @@ void my_timerMain(lv_timer_t * timer)
         while (app_event_recv(&evt)) {
             switch (evt.type) {
                 case APP_EVT_ESPNOW_SYNC_SLOT:
-                    ui_showroom_set_page_from_sync((int)evt.data.u8);
+                    ui_sweep_set_from_sync((int)evt.data.u8);
                     break;
                 case APP_EVT_ESPNOW_INTRO_STEP:
                     ui_intro_set_step((int)evt.data.u8);
-                    break;
-                case APP_EVT_ESPNOW_ENTER_SHOWROOM:
-                    ui_showroom_set_active(true);
                     break;
                 case APP_EVT_ESPNOW_THRESH_SYNC:
                     // RPM threshold synced from another gauge: write local NVS (the master forwards it to the other slaves) + refresh this page
@@ -525,7 +518,7 @@ void my_timerMain(lv_timer_t * timer)
     static enGear eGear = GEAR_NEUTRAL;
     static bool  s_gear_unknown = false;   // OBD-gear profile can't read a valid gear → show "--" (no ratio-calc fallback)
     // rpm flash state (red/black toggle, strobing flag, linked ramp) moved to ui_ext.c
-    // Sweep animation detection (excludes showroom sync values 200+); sweep state lives in ui_ext.c now
+    // Sweep animation detection; sweep state lives in ui_ext.c now
     #define IN_SWEEP (ui_ext_sweep_active())
     static uint8_t ucOnlyOnce = 0;
     static uint32_t ulOpenLightTimeCnt = 0;
@@ -549,8 +542,6 @@ void my_timerMain(lv_timer_t * timer)
     // "connected" signal: slave=master data being received, master=ELM327 BLE connected (shared by status display and the master's sweep trigger)
     bool ble_now = is_slave ? espnow_link_slave_has_data() : elm327_ble_is_connected();
     ui_ext_sweep_trigger(ble_now, is_slave);
-    /* ---- Showroom mode: master drives slots, slaves follow (moved to ui_ext.c) ---- */
-    ui_ext_showroom_tick(is_slave);
 
     lv_obj_t *scr = lv_scr_act();
     bool live_data_screen = ui_screen_updates_live_data(scr);
@@ -826,15 +817,13 @@ void my_timerMain(lv_timer_t * timer)
     if (!locked_boot_done()) return;
     if (ui_ext_boot_video_tick()) return;
 
-    /* ===== Boot flow / Showroom Intro playback (moved to ui_ext.c) ===== */
+    /* ===== Boot flow: Logo -> theme (ui_ext.c) ===== */
     ui_ext_intro_tick(is_slave);
 
     /* ---- RPM over-limit flash warning (migrated to ui_ext.c) ---- */
     ui_ext_rpm_flash_tick(usRpm, IN_SWEEP);
 
-    if (!ui_ext_showroom_is_active()) {
-        ui_ext_no_signal_update(ble_now);   // showroom mode is a fake-data demo, no NO SIGNAL hint
-    }
+    ui_ext_no_signal_update(ble_now);
 
     /* ---- Adaptive refresh rate: data pages run fast, static pages stay slow ----
        Only this UI timer's period changes (pure redraw pacing); no OBD/RS485/ESP-NOW query or broadcast is affected. */
@@ -870,13 +859,6 @@ void ui_event_logo_background(lv_event_t * e)
         }
         last_click_tick = now;
 
-        if(click_cnt >= 2){
-            click_cnt = 0;
-            if(ui_ScreenPageODBProtocal == NULL) ui_ScreenPageODBProtocal_screen_init();
-            lv_scr_load_anim(ui_ScreenPageODBProtocal, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
-            ui_ScreenPageLogo = NULL;
-            imageLogo = NULL;
-        }  
 
         ESP_LOGD(TAG, "Logo LV_EVENT_CLICKED");
     }   
@@ -1195,10 +1177,6 @@ void ui_event_info_custom_background(lv_event_t * e)
 void ui_event_easter_egg_background(lv_event_t * e)
 {
     lv_event_code_t event_code = lv_event_get_code(e);
-    if(event_code == LV_EVENT_CLICKED && !ui_ext_showroom_is_active()) {
-        ui_ext_showroom_handle_tap();  // 10 rapid taps on the version page enter showroom
-        return;
-    }
     if(event_code == LV_EVENT_GESTURE) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         if(dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT) {
@@ -1293,7 +1271,7 @@ void ui_init(void)
     (void)has_custom_theme;
     if (false) {
         // the firmware's own gauge pages are never shown any more (the "no theme" page replaces them, ui_menu.c);
-        // they are built only if something opens them (showroom)
+        // nothing opens them any more
         ui_ScreenPageGear_screen_init();
         ui_ScreenPageRpm_screen_init();
         ui_ScreenPageSpeed_screen_init();
@@ -1310,9 +1288,7 @@ void ui_init(void)
         ui_ScreenPageNeedle = NULL;
     }
 
-    // System pages are always created (needed for settings/BLE/etc regardless of theme)
-    ui_ScreenPageOilWarn_screen_init();
-    ui_ScreenPageODBProtocal_screen_init();
+    // the firmware's own oil-warning and OBD-protocol pages are no longer reachable: not built
     // The Info page is lazy-loaded on demand; its screen pointer must be initialized to NULL
     ui_ScreenPageInfo = NULL;
     ui_ScreenPageTempCustom = NULL;
@@ -1320,7 +1296,6 @@ void ui_init(void)
     ui_ScreenPageNeedleConfig = NULL;   // config page lazy-loaded
     ui_ScreenPageChartConfig = NULL;    // chart data-source selection page lazy-loaded
     ui_ScreenPageChartAlarm = NULL;     // chart alarm settings page lazy-loaded
-    ui_ScreenPageIntro = NULL;          // boot animation page lazy-loaded
     ui_ScreenPageThemeGauge = NULL;     // theme-provided gauge page, lazy-loaded (only reachable if the active theme declares "main_gauge")
     ui____initial_actions0 = lv_obj_create(NULL);
 

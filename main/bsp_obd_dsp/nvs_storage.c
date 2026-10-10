@@ -107,7 +107,7 @@ esp_err_t nvs_storage_init(void)
         }
         if (!has_ver || stored_ver < CFG_VERSION_CURRENT) {
             ESP_LOGW("nvs", "Config migration v%u → v%u", stored_ver, CFG_VERSION_CURRENT);
-            // v0 → v1: boot_mode field added, default 0 (SKY GAUGE)
+            // v0 → v1: boot_mode field added, default 0
             if (stored_ver < 1) {
                 s_mg.boot_mode = 0;
                 save_blob(NS_CFG, KEY_MG_EXTRA, &s_mg, sizeof(s_mg));
@@ -197,7 +197,7 @@ void nvs_chart_alarm_set(uint8_t item, int16_t raw_threshold){
 }
 
 /* Multi-gauge boot animation settings */
-uint8_t nvs_intro_enable_get(void){ return s_mg.intro_enable; }
+uint8_t nvs_intro_enable_get(void){ return s_mg.intro_enable == 1 ? 2 : s_mg.intro_enable; }   // 1 was RACE/AS/ONE (removed): now VIDEO
 void nvs_intro_enable_set(uint8_t en){
     if(en > 4) return;
     if(s_mg.intro_enable == en) return;

@@ -354,7 +354,7 @@ void app_main(void)
 
         /* 8.1 Start BLE OBD - auto-connect only when a MAC is already bound in NVS (exact MAC match only, no fuzzy name matching);
                legacy configs with a name but no MAC no longer auto-connect; the user must re-select on the scan page to bind the MAC.
-               MASTER starts the Bluetooth stack even without a configured OBD device, so it can broadcast the SkyGauge pairing signal. */
+               MASTER starts the Bluetooth stack even without a configured OBD device, so it can broadcast the gauge pairing signal. */
         bool has_obd_mac = (user_cfg->ble_obd_mac[0] | user_cfg->ble_obd_mac[1] |
                             user_cfg->ble_obd_mac[2] | user_cfg->ble_obd_mac[3] |
                             user_cfg->ble_obd_mac[4] | user_cfg->ble_obd_mac[5]) != 0;
@@ -369,7 +369,7 @@ void app_main(void)
                      user_cfg->ble_device_name);
             elm327_ble_ensure_stack_init();   // the stack must still be started for RaceChrono/the scan page
         } else if (espnow_on) {
-            ESP_LOGD(TAG, "No saved BLE device, but MASTER needs BLE stack for SkyGauge pairing broadcast");
+            ESP_LOGD(TAG, "No saved BLE device, but MASTER needs BLE stack for the pairing broadcast");
             elm327_ble_ensure_stack_init();
         } else {
             ESP_LOGD(TAG, "No saved BLE device, waiting for user selection");

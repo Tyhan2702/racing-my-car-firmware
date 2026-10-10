@@ -7,7 +7,7 @@
 //  Consumers (LVGL task / poll task):           app_event_recv()
 //
 //  Migration plan:
-//    1. ESP-NOW recv → ui_showroom_set_page_from_sync(): change to app_event_send()
+//    1. ESP-NOW recv → ui_sweep_set_from_sync(): change to app_event_send()
 //    2. BLE disconnect → directly modifying s_connected: change to app_event_send()
 //    3. Handle all events via app_event_recv() inside the LVGL task my_timerMain
 // ================================================================

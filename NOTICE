@@ -1,0 +1,11 @@
+Racing My Car 1.85 Gauge firmware
+Copyright (C) 2026 Racing My Car
+
+This program is a modified version of obd_brz_gauge (https://github.com/steveEcode/obd_brz_gauge), released under
+the GNU General Public License version 3. Racing My Car modified it from March 2026 on: its own user interface,
+menu, settings, games, themes, boot animation, device names, Wi-Fi update and recovery. The full history of changes
+is in this repository's git log.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed WITHOUT ANY WARRANTY; see the GNU General Public License (LICENSE) for details.

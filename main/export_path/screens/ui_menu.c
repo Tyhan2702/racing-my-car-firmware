@@ -435,7 +435,7 @@ static void open_boot(void)
 static void idle_cb(lv_timer_t *t)
 {
     (void)t;
-    if (lv_disp_get_inactive_time(NULL) < IDLE_MS || ui_ext_showroom_is_active()) return;
+    if (lv_disp_get_inactive_time(NULL) < IDLE_MS) return;
     lv_obj_t *cur = lv_scr_act();
     if (ui_ScreenPageOTAMode && cur == ui_ScreenPageOTAMode) return;   // never in the middle of an update
     bool menu_page = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||

@@ -46,7 +46,7 @@ void elm327_ble_init_and_start(const char *target_name, const elm327_ble_callbac
 
 // Only initialize the BT controller + Bluedroid + GAP/GATTC callbacks (idempotent, safe to call
 // repeatedly); does not start any ELM327 scan/connection. For cases that have no OBD device yet
-// still need BLE peripheral advertising (e.g. RaceChrono DIY / SkyGauge pairing broadcast).
+// still need BLE peripheral advertising (e.g. RaceChrono DIY / gauge pairing broadcast).
 void elm327_ble_ensure_stack_init(void);
 
 // Send an OBD command (e.g. convert "01 0C\r" to bytes, then call this function).

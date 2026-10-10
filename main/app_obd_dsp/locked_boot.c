@@ -22,7 +22,7 @@ static void locked_boot_timer_cb(lv_timer_t *t) {
         lv_timer_del(s_timer);
         s_timer = NULL;
         // Release the player now: the canvas goes (the static logo underneath shows through) and its buffer is freed,
-        // so the owner's boot animation or showroom video starts from a clean player. If the Logo screen was already
+        // so the owner's boot animation starts from a clean player. If the Logo screen was already
         // deleted (e.g. a double tap opened another page), the player has forgotten the canvas and only frees memory.
         boot_block_player_destroy();
         s_done = true;

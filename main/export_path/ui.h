@@ -19,14 +19,6 @@ extern "C" {
 #include "esp_log.h"
 #include "app_obd_dsp/obd_data_cache.h"
 
-#define USE_GIF_LOGO        0
-#define USE_GIF_EASTER_EGG  0
-// Custom boot logo switch: 1=use the customer's custom image (imgBootLogoCustom) as the boot animation; 0=use the default SKY GAUGE
-// Before setting 1, convert the customer PNG to an LVGL C array (variable name imgBootLogoCustom) in the images/ directory
-#define USE_CUSTOM_BOOT_LOGO 1
-// Custom RPM-warning flash images: 1=flash 3 images in a loop (replacing red/black); 0=default red/black flash
-// Before setting 1, convert the 3 PNGs to LVGL C arrays in the images/ directory
-#define USE_CUSTOM_RPM_FLASH 0
 
 #define COLOR_MITSUBISHI_RED    0xFFFFFF //main color white (originally Mitsubishi red)
 #define COLOR_DOMIANT_PINK      0xFFFFFF //main color white (originally pink)
@@ -168,10 +160,6 @@ void ui_ScreenPageChartAlarm_screen_init(void);
 extern lv_obj_t * ui_ScreenPageChartAlarm;
 void ui_event_chart_alarm_background(lv_event_t * e);
 
-// SCREEN: ui_ScreenPageIntro (triple-gauge boot animation RACE / AS / ONE)
-void ui_ScreenPageIntro_screen_init(void);
-extern lv_obj_t * ui_ScreenPageIntro;
-extern lv_obj_t * ui_LabelIntroWord;      // shows the word for this unit's position (updated by my_timerMain)
 // Boot animation progress sync (ESP-NOW): master broadcasts / slaves follow
 int  ui_intro_get_step(void);
 void ui_intro_set_step(int step);
@@ -238,34 +226,18 @@ int  ui_sweep_get_step(void);       // get the current sweep progress (master br
 // EVENTS
 
 extern lv_obj_t * ui____initial_actions0;
-LV_IMG_DECLARE(gifBlueLightLogo);    
-LV_IMG_DECLARE(gifSnake400);  
-LV_IMG_DECLARE(gifKaBiBaLaZip);    // assets/pngBlueLightLogo.png
-LV_IMG_DECLARE(gifCuteCatZip);
-LV_IMG_DECLARE(gifBlackLeopard);
 // IMAGES AND IMAGE SETS
 LV_IMG_DECLARE(ui_img_pngmainback_png);    // assets/pngMainBack.png
-LV_IMG_DECLARE(pngLogoMITSUBISHI);    // assets/pngLogoMITSUBISHI.png
-LV_IMG_DECLARE(pngLogoSkyGarage);     // assets/sklogo.png (280x280)
-#if USE_CUSTOM_BOOT_LOGO == 1
-LV_IMG_DECLARE(imgBootLogoCustom);
-LV_IMG_DECLARE(imgRmcMarkSmall);       // small yellow Racing My Car mark (info page title)    // customer custom boot image (convert it yourself and place in images/)
-#endif
-#if USE_CUSTOM_RPM_FLASH == 1
-LV_IMG_DECLARE(imgRpmFlash1);
-LV_IMG_DECLARE(imgRpmFlash2);
-LV_IMG_DECLARE(imgRpmFlash3);
-#endif
+LV_IMG_DECLARE(imgBootLogoCustom);      // the Racing My Car logo, 360x360 (boot)
+LV_IMG_DECLARE(imgRmcMarkSmall);        // small yellow Racing My Car mark (menu, info page)
 
 // RPM warning test: when set >0 the flash is force-triggered, self-decrements each tick, stops at zero
 extern volatile int s_rpm_flash_test_ticks;
 void ui_rpm_flash_test_start(void);
 void ui_rpm_warn_refresh_from_nvs(void);  // refresh the RPM WARN page after another gauge syncs threshold/switch
 
-// Showroom mode
-bool ui_showroom_is_active(void);
-void ui_showroom_set_active(bool en);
-void ui_showroom_set_page_from_sync(int sweep_step);
+// Sweep sync from the master gauge (ESP-NOW)
+void ui_sweep_set_from_sync(int sweep_step);
 LV_IMG_DECLARE(ui_img_pngblackear_png);    // assets/pngBlackEar.png
 // FONTS
 LV_FONT_DECLARE(ui_font_FontBabyGearNumSize48);

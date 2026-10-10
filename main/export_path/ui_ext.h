@@ -2,7 +2,7 @@
 // ================================================================
 //  ui_ext.h — hand-written extension logic for ui.c (not overwritten by SquareLine)
 //
-//  All hand-written UI logic (showroom / boot animation / sweep / RPM warning)
+//  All hand-written UI logic (boot animation / sweep / RPM warning)
 //  lives in ui_ext.c; ui.c only calls it through the functions below.
 //  This keeps the hand-written code from being lost when SquareLine Studio re-exports ui.c.
 // ================================================================
@@ -32,7 +32,7 @@ extern "C" {
 // Whether the sweep animation is running right now (replaces the old IN_SWEEP macro).
 bool ui_ext_sweep_active(void);
 
-// Current sweep progress (0=off, 1..SWEEP_TOTAL=running, 200..209=showroom slot broadcast).
+// Current sweep progress (0=off, 1..SWEEP_TOTAL=running).
 int  ui_ext_sweep_get_step(void);
 
 // Called every timer tick from my_timerMain where the old sweep block lived.
@@ -44,15 +44,9 @@ float ui_ext_sweep_tick(bool is_slave, uint8_t configured_brightness);
 // OBD BLE connects (deferring until boot finishes if needed). No-op for slaves.
 void ui_ext_sweep_trigger(bool ble_now, bool is_slave);
 
-/* ---- Showroom mode ----
-   Minimal design: each gauge runs a fixed-timing loop independently, no per-page ESP-NOW sync needed. */
-bool ui_ext_showroom_is_active(void);
-void ui_ext_showroom_handle_tap(void);    // 10 rapid taps on the version page enter showroom
-void ui_ext_showroom_tick(bool is_slave); // the whole showroom state machine (moved out of my_timerMain)
-
 /* ---- Boot animation / video / intro ---- */
 bool ui_ext_boot_video_tick(void);        // video boot mode; returns true to make my_timerMain return early
-void ui_ext_intro_tick(bool is_slave);    // RACE/AS/ONE boot animation state machine
+void ui_ext_intro_tick(bool is_slave);    // boot flow: Logo -> theme (slaves follow the master)
 void ui_ext_no_signal_update(bool signal_ok); // "NO SIGNAL" overlay on gauge pages
 
 /* ---- RPM warning flash (migrated from ui.c my_timerMain) ---- */

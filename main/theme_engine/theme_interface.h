@@ -59,7 +59,7 @@ typedef struct {
     char id[32];          // "boost_oil_v2"
     char name[32];        // "TURBO PRO"
     char version[16];     // "2.1.0"
-    char author[32];      // "community/steveE"
+    char author[32];      // e.g. "Racing My Car"
 } theme_info_t;
 
 // ============================================================
@@ -97,7 +97,7 @@ esp_err_t theme_get_info(theme_info_t *info);
  *
  * NOTE: Boot pages are NEVER themed:
  *   - "logo" (ui_ScreenPageLogo) - Sky Gauge logo screen
- *   - "intro" (ui_ScreenPageIntro) - RACE AS ONE animation
+ *   - "intro" - reserved (no longer used)
  *   - Boot video playback (boot_block_player)
  * These always use core firmware implementations to ensure consistent boot experience.
  *
