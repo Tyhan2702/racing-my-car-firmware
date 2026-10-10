@@ -13,9 +13,9 @@ void ui_ScreenPageLogo_screen_init(void)
     lv_obj_set_style_bg_color(ui_ScreenPageLogo, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_ScreenPageLogo, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     // the Racing My Car logo on black (images/imgBootLogoCustom.c)
-    LV_IMG_DECLARE(imgBootLogoCustom);
+    const lv_img_dsc_t *logo = imgBootLogoCustom_get();
     imageLogo = lv_img_create(ui_ScreenPageLogo);
-    lv_img_set_src(imageLogo, &imgBootLogoCustom);
+    if (logo) lv_img_set_src(imageLogo, logo);
     lv_obj_align(imageLogo, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_event_cb(ui_ScreenPageLogo, ui_event_logo_background, LV_EVENT_ALL, NULL);
 

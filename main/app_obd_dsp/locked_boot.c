@@ -3,10 +3,14 @@
 #include "app_obd_dsp/boot_block_player.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
+#include "app_obd_dsp/rmc_inflate.h"
 
 extern const char locked_boot_manifest[];
-extern const uint8_t locked_boot_data[];
+extern const uint8_t locked_boot_data[];          // zlib (locked_boot_anim.c)
 extern const size_t locked_boot_data_size;
+extern const size_t locked_boot_raw_size;
+static uint8_t *s_raw;                            // inflated in PSRAM while it plays
 
 static const char *TAG = "locked_boot";
 static volatile bool s_done = false;
@@ -25,6 +29,8 @@ static void locked_boot_timer_cb(lv_timer_t *t) {
         // so the owner's boot animation starts from a clean player. If the Logo screen was already
         // deleted (e.g. a double tap opened another page), the player has forgotten the canvas and only frees memory.
         boot_block_player_destroy();
+        heap_caps_free(s_raw);
+        s_raw = NULL;
         s_done = true;
         ESP_LOGI(TAG, "locked boot animation finished after %u ms", (unsigned)elapsed_ms);
     }
@@ -33,19 +39,25 @@ static void locked_boot_timer_cb(lv_timer_t *t) {
 void locked_boot_start(lv_obj_t *parent) {
     if (s_started) return;
     s_started = true;
-    boot_block_player_set_embedded(locked_boot_manifest, locked_boot_data, locked_boot_data_size);
+    s_raw = rmc_inflate(locked_boot_data, locked_boot_data_size, locked_boot_raw_size);
     lv_obj_t *canvas = NULL;
-    bool ok = parent && boot_block_player_create(parent, &canvas);
+    bool ok = false;
+    if (s_raw) {
+        boot_block_player_set_embedded(locked_boot_manifest, s_raw, locked_boot_raw_size);
+        ok = parent && boot_block_player_create(parent, &canvas);
+    }
     // Later players (the owner's boot animation) read the bootmedia partition again.
     boot_block_player_set_embedded(NULL, NULL, 0);
     if (!ok) {
         ESP_LOGW(TAG, "locked boot animation could not start, continuing boot");
+        heap_caps_free(s_raw);
+        s_raw = NULL;
         s_done = true;
         return;
     }
     s_start_us = esp_timer_get_time();
     s_timer = lv_timer_create(locked_boot_timer_cb, 33, NULL);
-    ESP_LOGI(TAG, "locked boot animation started (%u bytes)", (unsigned)locked_boot_data_size);
+    ESP_LOGI(TAG, "locked boot animation started (%u bytes, %u stored)", (unsigned)locked_boot_raw_size, (unsigned)locked_boot_data_size);
 }
 
 bool locked_boot_done(void) {

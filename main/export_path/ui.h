@@ -68,7 +68,7 @@ int  ui_sweep_get_step(void);       // get the current sweep progress (master br
 // Data-item accessors (ui_disp_item_name/unit/color/range) — see ui_disp_item.h
 
 // IMAGES AND IMAGE SETS
-LV_IMG_DECLARE(imgBootLogoCustom);      // the Racing My Car logo, 360x360 (boot)
+const lv_img_dsc_t *imgBootLogoCustom_get(void);   // the Racing My Car logo, 360x360 (boot), inflated on first use; NULL if it cannot be
 LV_IMG_DECLARE(imgRmcMarkSmall);        // small yellow Racing My Car mark (menu, info page)
 
 // RPM warning: flash state (ui_ext.c)
