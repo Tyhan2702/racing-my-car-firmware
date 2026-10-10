@@ -6,6 +6,53 @@
 
 #define TAG "vehicle_profile"
 
+// ---- Brand method lists (obd_method_t, vehicle_profiles.h) ----
+// From OBDb (github.com/OBDb, CC BY-SA 4.0): the signal sets and the per-year replies recorded on real cars, 2000-2026,
+// counted over 139 models of Toyota/Lexus/Scion, Honda/Acura, Mazda and Nissan (2026-10). Each list is in the order that
+// covers the most model-years first. "my" = recorded model-years.
+//   hdr   rx     svc  pid     byte len sign mul div add  kind            29bit
+static const obd_method_t TOYOTA_OIL_T[] = {
+    {"7E0", NULL,  0x21, 0x51,   9, 1, false, 1, 1, -40, MV_LINEAR, false},   // 231 my / 23 models (KWP-style ECUs, to ~2019)
+    {"700", "708", 0x22, 0x107B, 24, 1, false, 1, 1, -40, MV_LINEAR, false},  // 175 my / 30 models (newer ECUs)
+    {"700", "708", 0x22, 0x1F5C, 0, 1, false, 1, 1, -40, MV_LINEAR, false},   // 160 my / 30 models
+    {NULL,  NULL,  0x01, 0x5C,   0, 1, false, 1, 1, -40, MV_LINEAR, false},   // standard, 83 my (2020 on)
+};
+static const obd_method_t TOYOTA_GEAR[] = {
+    {"7E0", NULL,  0x21, 0x85,   0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false}, // 172 my / 19 models
+    {"700", "708", 0x22, 0x1621, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false}, // 156 my / 30 models
+    {"7E0", NULL,  0x21, 0xDA,   0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false}, // 150 my / 23 models
+};
+static const obd_method_t TOYOTA_OIL_P[] = {
+    {"700", "708", 0x22, 0x1074, 0, 2, false, 10, 128, 0, MV_LINEAR, false},  // kPa, 168 my / 30 models
+};
+static const obd_method_t HONDA_OIL_T[] = {   // 29-bit engine ECU, its address differs by model
+    {"18DA10F1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true}, // 46 my / 7 models
+    {"18DA11F1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true}, // 36 my / 8 models
+    {"18DA0EF1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true}, // 11 my / 3 models
+    {NULL,       NULL, 0x01, 0x5C,    0, 1, false, 1, 1, -40, MV_LINEAR, false},
+};
+static const obd_method_t HONDA_GEAR[] = {
+    {"18DA1EF1", NULL, 0x22, 0x3086, 20, 1, false, 1, 1, 0, MV_GEAR_HONDA, true}, // transmission ECU, 70 my / 9 models
+};
+static const obd_method_t MAZDA_OIL_T[] = {
+    {"7E0", NULL, 0x22, 0x1310, 0, 2, false, 1, 100, -40, MV_LINEAR, false},   // 74 my / 9 models
+    {"7E0", NULL, 0x21, 0x51,   9, 1, false, 1, 1,   -40, MV_LINEAR, false},   // 23 my / 4 models
+    {"7E0", NULL, 0x22, 0x111F, 0, 1, false, 1, 1,   -50, MV_LINEAR, false},   // 5 my / 2 models
+    {NULL,  NULL, 0x01, 0x5C,   0, 1, false, 1, 1,   -40, MV_LINEAR, false},
+};
+static const obd_method_t MAZDA_GEAR[] = {
+    {"7E0", NULL, 0x22, 0x1E12, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // 20 my / 3 models
+    {"7E1", NULL, 0x22, 0x1E12, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // transmission ECU, 10 my / 2 models
+    {"7E0", NULL, 0x22, 0x1E1F, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // 18 my / 3 models
+};
+static const obd_method_t MAZDA_OIL_P[] = {
+    {"7E0", NULL, 0x22, 0x0415, 0, 2, true, 1, 1, 0, MV_LINEAR, false},       // kPa, 70 my / 9 models
+};
+static const obd_method_t STD_OIL_T[] = {
+    {NULL, NULL, 0x01, 0x5C, 0, 1, false, 1, 1, -40, MV_LINEAR, false},
+};
+#define MV_SET(a) { (a), (uint8_t)(sizeof(a) / sizeof((a)[0])) }
+
 // Predefined vehicle profiles
 static const vehicle_profile_t s_profiles[] = {
     {
@@ -391,32 +438,70 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_timeout = 0x19,               // default timeout; adjust if responses are slow
     },
     {
-        // Toyota Corolla / Corolla Altis 2008-2026 (E140/E150, E160/E170, E210; 1ZR/2ZR/3ZR, M20A, 8NR; CVT, AT, MT).
-        // Sources: OBDb/Toyota-Corolla (CC BY-SA 4.0, github.com/OBDb/Toyota-Corolla), signal set + per-year recorded
-        // replies 2008-2026 (2018 has none recorded):
-        //  - Standard mode 01 on the engine ECU (7E0): RPM 0C, speed 0D, coolant 05, intake 0F, load 04, TPS 11,
-        //    voltage 42. No MAP (010B): the ZR engines measure air by MAF, so no boost.
-        //  - Engine oil temperature: 01 5C only from 2020. Toyota Mode 21 PID 51 on 7E0 answers every year:
-        //    data byte 9 (after "61 51"), °C = A - 40 (COROLLA_EOT; recorded 2014 replies read 55..123 °C).
-        //  - Gear: Toyota Mode 21 PID 85 on 7E0, data byte 0 = current gear (COROLLA_GEAR; recorded 1..5). A CVT
-        //    reports its stepped ratio; until a gear arrives the gauge shows "--" (no guessing from RPM / speed).
-        .name = "Corolla",
-        .final_drive_ratio = 0.0f,         // gear comes from the car (21 85), not from ratios
-        .tire_rolling_radius_m = 0.316f,   // 205/55R16
+        // Toyota / Lexus / Scion 2000-2026, every model (Corolla, Camry, RAV4, Hilux, Vios, Yaris, Prius, ...). Standard
+        // mode 01 on the engine ECU (7E0); oil temp, gear and oil pressure from the brand method lists above, each
+        // falling back to the next until the car answers. Gear comes from the car or shows "--" (no guessing).
+        .name = "Toyota",
+        .final_drive_ratio = 0.0f,
+        .tire_rolling_radius_m = 0.316f,
         .gear_count = 0,
         .gear_ratios = {0},
         .gear_tolerance = 0.0f,
-        .oil_temp_strategy = {
-            .primary = OIL_TEMP_MODE_TOYOTA_21_51,  // every year
-            .secondary = OIL_TEMP_MODE_PID_5C,      // standard, 2020 on
-            .tertiary = OIL_TEMP_MODE_NONE,
-            .quaternary = OIL_TEMP_MODE_NONE,
-        },
-        .has_boost = false,                // MAF engines: no 010B
-        .obd_gear_kwp21 = 0x85,
-        .forced_protocol = 0,              // auto-detect (CAN 11-bit 500k on every recorded year, tried first)
-        .obd_functional_addr = false,      // physical 7E0: Toyota's engine ECU answers mode 01 and mode 21 there
+        .oil_temp_strategy = { .primary = OIL_TEMP_MODE_PID_5C, .secondary = OIL_TEMP_MODE_NONE, .tertiary = OIL_TEMP_MODE_NONE, .quaternary = OIL_TEMP_MODE_NONE },
+        .has_boost = true,                 // 010B on the turbo models (MAF engines just don't answer it)
+        .forced_protocol = 0,
+        .obd_functional_addr = false,      // physical 7E0: Toyota's engine ECU answers mode 01, 21 and 22 there
         .obd_timeout = 0x19,
+        .methods = { [MV_OIL_TEMP] = MV_SET(TOYOTA_OIL_T), [MV_GEAR] = MV_SET(TOYOTA_GEAR), [MV_OIL_PRESSURE] = MV_SET(TOYOTA_OIL_P) },
+    },
+    {
+        // Honda / Acura 2000-2026 (Civic, City, Accord, CR-V, HR-V, Jazz/Fit, ...). Standard PIDs on 7DF, or on the
+        // 29-bit broadcast 18DB33F1 when the car turns out to be 29-bit CAN. Oil temp and gear only exist on the 29-bit
+        // ECUs (newer Hondas); older ones give the standard PIDs.
+        .name = "Honda",
+        .final_drive_ratio = 0.0f,
+        .tire_rolling_radius_m = 0.316f,
+        .gear_count = 0,
+        .gear_ratios = {0},
+        .gear_tolerance = 0.0f,
+        .oil_temp_strategy = { .primary = OIL_TEMP_MODE_PID_5C, .secondary = OIL_TEMP_MODE_NONE, .tertiary = OIL_TEMP_MODE_NONE, .quaternary = OIL_TEMP_MODE_NONE },
+        .has_boost = true,
+        .forced_protocol = 0,
+        .obd_functional_addr = true,
+        .auto_29bit_functional = true,
+        .obd_timeout = 0x19,
+        .methods = { [MV_OIL_TEMP] = MV_SET(HONDA_OIL_T), [MV_GEAR] = MV_SET(HONDA_GEAR) },
+    },
+    {
+        // Mazda 2000-2026 (Mazda2/3/6, CX-3/5/30/50/60/9, MX-5, BT-50, ...): standard mode 01 on 7E0, brand lists above.
+        .name = "Mazda",
+        .final_drive_ratio = 0.0f,
+        .tire_rolling_radius_m = 0.316f,
+        .gear_count = 0,
+        .gear_ratios = {0},
+        .gear_tolerance = 0.0f,
+        .oil_temp_strategy = { .primary = OIL_TEMP_MODE_PID_5C, .secondary = OIL_TEMP_MODE_NONE, .tertiary = OIL_TEMP_MODE_NONE, .quaternary = OIL_TEMP_MODE_NONE },
+        .has_boost = true,
+        .forced_protocol = 0,
+        .obd_functional_addr = false,
+        .obd_timeout = 0x19,
+        .methods = { [MV_OIL_TEMP] = MV_SET(MAZDA_OIL_T), [MV_GEAR] = MV_SET(MAZDA_GEAR), [MV_OIL_PRESSURE] = MV_SET(MAZDA_OIL_P) },
+    },
+    {
+        // Nissan 2000-2026 (Almera, Sylphy/Sentra, X-Trail, Navara, Serena, ...). OBDb has no brand oil temp / gear for
+        // Nissan, so: the standard PIDs on 7DF, oil temp from 01 5C where the car has it, gear shown as "--".
+        .name = "Nissan",
+        .final_drive_ratio = 0.0f,
+        .tire_rolling_radius_m = 0.316f,
+        .gear_count = 0,
+        .gear_ratios = {0},
+        .gear_tolerance = 0.0f,
+        .oil_temp_strategy = { .primary = OIL_TEMP_MODE_PID_5C, .secondary = OIL_TEMP_MODE_NONE, .tertiary = OIL_TEMP_MODE_NONE, .quaternary = OIL_TEMP_MODE_NONE },
+        .has_boost = true,
+        .forced_protocol = 0,
+        .obd_functional_addr = true,
+        .obd_timeout = 0x19,
+        .methods = { [MV_OIL_TEMP] = MV_SET(STD_OIL_T) },
     },
 };
 

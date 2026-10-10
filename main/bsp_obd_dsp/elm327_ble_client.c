@@ -149,7 +149,8 @@ static volatile int64_t s_can_coolant_last_us = 0;  // last CAN coolant-temp sam
 // Global ready flag
 static volatile bool s_elm_ready = true; // initially true so the first ATZ can be sent
 static volatile bool s_expect_mode21 = false; // true=last command was 21 01, waiting for a 61 01 response
-static volatile uint8_t s_expect_kwp21 = 0;   // Toyota Mode 21 PID awaited by fixed byte position (0x51 oil temp, gear PID); 0 = none
+static uint8_t s_active_protocol = 0;          // ATSP protocol of the current link (7/9 = 29-bit CAN)
+static void mv_reset(void);
 // ---- CAN continuous monitor mode (ATMA, parse each frame as it arrives) ----
 static volatile bool s_zc6_can_monitor_active = false;
 static bool s_zc_can_obd_phase = false;          // true=running the standard OBD poll
@@ -197,7 +198,6 @@ static inline uint8_t oil_mode_to_poll_idx(oil_temp_query_mode_t mode) {
         case OIL_TEMP_MODE_BMW_G_22_4402: return 8;
         case OIL_TEMP_MODE_BMW_22_D002: return 9;
         case OIL_TEMP_MODE_BMW_22_111F: return 10;
-        case OIL_TEMP_MODE_TOYOTA_21_51: return 11;
         default: return 0;
     }
 }
@@ -206,7 +206,7 @@ static const char *get_vehicle_fixed_header_cmd(void) {
     const vehicle_profile_t *vp = vehicle_profile_get_active();
     if (vp && vp->obd_functional_addr) {
         // 29-bit CAN functional broadcast (Honda Integra/Civic 11th gen and similar vehicles)
-        if (vp->obd_29bit_functional) {
+        if (vp->obd_29bit_functional || (vp->auto_29bit_functional && (s_active_protocol == 7 || s_active_protocol == 9))) {
             return "ATSH18DB33F1\r";
         }
         // 11-bit functional addressing (vehicle-wide broadcast), same as phone apps; BMW needs this
@@ -289,7 +289,6 @@ static void record_oil_temp_success(oil_temp_query_mode_t mode) {
             s_oil_diag.mode1_ok++;
             break;
         case OIL_TEMP_MODE_TOYOTA_21_01:
-        case OIL_TEMP_MODE_TOYOTA_21_51:
             s_oil_diag.mode2_ok++;
             break;
         case OIL_TEMP_MODE_MAZDA_22_111F:
@@ -334,7 +333,6 @@ static void record_oil_temp_failure(oil_temp_query_mode_t mode) {
             s_oil_diag.mode1_fail++;
             break;
         case OIL_TEMP_MODE_TOYOTA_21_01:
-        case OIL_TEMP_MODE_TOYOTA_21_51:
             s_oil_diag.mode2_fail++;
             break;
         case OIL_TEMP_MODE_MAZDA_22_111F:
@@ -894,6 +892,8 @@ static void do_elm_init(void) {
     }
 
     snprintf(atsp_cmd, sizeof(atsp_cmd), "ATSP%d\r", protocol_to_use);
+    s_active_protocol = protocol_to_use;
+    mv_reset();   // a new link (maybe another car or profile): start every method list from its first method
     const char *fixed_header_cmd = get_vehicle_fixed_header_cmd();
     // Timeout command: prefer the override's obd_timeout first, then the profile's obd_timeout, default 0x19
     const vehicle_override_t *vp_ov = vehicle_profile_get_override();
@@ -1075,7 +1075,8 @@ static void obd_poll_task(void *arg) {
             case 1:// Intake air temp
                 elm327_ble_send_ascii_blocking("01 0F\r");
                 break;
-            case 6: // Auto oil-temp query (based on vehicle strategy) (CAN mode gets it from passive CAN, skip when available)
+            case 6: // Auto oil-temp query (based on vehicle strategy)
+                if (mv_query(MV_OIL_TEMP)) break;   // brand method list (CAN mode gets it from passive CAN, skip when available)
                 if (can_broadcast && can_has_oil) break;
                 {
                     const oil_formula_t *oil_f = NULL;
@@ -1104,10 +1105,6 @@ static void obd_poll_task(void *arg) {
                         s_expect_mode21 = (mode == OIL_TEMP_MODE_TOYOTA_21_01);
                         if (mode == OIL_TEMP_MODE_PID_5C)
                             elm327_ble_send_ascii_blocking("01 5C\r");
-                        else if (mode == OIL_TEMP_MODE_TOYOTA_21_51) {
-                            s_expect_kwp21 = 0x51;   // the profile's header is the engine ECU (7E0)
-                            elm327_ble_send_ascii_blocking("21 51\r");
-                        }
                         else if (mode == OIL_TEMP_MODE_TOYOTA_21_01)
                             elm327_ble_send_ascii_blocking("21 01\r");
                         else {
@@ -1171,6 +1168,7 @@ static void obd_poll_task(void *arg) {
                 elm327_ble_send_ascii_blocking("01 44\r");
                 break;
             case 10:// Engine oil pressure (Mode 22 DID, per-profile: 4436=B58, 586F=N55) — physical header, only for OBD-oil-pressure profiles
+                if (mv_query(MV_OIL_PRESSURE)) break;   // brand method list
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
                     if (vp && vp->obd_oil_pressure_did != 0) {
@@ -1186,14 +1184,10 @@ static void obd_poll_task(void *arg) {
                 }
                 break;
             case 11:// Transmission gear (Mode 22 DID, per-profile: DA2E=BMW EGS) — only for OBD-gear profiles
+                if (mv_query(MV_GEAR)) break;   // brand method list
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_gear_kwp21 != 0) {     // Toyota: Mode 21 on the engine ECU (7E0), e.g. 21 85
-                        char cmd[8];
-                        snprintf(cmd, sizeof(cmd), "21 %02X\r", vp->obd_gear_kwp21);
-                        s_expect_kwp21 = vp->obd_gear_kwp21;
-                        elm327_ble_send_ascii_blocking(cmd);
-                    } else if (vp && vp->obd_gear_did != 0) {
+                    if (vp && vp->obd_gear_did != 0) {
                         const vehicle_override_t *ov = vehicle_profile_get_override();
                         const char *gear_hdr = (ov && ov->obd_gear_header_cmd) ? ov->obd_gear_header_cmd
                                              : ((ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r");
@@ -1260,10 +1254,10 @@ static void obd_poll_task(void *arg) {
 // Mode 21 multi-frame parser: extract all data bytes after "61 01".
 // Skips ELM327 line-number prefixes ("N: ") and ISO-TP consecutive-frame sequence bytes (0x20~0x2F).
 // Returns the number of bytes extracted; results stored in out[].
-// Toyota Mode 21 reply by fixed byte positions: p points just after "61 XX". With ATCAF1/ATS1/ATH0 the ELM327 prints a
+// A reply by fixed byte positions: p points just after the echoed service + PID ("61 51", "62 10 7B"). With ATCAF1/ATS1/ATH0 the ELM327 prints a
 // multi-frame reply as "021\r0: 61 51 00 ..\r1: 00 00 52 ..\r2: .." (the N: prefix stands for the ISO-TP frame, its PCI
 // byte is not printed), a single frame as "61 85 05 20 82". Returns the data bytes after "61 XX", in order.
-static int parse_kwp21_data(const char *p, uint8_t *out, int max_out) {
+static int parse_reply_data(const char *p, uint8_t *out, int max_out) {
     int count = 0;
     bool line_start = false;
     while (*p && *p != '>' && count < max_out) {
@@ -1283,6 +1277,90 @@ static int parse_kwp21_data(const char *p, uint8_t *out, int max_out) {
         p = peek;
     }
     return count;
+}
+
+// ---- Brand method lists (vehicle_profiles.h obd_method_t) ----
+// Per value: the method in use, and how many requests in a row it went unanswered. MV_GIVE_UP of those and the next
+// method of the list is tried (round and round, so a car woken later is still found).
+#define MV_GIVE_UP 4
+static uint8_t s_mv_idx[MV_COUNT], s_mv_miss[MV_COUNT];
+static volatile int8_t s_mv_pending = -1;   // value whose reply is awaited
+static const obd_method_set_t *mv_set(int sig)
+{
+    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    return (vp && vp->methods[sig].count) ? &vp->methods[sig] : NULL;
+}
+static bool mv_usable(const obd_method_t *m) { return !m->need_29bit || s_active_protocol == 7 || s_active_protocol == 9; }
+static const obd_method_t *mv_current(int sig)
+{
+    const obd_method_set_t *set = mv_set(sig);
+    if (!set) return NULL;
+    for (uint8_t n = 0; n < set->count; n++) {          // skip methods this bus cannot carry
+        const obd_method_t *m = &set->list[s_mv_idx[sig] % set->count];
+        if (mv_usable(m)) return m;
+        s_mv_idx[sig] = (uint8_t)((s_mv_idx[sig] + 1) % set->count);
+    }
+    return NULL;
+}
+static void mv_result(int sig, bool ok)
+{
+    const obd_method_set_t *set = mv_set(sig);
+    if (!set) return;
+    if (ok) { s_mv_miss[sig] = 0; return; }
+    if (++s_mv_miss[sig] >= MV_GIVE_UP) {
+        s_mv_miss[sig] = 0;
+        s_mv_idx[sig] = (uint8_t)((s_mv_idx[sig] + 1) % set->count);
+    }
+}
+static void mv_reset(void) { memset(s_mv_idx, 0, sizeof(s_mv_idx)); memset(s_mv_miss, 0, sizeof(s_mv_miss)); s_mv_pending = -1; }
+// Sends the current method's request (header and receive filter around it); false when the profile has no list for it
+static bool mv_query(int sig)
+{
+    const obd_method_t *m = mv_current(sig);
+    if (!m) return false;
+    char cmd[24];
+    if (m->hdr) { snprintf(cmd, sizeof(cmd), "ATSH%s\r", m->hdr); elm327_ble_send_ascii_blocking(cmd); }
+    if (m->rx) { snprintf(cmd, sizeof(cmd), "ATCRA%s\r", m->rx); elm327_ble_send_ascii_blocking(cmd); }
+    if (m->service == 0x22) snprintf(cmd, sizeof(cmd), "22 %02X %02X\r", (m->pid >> 8) & 0xFF, m->pid & 0xFF);
+    else snprintf(cmd, sizeof(cmd), "%02X %02X\r", m->service, m->pid & 0xFF);
+    s_mv_pending = (int8_t)sig;                          // cleared by the reply handler (the send returns before the reply)
+    elm327_ble_send_ascii_blocking(cmd);
+    if (m->rx) elm327_ble_send_ascii_blocking("ATCRA\r");
+    if (m->hdr) elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
+    return true;
+}
+// The reply to mv_query: find the echo, take the bytes, convert, check the range, hand the value on
+static void mv_handle(int sig, const char *buf)
+{
+    const obd_method_t *m = mv_current(sig);
+    if (!m) return;
+    char echo[12];
+    if (m->service == 0x22) snprintf(echo, sizeof(echo), "62 %02X %02X", (m->pid >> 8) & 0xFF, m->pid & 0xFF);
+    else snprintf(echo, sizeof(echo), "%02X %02X", m->service + 0x40, m->pid & 0xFF);
+    const char *p = strstr(buf, echo);
+    uint8_t d[96];
+    int n = p ? parse_reply_data(p + strlen(echo), d, (int)sizeof(d)) : 0;
+    if (n < m->byte + m->len) { mv_result(sig, false); return; }
+    int32_t raw = m->len == 2 ? (d[m->byte] << 8) | d[m->byte + 1] : d[m->byte];
+    if (m->sign) raw = m->len == 2 ? (int16_t)raw : (int8_t)raw;
+    bool ok = false;
+    if (m->kind == MV_GEAR_PLAIN || m->kind == MV_GEAR_HONDA) {
+        uint8_t gear = (uint8_t)raw;
+        if (m->kind == MV_GEAR_HONDA) gear = raw == 0 || raw == 14 ? 0 : raw >= 1 && raw <= 9 ? (uint8_t)raw : 0xFF;
+        ok = raw <= 15;
+        if (ok && s_cbs.on_parsed_obd_gear) s_cbs.on_parsed_obd_gear(gear);
+    } else {
+        int32_t v = raw * m->mul / (m->div ? m->div : 1) + m->add;
+        if (sig == MV_OIL_TEMP) {
+            ok = v >= -40 && v <= 180;
+            if (ok && s_cbs.on_parsed_oil_temp) s_cbs.on_parsed_oil_temp((uint32_t)v);
+        } else if (sig == MV_OIL_PRESSURE) {
+            ok = v >= 0 && v <= 1500;                          // kPa
+            if (ok && s_cbs.on_parsed_oil_pressure) s_cbs.on_parsed_oil_pressure((uint32_t)(v * 10));   // hPa
+        }
+    }
+    if (ok) mark_obd_data_valid();
+    mv_result(sig, ok);
 }
 
 static int parse_mode21_data(const char *buf, uint32_t *out, int max_out) {
@@ -2012,28 +2090,10 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         // Any valid data frame header received → refresh the "valid data" timestamp and set the flag
         if (p41 || p62 || p61) mark_obd_data_valid();
 
-        // Toyota Mode 21 by fixed byte position (OBDb Toyota-Corolla): 21 51 oil temp = byte 9 - 40, 21 85 gear = byte 0
-        char kwp_hdr[8] = "";
-        if (s_expect_kwp21) snprintf(kwp_hdr, sizeof(kwp_hdr), "61 %02X", s_expect_kwp21);
-        const char *p_kwp = kwp_hdr[0] ? strstr(buf, kwp_hdr) : NULL;
-        if (p_kwp != NULL) {
-            uint8_t pid = s_expect_kwp21;
-            s_expect_kwp21 = 0;
-            uint8_t kd[64];
-            int kn = parse_kwp21_data(p_kwp + 5, kd, (int)sizeof(kd));
-            const vehicle_profile_t *vp_k = vehicle_profile_get_active();
-            mark_obd_data_valid();
-            if (pid == 0x51) {
-                int32_t oil_c = kn > 9 ? (int32_t)kd[9] - 40 : -100;
-                if (oil_c >= -40 && oil_c <= 215) {
-                    record_oil_temp_success(OIL_TEMP_MODE_TOYOTA_21_51);
-                    if (s_cbs.on_parsed_oil_temp) s_cbs.on_parsed_oil_temp((uint32_t)oil_c);
-                } else {
-                    record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_51);
-                }
-            } else if (vp_k && pid == vp_k->obd_gear_kwp21 && kn >= 1 && s_cbs.on_parsed_obd_gear) {
-                s_cbs.on_parsed_obd_gear(kd[0]);
-            }
+        if (s_mv_pending >= 0) {
+            int8_t sig = s_mv_pending;
+            s_mv_pending = -1;
+            mv_handle(sig, buf);            // a brand method's reply (or its NO DATA)
         } else if (p61 != NULL && s_expect_mode21) {
             s_expect_mode21 = false;
             uint32_t d[64] = {0};
@@ -2293,12 +2353,6 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             }
             oil_temp_done: ;
         } else {
-            // A Toyota fixed-position Mode 21 request that got NO DATA / a negative reply: the next one tries again,
-            // and after a few the oil temp moves on to the profile's next mode
-            if (s_expect_kwp21) {
-                if (s_expect_kwp21 == 0x51) record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_51);
-                s_expect_kwp21 = 0;
-            }
             // If Mode21 was expected but an unrelated response arrived, record a failure too
             if (s_expect_mode21) {
                 record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
