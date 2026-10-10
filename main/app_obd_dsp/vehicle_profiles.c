@@ -499,7 +499,7 @@ static const vehicle_profile_t s_profiles[] = {
                      [MV_TRANS_TEMP] = MV_SET(TOYOTA_TRANS_T), [MV_KNOCK] = MV_SET(TOYOTA_KNOCK),
                      [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P),
                      [MV_SHIFT] = MV_SET(TOYOTA_SHIFT) },
-        .poll_gap_ms = 5,                  // the engine ECU answers quickly on CAN: a short gap keeps the RPM lively
+        .poll_gap_ms = 10,                 // the engine ECU answers quickly on CAN; the next request waits for the reply anyway
     },
     {
         // Honda / Acura 2000-2026 (Civic, City, Accord, CR-V, HR-V, Jazz/Fit, ...). Standard PIDs on 7DF, or on the
@@ -570,7 +570,7 @@ static const vehicle_profile_t s_profiles[] = {
                      [MV_TRANS_TEMP] = MV_SET(TOYOTA_TRANS_T), [MV_KNOCK] = MV_SET(TOYOTA_KNOCK),
                      [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P),
                      [MV_SHIFT] = MV_SET(TOYOTA_SHIFT) },
-        .poll_gap_ms = 5,                  // the engine ECU answers quickly on CAN: a short gap keeps the RPM lively
+        .poll_gap_ms = 10,                 // the engine ECU answers quickly on CAN; the next request waits for the reply anyway
     },
 };
 

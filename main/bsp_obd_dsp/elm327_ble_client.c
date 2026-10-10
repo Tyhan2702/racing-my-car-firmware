@@ -81,6 +81,7 @@ static inline void mark_obd_data_valid(void) {
 }
 
 bool elm327_ble_send_ascii_blocking(const char *ascii_cmd);
+static void elm_wait_ready(void);
 
 static bool send_rpm_request(const char *site)
 {
@@ -417,16 +418,13 @@ static void record_oil_temp_failure(oil_temp_query_mode_t mode) {
 // Default callbacks and poll task (optional)
 static void default_on_connected(void) { ESP_LOGD(TAG, "OBD BLE connected"); }
 static void default_on_disconnected(void) { ESP_LOGD(TAG, "OBD BLE disconnected"); }
-static void default_on_raw_notify(const uint8_t *data, size_t len) {
-    // Receiving '>' means the ELM is ready; the next command can be sent
-    // xTaskNotify wakes the poll task immediately, avoiding the 10ms polling overhead
-    for (size_t i = 0; i < len; ++i) {
-        if (data[i] == '>') {
-            s_elm_ready = true;
-            if (s_poll_task_handle) xTaskNotify(s_poll_task_handle, 0, eNoAction);
-            break;
-        }
-    }
+// The '>' prompt releases the next command only once the reply has been read (end of ESP_GATTC_NOTIFY_EVT): released
+// here, the poll task sent the next request, and changed what reply it expects, while this one was still being read.
+static void default_on_raw_notify(const uint8_t *data, size_t len) { (void)data; (void)len; }
+static void elm_release(void)
+{
+    s_elm_ready = true;
+    if (s_poll_task_handle) xTaskNotify(s_poll_task_handle, 0, eNoAction);   // wakes the poll task at once
 }
 
 // ---- Protocol auto-detection ----
@@ -771,6 +769,7 @@ static void send_pid(uint8_t pid)
 {
     char cmd[8];
     snprintf(cmd, sizeof(cmd), "01 %02X\r", pid);
+    elm_wait_ready();                    // the previous reply is read first, else it would be checked against this PID
     s_expect_pid = pid;                  // checked by the reply handler (the send returns before the reply)
     elm327_ble_send_ascii_blocking(cmd);
 }
@@ -856,8 +855,8 @@ static void scan_step(void)
         }
         i -= 0xE0;
         if (i < MV_COUNT) { if (mv_query(i)) return; continue; }
-        if (i == MV_COUNT) { s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); return; }
-        if (!s_vin[0] && s_vin_tries < 3) { s_vin_tries++; s_expect_vin = true; elm327_ble_send_ascii_blocking("09 02\r"); return; }
+        if (i == MV_COUNT) { elm_wait_ready(); s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); return; }
+        if (!s_vin[0] && s_vin_tries < 3) { s_vin_tries++; elm_wait_ready(); s_expect_vin = true; elm327_ble_send_ascii_blocking("09 02\r"); return; }
     }
 }
 
@@ -1322,6 +1321,7 @@ static void obd_poll_task(void *arg) {
                     } else {
                         uint8_t poll_idx = 0;
                         oil_temp_query_mode_t mode = get_next_oil_query_mode(&poll_idx);
+                        elm_wait_ready();
                         s_expect_mode21 = (mode == OIL_TEMP_MODE_TOYOTA_21_01);
                         if (mode == OIL_TEMP_MODE_PID_5C)
                             elm327_ble_send_ascii_blocking("01 5C\r");
@@ -1377,7 +1377,7 @@ static void obd_poll_task(void *arg) {
                 break;
             case 7:// Battery voltage (0x42); the adapter's own voltmeter (ATRV, at the OBD socket) when the car lacks it
                 if (pid_ok(0x42)) send_pid(0x42);
-                else { s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); }
+                else { elm_wait_ready(); s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); }
                 break;
             case 8:// Boost pressure: intake manifold absolute pressure (0x0B, kPa), queried only for turbo profiles
                 {
@@ -1502,6 +1502,23 @@ static void obd_poll_task(void *arg) {
 // The data bytes from p on: the rest of p's line, then only the "N:" continuation frames of a multi-frame (ISO-TP)
 // reply. A line without that prefix is someone else's reply (a second tester on the bus) landing between our frames:
 // it is skipped, not read as part of ours.
+// Where a reply line's "41 " (or other service echo) starts: at the line's start, or after what some adapters print in
+// front of it (spaces, a CAN ID and length when headers are on: "7E8 04 41 0C ..", "18 DA F1 10 04 41 0C ..").
+// NULL when the line is not such a reply.
+static const char *line_reply(const char *ln, size_t len, const char *svc)
+{
+    size_t sl = strlen(svc), i = 0;
+    while (i < len && ln[i] == ' ') i++;
+    if (i + sl <= len && strncmp(ln + i, svc, sl) == 0) return ln + i;
+    // headers on: an 11-bit ID of 3 hex digits + the length byte, or a 29-bit ID as 4 bytes + the length byte
+    const char *p = ln + i;
+    size_t skip = 0;
+    if (len - i >= 7 && isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1]) && isxdigit((unsigned char)p[2]) && p[3] == ' ' &&
+        isxdigit((unsigned char)p[4]) && isxdigit((unsigned char)p[5]) && p[6] == ' ') skip = 7;
+    else if (len - i >= 15 && strncmp(p, "18 ", 3) == 0 && p[5] == ' ' && p[8] == ' ' && p[11] == ' ' && p[14] == ' ') skip = 15;
+    if (skip && i + skip + sl <= len && strncmp(p + skip, svc, sl) == 0) return p + skip;
+    return NULL;
+}
 static int parse_reply_data(const char *p, uint8_t *out, int max_out) {
     int count = 0;
     bool line_start = false;
@@ -1640,6 +1657,7 @@ static bool mv_query(int sig)
     if (m->rx) { snprintf(cmd, sizeof(cmd), "ATCRA%s\r", m->rx); elm327_ble_send_ascii_blocking(cmd); }
     if (m->service == 0x22) snprintf(cmd, sizeof(cmd), "22 %02X %02X\r", (m->pid >> 8) & 0xFF, m->pid & 0xFF);
     else snprintf(cmd, sizeof(cmd), "%02X %02X\r", m->service, m->pid & 0xFF);
+    elm_wait_ready();                                    // the previous reply (often RPM) is read as its own, not as this one
     s_mv_pending = (int8_t)sig;                          // cleared by the reply handler (the send returns before the reply)
     elm327_ble_send_ascii_blocking(cmd);
     if (m->rx) elm327_ble_send_ascii_blocking("ATCRA\r");
@@ -1955,25 +1973,16 @@ bool elm327_ble_send_command(const uint8_t *data, size_t len) {
 }
 
 // Block until the previous response ends ('>' received) before sending.
-// Uses FreeRTOS task notifications instead of 10ms polling: xTaskNotify wakes immediately on '>', zero wait overhead.
-bool elm327_ble_send_ascii_blocking(const char *ascii_cmd)
+// Waits until the adapter's previous reply has arrived and been read (its '>' is handled at the end of the reply
+// parser), up to 3 s. Callers that arm a reply expectation (s_expect_pid, s_mv_pending ...) wait here first, so the
+// previous reply is never checked against the next request.
+static void elm_wait_ready(void)
 {
-    {   // which mode 01 PID we asked for last (replies to other PIDs come from another tester)
-        unsigned pid;
-        if (strncmp(ascii_cmd, "01 ", 3) == 0 && sscanf(ascii_cmd + 3, "%x", &pid) == 1) s_sent01 = (int)pid;
-        else if (strncmp(ascii_cmd, "AT", 2) != 0) s_sent01 = -1;
-    }
-    // Fast-exit when disconnected: no point waiting for a '>' that will never arrive.
-    // Prevents up to 3s of pointless blocking per command after a BLE drop.
-    if (!s_connected) {
-        s_elm_ready = true;
-        return false;
-    }
     if (!s_elm_ready) {
         uint32_t waited_ms = 0;
         while (!s_elm_ready && waited_ms < 3000) {
             // Disconnect mid-wait → abort immediately instead of waiting up to 3s
-            if (!s_connected) { s_elm_ready = true; return false; }
+            if (!s_connected) { s_elm_ready = true; return; }
             // Wait at most 10ms (as a fallback); xTaskNotify wakes early when '>' arrives
             ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
             waited_ms += 10;
@@ -1983,9 +1992,27 @@ bool elm327_ble_send_ascii_blocking(const char *ascii_cmd)
             esp_task_wdt_reset();
         }
         if (!s_elm_ready) {
-            ESP_LOGW(TAG, "Timeout (>3s) waiting previous response, forcing send: %s", ascii_cmd);
+            ESP_LOGW(TAG, "Timeout (>3s) waiting for the previous reply, sending anyway");
             s_elm_ready = true;
         }
+    }
+}
+
+// Uses FreeRTOS task notifications instead of 10ms polling: xTaskNotify wakes immediately on '>', zero wait overhead.
+bool elm327_ble_send_ascii_blocking(const char *ascii_cmd)
+{
+    // Fast-exit when disconnected: no point waiting for a '>' that will never arrive.
+    // Prevents up to 3s of pointless blocking per command after a BLE drop.
+    if (!s_connected) {
+        s_elm_ready = true;
+        return false;
+    }
+    elm_wait_ready();
+    {   // which mode 01 PID we asked for last (replies to other PIDs come from another tester); noted only now, after
+        // the previous reply has been read, or that reply would look like someone else's
+        unsigned pid;
+        if (strncmp(ascii_cmd, "01 ", 3) == 0 && sscanf(ascii_cmd + 3, "%x", &pid) == 1) s_sent01 = (int)pid;
+        else if (strncmp(ascii_cmd, "AT", 2) != 0) s_sent01 = -1;
     }
     s_elm_ready = false;
     uint8_t buf[32];
@@ -2318,8 +2345,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         s_accum_len += copy_n;
         s_accum_buf[s_accum_len] = '\0';
 
-        // Keep waiting if '>' hasn't arrived
-        if (memchr(s_accum_buf, '>', s_accum_len) == NULL) break;
+        // Keep waiting if '>' hasn't arrived (a prompt that did not fit the full buffer still ends the reply)
+        if (memchr(s_accum_buf, '>', s_accum_len) == NULL && memchr(v, '>', (size_t)n) == NULL) break;
 
         char *buf = s_accum_buf;
 
@@ -2445,8 +2472,15 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             char want[8];
             s_expect_pid = 0;
             snprintf(want, sizeof(want), "41 %02X", ep);
-            const char *hit = strstr(buf, want);
-            while (hit && hit != buf && hit[-1] != '\r' && hit[-1] != '\n') hit = strstr(hit + 1, want);   // a reply starts a line
+            const char *hit = NULL;            // a reply line (not the same bytes inside another reply's data)
+            for (const char *ln = buf; *ln && !hit; ) {
+                size_t len = strcspn(ln, "\r\n>");
+                const char *at = line_reply(ln, len, want);
+                if (at && (at[5] == ' ' || at[5] == '\r' || at[5] == '\n' || at[5] == '>' || at[5] == 0)) hit = at;
+                ln += len;
+                if (*ln == '>') break;
+                while (*ln == '\r' || *ln == '\n') ln++;
+            }
             if (hit && s_scan_active && ep < sizeof(s_scan_n)) {   // the DATA page shows the raw reply
                 uint8_t tmp[SCAN_RAW];
                 int n = parse_reply_data(hit + 5, tmp, SCAN_RAW);
@@ -2499,16 +2533,23 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             // first line lost our own reply whenever theirs came first, and reading past a line mixed two replies.
             for (const char *ln = buf; ln && *ln; ) {
                 size_t len = strcspn(ln, "\r\n>");
-                if (len >= 3 && strncmp(ln, "41 ", 3) == 0) {
+                const char *at = line_reply(ln, len, "41 ");
+                if (at) {
                     char line[64];
+                    len -= (size_t)(at - ln);
                     if (len >= sizeof(line)) len = sizeof(line) - 1;
-                    memcpy(line, ln, len);
+                    memcpy(line, at, len);
                     line[len] = '\0';
                     const char *p41 = line;
                     {
                         unsigned fp = 0;
-                        if (sscanf(line, "41 %x", &fp) == 1 && s_sent01 >= 0 && (int)fp != s_sent01 && fp % 0x20 != 0)
-                            s_foreign_us = esp_timer_get_time();   // a reply we did not ask for: someone else is polling
+                        if (sscanf(line, "41 %x", &fp) == 1 && s_sent01 >= 0 && (int)fp != s_sent01 && fp % 0x20 != 0) {
+                            // a reply we did not ask for: someone else is polling (3 within 2 s, not one stray line)
+                            static int64_t first_us; static uint8_t seen;
+                            int64_t now = esp_timer_get_time();
+                            if (now - first_us > 2000000) { first_us = now; seen = 0; }
+                            if (++seen >= 3) s_foreign_us = now;
+                        }
                     }
                 uint32_t d[6] = {0};
                 uint32_t mode = 0, pid = 0;
@@ -2814,9 +2855,10 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             }
         }
 
-        // Clear the accumulation buffer after a full response
+        // Clear the accumulation buffer after a full response; the next command may go now
         s_accum_len = 0;
         s_accum_buf[0] = '\0';
+        elm_release();
         break;
     }
     case ESP_GATTC_WRITE_CHAR_EVT: {
