@@ -358,7 +358,7 @@ static const vehicle_profile_t s_profiles[] = {
         // Oil temp 01 5C is not supported; use FCA UDS extended addressing ATSH18DA10F1 + 22 13 02 instead
         // (see the override in vehicle_custom_config.h).
         // MY2018+ SGW only blocks write operations (code clearing/matching); read-only live data needs no bypass.
-        .name = "GIULIA 2.0T",
+        .name = "Giulia 2.0T",
         .final_drive_ratio = 2.35f,        // RWD standard final drive (Q4 AWD is 2.65, adjust to the actual car)
         .tire_rolling_radius_m = 0.330f,   // 225/45R18, adjust to the actual tires
         .gear_count = 8,                   // ZF 8HP50
@@ -383,7 +383,7 @@ static const vehicle_profile_t s_profiles[] = {
         // Generic standard mode 01 PIDs (RPM/speed/coolant/intake/load/TPS/voltage) use the 29-bit functional
         // broadcast 18DB33F1 (forced protocol 7), same as Honda Integra. Oil temp goes through the generic
         // standard PID 01 5C — no manufacturer-specific CAN rules / formulas are applied.
-        .name = "jeep",
+        .name = "Jeep",
         .final_drive_ratio = 3.45f,        // Generic placeholder (Wrangler JL Pentastar ballpark)
         .tire_rolling_radius_m = 0.373f,   // Generic placeholder for 245/75R17
         .gear_count = 8,                   // Generic placeholder (8HP75-class 8-speed auto)

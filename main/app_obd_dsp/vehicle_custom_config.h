@@ -252,7 +252,7 @@ static const vehicle_override_t s_vehicle_overrides[] = {
         // Standard PIDs (RPM/speed/coolant temp/intake temp/load/TPS/voltage/MAP) go through 29-bit functional broadcast 18DB33F1 (protocol 7).
         // Other extensible DIDs (same header 18DA10F1): oil pressure 22 13 0A=A*10/255, gear 22 19 2D (0=N,0x10=R),
         // boost gauge pressure 22 19 5A=((A*256+B)-32768)/1000-1 bar, throttle 22 19 24=(A*256+B)/655.35 %
-        .match_name      = "GIULIA 2.0T",
+        .match_name      = "Giulia 2.0T",
         .oil_primary     = &oil_giulia_1302,
         .functional_addr = true,
         .obd_timeout     = 0x0F,
