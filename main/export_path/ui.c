@@ -567,7 +567,7 @@ void my_timerMain(lv_timer_t * timer)
         if (decoded_gear >= 0 && decoded_gear <= GEAR_8) {
             eGear = (enGear)decoded_gear;
             s_gear_unknown = false;
-        } else if (vehicle_profile_get_active()->obd_gear_did != 0) {
+        } else if (vehicle_profile_get_active()->obd_gear_did != 0 || vehicle_profile_get_active()->obd_gear_kwp21 != 0) {
             // OBD gear profile: no RPM/speed ratio fallback — show "--" until a valid gear arrives
             s_gear_unknown = true;
         } else {

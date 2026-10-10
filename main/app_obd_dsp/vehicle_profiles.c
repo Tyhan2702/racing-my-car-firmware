@@ -390,6 +390,34 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_29bit_functional = true,      // 29-bit functional broadcast address (18DB33F1, not 7DF)
         .obd_timeout = 0x19,               // default timeout; adjust if responses are slow
     },
+    {
+        // Toyota Corolla / Corolla Altis 2008-2026 (E140/E150, E160/E170, E210; 1ZR/2ZR/3ZR, M20A, 8NR; CVT, AT, MT).
+        // Sources: OBDb/Toyota-Corolla (CC BY-SA 4.0, github.com/OBDb/Toyota-Corolla), signal set + per-year recorded
+        // replies 2008-2026 (2018 has none recorded):
+        //  - Standard mode 01 on the engine ECU (7E0): RPM 0C, speed 0D, coolant 05, intake 0F, load 04, TPS 11,
+        //    voltage 42. No MAP (010B): the ZR engines measure air by MAF, so no boost.
+        //  - Engine oil temperature: 01 5C only from 2020. Toyota Mode 21 PID 51 on 7E0 answers every year:
+        //    data byte 9 (after "61 51"), °C = A - 40 (COROLLA_EOT; recorded 2014 replies read 55..123 °C).
+        //  - Gear: Toyota Mode 21 PID 85 on 7E0, data byte 0 = current gear (COROLLA_GEAR; recorded 1..5). A CVT
+        //    reports its stepped ratio; until a gear arrives the gauge shows "--" (no guessing from RPM / speed).
+        .name = "Corolla",
+        .final_drive_ratio = 0.0f,         // gear comes from the car (21 85), not from ratios
+        .tire_rolling_radius_m = 0.316f,   // 205/55R16
+        .gear_count = 0,
+        .gear_ratios = {0},
+        .gear_tolerance = 0.0f,
+        .oil_temp_strategy = {
+            .primary = OIL_TEMP_MODE_TOYOTA_21_51,  // every year
+            .secondary = OIL_TEMP_MODE_PID_5C,      // standard, 2020 on
+            .tertiary = OIL_TEMP_MODE_NONE,
+            .quaternary = OIL_TEMP_MODE_NONE,
+        },
+        .has_boost = false,                // MAF engines: no 010B
+        .obd_gear_kwp21 = 0x85,
+        .forced_protocol = 0,              // auto-detect (CAN 11-bit 500k on every recorded year, tried first)
+        .obd_functional_addr = false,      // physical 7E0: Toyota's engine ECU answers mode 01 and mode 21 there
+        .obd_timeout = 0x19,
+    },
 };
 
 #define PROFILE_COUNT (sizeof(s_profiles) / sizeof(s_profiles[0]))

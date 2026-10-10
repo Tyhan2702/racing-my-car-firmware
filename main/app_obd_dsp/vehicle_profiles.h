@@ -26,6 +26,7 @@ typedef enum {
     OIL_TEMP_MODE_BMW_G_22_4402 = 8,   // BMW G-series Mode 22 PID 4402, two bytes °C = (A*256+B)*191.25/255-48
     OIL_TEMP_MODE_BMW_22_D002 = 9,    // BMW G-series Mode 22 PID D002, two bytes °C = (A*256+B)*191.25/255-48
     OIL_TEMP_MODE_BMW_22_111F = 10,    // BMW Mode 22 PID 111F (Header 7E0), single byte °C = A-50
+    OIL_TEMP_MODE_TOYOTA_21_51 = 11,   // Toyota Mode 21 PID 51 (Header 7E0), data byte 9, °C = A-40 (Corolla 2008-2026, OBDb)
 } oil_temp_query_mode_t;
 
 // Vehicle gear ratio ranges (used for gear detection)
@@ -58,6 +59,7 @@ typedef struct {
     oil_temp_strategy_t oil_temp_strategy; // oil temp query strategy
     bool has_boost;                      // whether turbocharged (decides whether to query/display boost pressure)
     uint16_t obd_oil_pressure_did;       // 0=off; else Mode 22 DID for OBD oil pressure (4436=B58 hPa, 586F=N55 hPa); supersedes the ADS1115 ADC
+    uint8_t obd_gear_kwp21;              // 0=off; else Toyota Mode 21 PID for direct gear read (85: data byte 0 = gear, Header 7E0)
     uint16_t obd_gear_did;               // 0=off; else Mode 22 DID for direct gear read (D031=BMW ZF 8HP current gear); supersedes ratio-based gear calc
     uint8_t forced_protocol;             // forced ELM327 protocol number (ATSP), 0=auto-detect; lock to 6 for cars like BMW where auto-detect is unstable
     bool obd_functional_addr;            // true=standard PIDs use functional addressing (ATSH 7DF, same as phone apps); false=physical addressing (ATSH 7E0, Subaru etc.)
