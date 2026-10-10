@@ -21,7 +21,8 @@
 #include "app_obd_dsp/ota_update_ble.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/espnow_link.h"
-#include "bsp_obd_dsp/gauge_pair_ble_client.h"   // GAUGE_PAIR_SERVICE_UUID / GAUGE_PAIR_CHAR_MAC (shared with the slave-gauge pairing client)
+#include "bsp_obd_dsp/gauge_pair_ble_client.h"
+#include "bsp_obd_dsp/elm327_ble_client.h"   // GAUGE_PAIR_SERVICE_UUID / GAUGE_PAIR_CHAR_MAC (shared with the slave-gauge pairing client)
 
 #define RC_TAG "racechrono_diy"
 
@@ -95,6 +96,11 @@ enum {
     IDX_CHAR_CFG_CAN_MAIN,
     IDX_CHAR_FILTER,
     IDX_CHAR_VAL_FILTER,
+    IDX_CHAR_OBD_REQ,          // OBD relay: the app's request for the car (elm327_relay_request)
+    IDX_CHAR_VAL_OBD_REQ,
+    IDX_CHAR_OBD_REP,          // ... and the adapter's raw reply, ending with '>'
+    IDX_CHAR_VAL_OBD_REP,
+    IDX_CHAR_CFG_OBD_REP,
     IDX_NB,
 };
 
@@ -126,6 +132,11 @@ static const uint8_t s_char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
 static uint16_t s_service_uuid = RC_SERVICE_UUID;
 static uint16_t s_char_uuid_can_main = RC_CHAR_CAN_MAIN;
 static uint16_t s_char_uuid_filter = RC_CHAR_FILTER;
+static uint16_t s_char_uuid_obd_req = 0x0003;
+static uint16_t s_char_uuid_obd_rep = 0x0004;
+static uint16_t s_handle_obd_req = 0, s_handle_obd_rep = 0, s_handle_obd_cccd = 0;
+static bool s_obd_notify = false;
+static uint16_t s_mtu = 23;
 static uint16_t s_cccd_init = 0x0000;
 static uint8_t s_dummy_val[20] = {0};
 
@@ -281,6 +292,32 @@ static const esp_gatts_attr_db_t s_gatt_db[IDX_NB] = {
     {{ESP_GATT_AUTO_RSP},
      {ESP_UUID_LEN_16, (uint8_t *)&s_char_uuid_filter, ESP_GATT_PERM_WRITE,
       sizeof(s_dummy_val), sizeof(uint8_t), s_dummy_val}},
+
+    [IDX_CHAR_OBD_REQ] =
+    {{ESP_GATT_AUTO_RSP},
+     {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_declare, ESP_GATT_PERM_READ,
+      sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&s_char_prop_write}},
+
+    [IDX_CHAR_VAL_OBD_REQ] =
+    {{ESP_GATT_AUTO_RSP},
+     {ESP_UUID_LEN_16, (uint8_t *)&s_char_uuid_obd_req, ESP_GATT_PERM_WRITE,
+      sizeof(s_dummy_val), sizeof(uint8_t), s_dummy_val}},
+
+    [IDX_CHAR_OBD_REP] =
+    {{ESP_GATT_AUTO_RSP},
+     {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_declare, ESP_GATT_PERM_READ,
+      sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&s_char_prop_read_notify}},
+
+    [IDX_CHAR_VAL_OBD_REP] =
+    {{ESP_GATT_AUTO_RSP},
+     {ESP_UUID_LEN_16, (uint8_t *)&s_char_uuid_obd_rep, ESP_GATT_PERM_READ,
+      sizeof(s_dummy_val), sizeof(uint8_t), s_dummy_val}},
+
+    [IDX_CHAR_CFG_OBD_REP] =
+    {{ESP_GATT_AUTO_RSP},
+     {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_client_cfg,
+      ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+      sizeof(uint16_t), sizeof(uint16_t), (uint8_t *)&s_cccd_init}},
 };
 
 // ---- Pairing service (separate attribute table; s_pair_mac is valid only in the MASTER role, read by the slave gauge during BLE pairing) ----
@@ -673,6 +710,9 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             s_handle_can_main = h[IDX_CHAR_VAL_CAN_MAIN];
             s_handle_can_cccd = h[IDX_CHAR_CFG_CAN_MAIN];
             s_handle_filter = h[IDX_CHAR_VAL_FILTER];
+            s_handle_obd_req = h[IDX_CHAR_VAL_OBD_REQ];
+            s_handle_obd_rep = h[IDX_CHAR_VAL_OBD_REP];
+            s_handle_obd_cccd = h[IDX_CHAR_CFG_OBD_REP];
             esp_ble_gatts_start_service(h[IDX_SVC]);
             s_attr_ready = true;
             ESP_LOGD(RC_TAG, "RC attr table ready, CAN main handle=0x%04X", s_handle_can_main);
@@ -722,6 +762,8 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
     case ESP_GATTS_DISCONNECT_EVT:
         s_connected = false;
         s_notify_enabled = false;
+        s_obd_notify = false;
+        s_mtu = 23;
         ESP_LOGI(RC_TAG, "GATT client disconnected: %02x:%02x:%02x:%02x:%02x:%02x",
                  param->disconnect.remote_bda[0], param->disconnect.remote_bda[1], param->disconnect.remote_bda[2],
                  param->disconnect.remote_bda[3], param->disconnect.remote_bda[4], param->disconnect.remote_bda[5]);
@@ -735,7 +777,15 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             ESP_LOGD(RC_TAG, "CAN main cccd=0x%04X stream %s", cccd, s_notify_enabled ? "EN" : "DIS");
         } else if (s_attr_ready && param->write.handle == s_handle_filter) {
             process_filter_write(param->write.value, param->write.len);
+        } else if (param->write.handle == s_handle_obd_cccd && param->write.len >= 2) {
+            s_obd_notify = (param->write.value[0] & 0x03) != 0;
+        } else if (s_handle_obd_req && param->write.handle == s_handle_obd_req) {
+            if (!elm327_relay_request(param->write.value, param->write.len)) racechrono_ble_diy_obd_reply("BUSY\r>", 6);
         }
+        break;
+
+    case ESP_GATTS_MTU_EVT:
+        s_mtu = param->mtu.mtu;
         break;
 
     case ESP_GATTS_READ_EVT:
@@ -895,4 +945,16 @@ void racechrono_ble_diy_set_ota_mode(bool enable)
 const char *racechrono_ble_diy_get_adv_name(void)
 {
     return s_adv_name;
+}
+
+// OBD relay reply to the app: the adapter's text in notifications of at most MTU - 3 bytes
+void racechrono_ble_diy_obd_reply(const char *text, size_t len)
+{
+    if (!s_connected || !s_obd_notify || !s_handle_obd_rep || s_gatts_if == ESP_GATT_IF_NONE) return;
+    size_t chunk = s_mtu > 3 ? s_mtu - 3 : 20;
+    for (size_t off = 0; off < len; off += chunk) {
+        size_t n = len - off < chunk ? len - off : chunk;
+        if (esp_ble_gatts_send_indicate(s_gatts_if, s_conn_id, s_handle_obd_rep, (uint16_t)n, (uint8_t *)text + off, false) != ESP_OK) return;
+        if (off + n < len) vTaskDelay(pdMS_TO_TICKS(5));
+    }
 }

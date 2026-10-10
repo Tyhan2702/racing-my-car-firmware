@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include "esp_gap_ble_api.h"
 
 #ifdef __cplusplus
@@ -24,6 +25,9 @@ const char *racechrono_ble_diy_get_adv_name(void);
 
 // Forward GAP callbacks from the app's single BLE GAP callback.
 void racechrono_ble_diy_handle_gap_event(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
+
+// OBD relay (0x1FF8: 0x0003 request, 0x0004 reply): sends the adapter's reply text to the connected app.
+void racechrono_ble_diy_obd_reply(const char *text, size_t len);
 
 // Query connection state to RaceChrono app.
 bool racechrono_ble_diy_is_connected(void);

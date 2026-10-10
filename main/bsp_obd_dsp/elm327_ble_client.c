@@ -157,6 +157,7 @@ static uint8_t s_active_protocol = 0;          // ATSP protocol of the current l
 static void mv_reset(void);
 static bool mv_query(int sig);
 static void fails_forget_now_and_then(void);
+static void relay_serve(void);
 // ---- CAN continuous monitor mode (ATMA, parse each frame as it arrives) ----
 static volatile bool s_zc6_can_monitor_active = false;
 static bool s_zc_can_obd_phase = false;          // true=running the standard OBD poll
@@ -181,6 +182,12 @@ static volatile bool s_can_side_seen = false;
 // Another tester on the same bus (a wired gauge, a scan tool): when its replies show up, we poll more gently and
 // never conclude from a missing reply that the car lacks a value (the ECU may simply have been busy with it).
 static volatile int s_sent01 = -1;
+// OBD relay (the app reads the car through the gauge): one request at a time, served by the poll task between slots
+static char s_relay_req[72];
+static volatile bool s_relay_has = false;
+static volatile bool s_relay_capture = false;
+static char s_relay_reply[400];
+static volatile size_t s_relay_len = 0;
 static volatile int64_t s_foreign_us;
 static bool bus_shared(void) { return s_foreign_us && esp_timer_get_time() - s_foreign_us < 15000000LL; }
 // ---- Supported PIDs and fallbacks ----
@@ -1486,6 +1493,7 @@ static void obd_poll_task(void *arg) {
                            ? ov_gap->poll_gap_ms
                            : ((vp_gap && vp_gap->poll_gap_ms > 0)
                               ? vp_gap->poll_gap_ms : OBD_POLL_SLOT_GAP_MS);
+            if (s_relay_has) relay_serve();
             if (bus_shared() && gap < 25) gap = 25;   // another tester polls too: leave the ECU room for both
             fails_forget_now_and_then();
             if (gap > 0) vTaskDelay(pdMS_TO_TICKS(gap));
@@ -1974,6 +1982,61 @@ bool elm327_ble_send_command(const uint8_t *data, size_t len) {
 }
 
 // Block until the previous response ends ('>' received) before sending.
+// ---- OBD relay ----
+bool elm327_relay_request(const uint8_t *data, size_t len)
+{
+    if (s_relay_has) return false;
+    size_t n = 0;
+    for (size_t i = 0; i < len && n < sizeof(s_relay_req) - 1; i++) if (data[i] != '\r' && data[i] != '\n') s_relay_req[n++] = (char)data[i];
+    s_relay_req[n] = '\0';
+    s_relay_has = true;
+    return true;
+}
+static bool relay_hex(const char *s, size_t n, size_t max)
+{
+    if (n > max) return false;
+    for (size_t i = 0; i < n; i++) if (!isxdigit((unsigned char)s[i])) return false;
+    return true;
+}
+// Read-only services plus 04 (clear codes, the app asks the driver first) and the adapter's voltmeter / protocol
+static bool relay_allowed(const char *c)
+{
+    if (!strcmp(c, "ATRV") || !strcmp(c, "ATDPN")) return true;
+    static const char *const ok[] = {"01", "02", "03", "04", "06", "07", "09", "0A", "21", "22"};
+    bool svc = false;
+    for (size_t i = 0; i < sizeof(ok) / sizeof(ok[0]); i++) if (!strncmp(c, ok[i], 2) && (c[2] == ' ' || c[2] == 0)) svc = true;
+    if (!svc || strlen(c) > 20) return false;
+    for (const char *p = c; *p; p++) if (!isxdigit((unsigned char)*p) && *p != ' ') return false;
+    return true;
+}
+static void relay_serve(void)
+{
+    char req[sizeof(s_relay_req)];
+    memcpy(req, s_relay_req, sizeof(req));
+    s_relay_has = false;
+    char *bar1 = strchr(req, '|'), *bar2 = bar1 ? strchr(bar1 + 1, '|') : NULL;
+    if (!bar2 || s_zc6_can_monitor_active) { racechrono_ble_diy_obd_reply("?\r>", 3); return; }
+    *bar1 = *bar2 = '\0';
+    const char *hdr = req, *rx = bar1 + 1, *cmd = bar2 + 1;
+    if (!relay_hex(hdr, strlen(hdr), 8) || !relay_hex(rx, strlen(rx), 8) || !relay_allowed(cmd)) { racechrono_ble_diy_obd_reply("?\r>", 3); return; }
+    char line[32];
+    if (*hdr) { snprintf(line, sizeof(line), "ATSH%s\r", hdr); elm327_ble_send_ascii_blocking(line); }
+    if (*rx) { snprintf(line, sizeof(line), "ATCRA%s\r", rx); elm327_ble_send_ascii_blocking(line); }
+    elm_wait_ready();
+    s_relay_len = 0;
+    s_relay_capture = true;
+    snprintf(line, sizeof(line), "%s\r", cmd);
+    elm327_ble_send_ascii_blocking(line);
+    elm_wait_ready();                                     // the reply has been read (and captured)
+    bool got = !s_relay_capture;
+    s_relay_capture = false;
+    if (*rx) elm327_ble_send_ascii_blocking("ATCRA\r");
+    if (*hdr) send_fixed_header();
+    if (!got) { racechrono_ble_diy_obd_reply("NO DATA\r>", 9); return; }
+    s_relay_reply[s_relay_len++] = '>';
+    racechrono_ble_diy_obd_reply(s_relay_reply, s_relay_len);
+}
+
 // Waits until the adapter's previous reply has arrived and been read (its '>' is handled at the end of the reply
 // parser), up to 3 s. Callers that arm a reply expectation (s_expect_pid, s_mv_pending ...) wait here first, so the
 // previous reply is never checked against the next request.
@@ -2859,6 +2922,14 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             }
         }
 
+        if (s_relay_capture) {              // the app's request: hand it the adapter's text as it came
+            const char *end = memchr(buf, '>', s_accum_len);
+            size_t n = end ? (size_t)(end - buf) : s_accum_len;
+            if (n > sizeof(s_relay_reply) - 2) n = sizeof(s_relay_reply) - 2;
+            memcpy(s_relay_reply, buf, n);
+            s_relay_len = n;
+            s_relay_capture = false;
+        }
         // Clear the accumulation buffer after a full response; the next command may go now
         s_accum_len = 0;
         s_accum_buf[0] = '\0';

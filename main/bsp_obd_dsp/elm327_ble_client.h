@@ -95,6 +95,9 @@ void elm327_ble_request_reinit(bool redetect);
 void elm327_scan_set_active(bool on);
 // Acceleration test (menu → TEST): poll only the speed, as fast as the car answers; tap gets every reply (km/h, time)
 void elm327_set_fast_speed(bool on);
+// OBD relay: a request from the app ("hdr|rx|cmd", hdr / rx may be empty), answered between the gauge's own requests
+// through racechrono_ble_diy_obd_reply. False while the previous one is still waiting.
+bool elm327_relay_request(const uint8_t *data, size_t len);
 void elm327_set_speed_tap(void (*cb)(float kmh, int64_t us));
 bool elm327_scan_get(uint8_t pid, uint8_t *d, uint8_t *n);   // last reply's data bytes (up to 14), false when none in 20 s
 int  elm327_scan_supported(uint8_t pid);                     // 1 / 0 from the car's bitmaps, -1 unknown
