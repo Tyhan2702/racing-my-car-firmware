@@ -1385,6 +1385,8 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
 
 
 
+LV_FONT_DECLARE(ui_font_Zh16);
+
 /*-----------------
  *  PUBLIC FONT
  *----------------*/
@@ -1408,7 +1410,7 @@ lv_font_t ui_font_FontTypoderSize16 = {
 #endif
     .dsc = &font_dsc,          /*The custom font data. Will be accessed by `get_glyph_bitmap/dsc` */
 #if LV_VERSION_CHECK(8, 2, 0) || LVGL_VERSION_MAJOR >= 9
-    .fallback = NULL,
+    .fallback = &ui_font_Zh16,              /*Chinese text (SETTINGS > LANGUAGE): export_path/ui_lang.c*/
 #endif
     .user_data = NULL,
 };

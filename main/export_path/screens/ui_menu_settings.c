@@ -13,6 +13,7 @@
 #include "app_obd_dsp/vehicle_profiles.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "esp_system.h"
+#include "../ui_lang.h"
 
 #define CARD_W 252
 #define C_CARD 0x1C1C1E
@@ -39,7 +40,7 @@ static lv_obj_t *card(const char *title, int h)
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(c, LV_OBJ_FLAG_SNAPPABLE);
     lv_obj_t *t = lv_label_create(c);
-    lv_label_set_text(t, title);
+    lv_label_set_text(t, TR(title));
     lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(C_DIM), 0);
     lv_obj_align(t, LV_ALIGN_TOP_LEFT, 0, 12);
@@ -121,9 +122,9 @@ static const char *const INTROS[] = {"OFF", "VIDEO", "VIDEO"};      // intro_ena
 static void show_multi(void)
 {
     uint8_t role = nvs_cfg_get()->device_role, intro = nvs_intro_enable_get(), pos = nvs_device_position_get();
-    lv_label_set_text(s_mode_val, MODES[role <= 2 ? role : 2]);
+    lv_label_set_text(s_mode_val, TR(MODES[role <= 2 ? role : 2]));
     lv_label_set_text_fmt(s_pos_val, "%u", (unsigned)(pos >= 1 && pos <= 3 ? pos : 1));
-    lv_label_set_text(s_intro_val, INTROS[intro <= 2 ? intro : 2]);
+    lv_label_set_text(s_intro_val, TR(INTROS[intro <= 2 ? intro : 2]));
 }
 static void on_mode(lv_event_t *e)
 {
@@ -156,6 +157,27 @@ static lv_obj_t *choice_card(const char *title, lv_event_cb_t cb)
     round_btn(c, "<", LV_ALIGN_BOTTOM_LEFT, -6, -10, cb, (void *)(intptr_t)-1);
     round_btn(c, ">", LV_ALIGN_BOTTOM_RIGHT, 6, -10, cb, (void *)(intptr_t)1);
     return value_label(c, LV_ALIGN_BOTTOM_MID, 0, -18, &ui_font_FontTypoderSize20);
+}
+
+// ---------- language: the settings page is rebuilt at once in the new language (the other pages are built when opened) ----------
+static lv_obj_t *s_lang_val;
+static int s_focus = 1;                                          // the card scrolled to the middle when the page opens
+static void show_lang(void) { lv_label_set_text(s_lang_val, ui_lang_get() == UI_LANG_ZH ? "中文" : "ENGLISH"); }
+static void rebuild(lv_timer_t *t)
+{
+    lv_timer_del(t);
+    lv_obj_t *old = ui_ScreenPageMenuSettings;
+    s_focus = 2;                                                 // back on the language card
+    ui_ScreenPageMenuSettings_screen_init();
+    s_focus = 1;
+    lv_scr_load(ui_ScreenPageMenuSettings);
+    if (old) lv_obj_del(old);
+}
+static void on_lang(lv_event_t *e)
+{
+    (void)e;
+    ui_lang_set(ui_lang_get() == UI_LANG_ZH ? UI_LANG_EN : UI_LANG_ZH);
+    lv_timer_create(rebuild, 0, NULL);                           // not from inside the button's own event
 }
 
 // ---------- shift light ----------
@@ -221,7 +243,7 @@ static void on_action(lv_event_t *e)
     }
     if (s_confirm_timer) confirm_expire(s_confirm_timer);
     s_confirm_btn = b;
-    lv_label_set_text(lv_obj_get_child(b, 0), "TAP AGAIN");
+    lv_label_set_text(lv_obj_get_child(b, 0), TR("TAP AGAIN"));
     lv_obj_set_style_bg_color(b, lv_color_hex(0xB91C1C), 0);
     s_confirm_timer = lv_timer_create(confirm_expire, 3000, NULL);
 }
@@ -234,6 +256,7 @@ static void action_card(const char *title, const char *label, action_fn fn)
     lv_obj_set_style_bg_color(b, lv_color_hex(0x3A3A3C), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_align(b, LV_ALIGN_BOTTOM_MID, 0, -12);
+    label = TR(label);
     lv_obj_set_user_data(b, (void *)label);
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, label);
@@ -263,6 +286,7 @@ static void on_screen(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_DELETE) {
+        if (lv_event_get_target(e) != ui_ScreenPageMenuSettings) return;   // the old page after a language change
         if (s_confirm_timer) { lv_timer_del(s_confirm_timer); s_confirm_timer = NULL; }
         s_confirm_btn = NULL;
         ui_ScreenPageMenuSettings = NULL;
@@ -298,7 +322,7 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     lv_obj_add_event_cb(s_list, on_scroll, LV_EVENT_SCROLL, NULL);
 
     lv_obj_t *title = lv_label_create(s_list);                   // scrolls away with the list
-    lv_label_set_text(title, "SETTINGS");
+    lv_label_set_text(title, TR("SETTINGS"));
     lv_obj_set_style_text_font(title, &ui_font_FontTypoderSize24, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(C_ACCENT), 0);
 
@@ -320,6 +344,13 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     lv_obj_set_ext_click_area(sl, 14);
     lv_obj_add_event_cb(sl, on_bright, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(sl, on_bright, LV_EVENT_RELEASED, NULL);
+
+    // language
+    c = card("LANGUAGE", 96);
+    round_btn(c, "<", LV_ALIGN_BOTTOM_LEFT, -6, -10, on_lang, NULL);
+    round_btn(c, ">", LV_ALIGN_BOTTOM_RIGHT, 6, -10, on_lang, NULL);
+    s_lang_val = value_label(c, LV_ALIGN_BOTTOM_MID, 0, -18, &ui_font_FontTypoderSize20);
+    show_lang();
 
     // vehicle
     c = card("VEHICLE", 96);
@@ -361,11 +392,11 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     action_card("GAUGE", "RESTART", do_restart);
 
     lv_obj_t *hint = lv_label_create(s_list);
-    lv_label_set_text(hint, "SWIPE LEFT / RIGHT: BACK");
+    lv_label_set_text(hint, TR("SWIPE LEFT / RIGHT: BACK"));
     lv_obj_set_style_text_font(hint, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x666666), 0);
 
     lv_obj_update_layout(scr);
-    lv_obj_scroll_to_view(lv_obj_get_child(s_list, 1), LV_ANIM_OFF);   // brightness first, in the middle
+    lv_obj_scroll_to_view(lv_obj_get_child(s_list, s_focus), LV_ANIM_OFF);   // brightness first, in the middle (language after a change)
     fade();
 }

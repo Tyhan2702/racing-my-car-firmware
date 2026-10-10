@@ -37,6 +37,7 @@ typedef struct {
     uint8_t rpm_warn_linked_en;  // multi-gauge linked flash: 0=off 1=on (gauges turn red in sequence by
                                  // position, then all flash at threshold; logic in ui.c)
     uint8_t rc_enabled;          // RaceChrono BLE service: 0=off (minimal mode), 1=on (full RC+Pair+Info+OTA)
+    uint8_t language;            // interface language: 0=English, 1=Chinese (export_path/ui_lang.c)
                                  // NOTE: new fields MUST be appended at the END of this struct;
                                  // see the load_blob grow logic comment in nvs_storage.c.
 } nvs_user_cfg_t;

@@ -28,6 +28,7 @@
 #include "lvgl.h"
 #include <string.h>
 #include <stdio.h>
+#include "ui_lang.h"
 
 static const char *TAG = "ui_ext";
 
@@ -366,7 +367,7 @@ void ui_ext_no_signal_update(bool signal_ok)
             lv_obj_set_style_pad_hor(s_no_signal_lbl, 10, LV_PART_MAIN);
             lv_obj_set_style_pad_ver(s_no_signal_lbl, 4, LV_PART_MAIN);
             lv_obj_set_style_radius(s_no_signal_lbl, 6, LV_PART_MAIN);
-            lv_label_set_text(s_no_signal_lbl, "NO SIGNAL");
+            lv_label_set_text(s_no_signal_lbl, TR("NO SIGNAL"));
             lv_obj_align(s_no_signal_lbl, LV_ALIGN_TOP_MID, 0, 34);
         }
         if (!s_no_signal_visible) {
@@ -409,7 +410,7 @@ void ui_ext_doors_update(void)
     }
     int n = 0;
     for (int b = 1; b < 5; b++) n += (want >> b) & 1;          // doors; bit 0 is the trunk
-    lv_label_set_text(s_lbl, n == 0 ? "TRUNK OPEN" : n == 1 ? "DOOR OPEN" : "DOORS OPEN");
+    lv_label_set_text(s_lbl, n == 0 ? TR("TRUNK OPEN") : n == 1 ? TR("DOOR OPEN") : TR("DOORS OPEN"));
     lv_obj_clear_flag(s_lbl, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(s_lbl);
 }

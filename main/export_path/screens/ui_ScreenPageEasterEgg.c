@@ -10,6 +10,7 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "ui_rmc_style.h"
 #include "esp_app_desc.h"
+#include "../ui_lang.h"
 
 #ifndef OBD_GAUGE_BUILD_TAG
 #define OBD_GAUGE_BUILD_TAG "unknown"
@@ -26,19 +27,19 @@ void ui_device_info_refresh(void)
     if (!s_mode) return;
     uint8_t role = nvs_cfg_get()->device_role;
     bool slave = role == ESPNOW_ROLE_SLAVE, up;
-    lv_label_set_text(s_mode, slave ? "SLAVE" : role == ESPNOW_ROLE_MASTER ? "MASTER" : "ALONE");
+    lv_label_set_text(s_mode, slave ? TR("SLAVE") : role == ESPNOW_ROLE_MASTER ? TR("MASTER") : TR("ALONE"));
     if (slave) {
         up = espnow_link_slave_has_data();
         const char *m = espnow_link_get_master_name();
-        lv_label_set_text(s_link_label, "MASTER");
+        lv_label_set_text(s_link_label, TR("MASTER"));
         lv_label_set_text(s_link, up && m[0] ? m : "--");
-        lv_label_set_text(s_status, up ? "LINKED" : "WAITING");
+        lv_label_set_text(s_status, up ? TR("LINKED") : TR("WAITING"));
     } else {
         up = elm327_ble_is_connected();
         const char *n = elm327_ble_get_connected_name();
-        lv_label_set_text(s_link_label, "OBD");
-        lv_label_set_text(s_link, n && n[0] ? n : "NOT SET");
-        lv_label_set_text(s_status, up ? "CONNECTED" : "OFFLINE");
+        lv_label_set_text(s_link_label, TR("OBD"));
+        lv_label_set_text(s_link, n && n[0] ? n : TR("NOT SET"));
+        lv_label_set_text(s_status, up ? TR("CONNECTED") : TR("OFFLINE"));
     }
     lv_obj_set_style_text_color(s_status, lv_color_hex(up ? RMC_GREEN : RMC_DIM), 0);
 }
@@ -61,18 +62,18 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     lv_img_set_zoom(mark, 218);
     lv_obj_align(mark, LV_ALIGN_TOP_MID, 0, 46);
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "GAUGE INFO");
+    lv_label_set_text(title, TR("GAUGE INFO"));
     lv_obj_set_style_text_font(title, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(RMC_DIM), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 84);
 
     lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 152);
     lv_obj_align(card, LV_ALIGN_CENTER, 0, 30);
-    s_mode = rmc_row(card, "MODE", 16);
-    s_link = rmc_row(card, "OBD", 50);
+    s_mode = rmc_row(card, TR("MODE"), 16);
+    s_link = rmc_row(card, TR("OBD"), 50);
     s_link_label = lv_obj_get_child(card, lv_obj_get_index(s_link) - 1);   // "OBD", or "MASTER" on a slave
-    s_status = rmc_row(card, "STATUS", 84);
-    lv_obj_t *fw = rmc_row(card, "FIRMWARE", 118);
+    s_status = rmc_row(card, TR("STATUS"), 84);
+    lv_obj_t *fw = rmc_row(card, TR("FIRMWARE"), 118);
     lv_label_set_text(fw, esp_app_get_description()->version);   // the release, e.g. v35 (version.txt in the firmware repo)
     lv_obj_add_event_cb(scr, on_info_delete, LV_EVENT_DELETE, NULL);
     ui_device_info_refresh();

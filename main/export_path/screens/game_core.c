@@ -17,6 +17,7 @@
 #include "cJSON.h"
 #include <stdlib.h>
 #include "app_obd_dsp/obd_data_cache.h"
+#include "../ui_lang.h"
 
 #define FRAME_MS 30
 #define PARKED_KMH 3
@@ -122,7 +123,7 @@ bool gc_record(int32_t score)
 void gc_toast(const char *text)
 {
     lv_obj_t *l = lv_label_create(lv_layer_top());
-    lv_label_set_text(l, text);
+    lv_label_set_text(l, TR(text));
     lv_obj_set_style_text_font(l, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_color(l, lv_color_hex(0xFFDD00), 0);
@@ -239,7 +240,7 @@ static void hold_show(int64_t held)
         lv_obj_align(s_hold_label, LV_ALIGN_TOP_MID, 0, 40);
     }
     int left = (int)((HOLD_EXIT_US - held + 999999) / 1000000);
-    lv_label_set_text_fmt(s_hold_label, "EXIT IN %d", left < 1 ? 1 : left);
+    lv_label_set_text_fmt(s_hold_label, TR("EXIT IN %d"), left < 1 ? 1 : left);
 }
 
 static void leave_game(void)
@@ -291,18 +292,18 @@ static void exit_ask(void)
     lv_obj_add_flag(s_exit_box, LV_OBJ_FLAG_CLICKABLE);         // touches stop here, not in the game
     lv_obj_clear_flag(s_exit_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_t *t = lv_label_create(s_exit_box);
-    lv_label_set_text(t, "EXIT GAME?");
+    lv_label_set_text(t, TR("EXIT GAME?"));
     lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize24, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, -30);
-    exit_btn(s_exit_box, "CANCEL", 0x2C2C2E, 0xFFFFFF, -66, false);
-    exit_btn(s_exit_box, "EXIT", 0xFFDD00, 0x000000, 66, true);
+    exit_btn(s_exit_box, TR("CANCEL"), 0x2C2C2E, 0xFFFFFF, -66, false);
+    exit_btn(s_exit_box, TR("EXIT"), 0xFFDD00, 0x000000, 66, true);
 }
 
 static void tick(lv_timer_t *t)
 {
     (void)t;
-    if (car_moving()) { leave_game(); gc_toast("PARK TO PLAY"); return; }   // never while driving
+    if (car_moving()) { leave_game(); gc_toast(TR("PARK TO PLAY")); return; }   // never while driving
     int64_t now = esp_timer_get_time();
     if (s_hold_us && s_up_us && now - s_up_us >= HOLD_GAP_US) hold_stop();   // really lifted
     else if (s_hold_us && !s_up_us) {
@@ -374,9 +375,9 @@ static void on_delete(lv_event_t *e)
 static void play(const game_def_t *g)
 {
     if (gc_scr) return;
-    if (car_moving()) { gc_toast("PARK TO PLAY"); return; }
+    if (car_moving()) { gc_toast(TR("PARK TO PLAY")); return; }
     gc_buf = heap_caps_malloc(GC_W * GC_H * sizeof(lv_color_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!gc_buf) { gc_toast("NOT ENOUGH MEMORY"); return; }
+    if (!gc_buf) { gc_toast(TR("NOT ENOUGH MEMORY")); return; }
     s_game = g;
     gc_scr = lv_obj_create(NULL);
     lv_obj_clear_flag(gc_scr, LV_OBJ_FLAG_SCROLLABLE);
@@ -397,7 +398,7 @@ static void play(const game_def_t *g)
     hold_stop();
     s_timer = lv_timer_create(tick, FRAME_MS, NULL);
     lv_scr_load_anim(gc_scr, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, false);
-    gc_toast("HOLD 5 SEC TO EXIT");
+    gc_toast(TR("HOLD 5 SEC TO EXIT"));
 }
 
 // ---------- the GAMES page ----------
@@ -432,8 +433,8 @@ static void show_pick(void)
     lv_label_set_text(s_name, g->name);
     lv_label_set_text(s_hint, g->hint);
     int32_t b = best_of(g);
-    if (b) lv_label_set_text_fmt(s_best, "BEST %ld%s%s", (long)b, g->unit[0] ? " " : "", g->unit);
-    else lv_label_set_text(s_best, "NO RECORD YET");
+    if (b) lv_label_set_text_fmt(s_best, TR("BEST %ld%s%s"), (long)b, g->unit[0] ? " " : "", g->unit);
+    else lv_label_set_text(s_best, TR("NO RECORD YET"));
 }
 
 static void on_arrow(lv_event_t *e)
@@ -488,7 +489,7 @@ void ui_ScreenPageGames_screen_init(void)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
 
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "GAMES");
+    lv_label_set_text(title, TR("GAMES"));
     lv_obj_set_style_text_font(title, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFDD00), 0);
     lv_obj_set_style_text_letter_space(title, 3, 0);
@@ -518,7 +519,7 @@ void ui_ScreenPageGames_screen_init(void)
 
     // nothing installed yet: point to the app
     s_empty = lv_label_create(scr);
-    lv_label_set_text(s_empty, "NO GAMES YET\n\nINSTALL THEM IN THE\nRACING MY CAR APP\n(GAUGE > GAMES)");
+    lv_label_set_text(s_empty, TR("NO GAMES YET\n\nINSTALL THEM IN THE\nRACING MY CAR APP\n(GAUGE > GAMES)"));
     lv_obj_set_style_text_font(s_empty, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(s_empty, lv_color_hex(0x9A9A9A), 0);
     lv_obj_set_style_text_align(s_empty, LV_TEXT_ALIGN_CENTER, 0);

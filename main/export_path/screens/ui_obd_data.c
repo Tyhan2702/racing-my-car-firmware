@@ -12,6 +12,7 @@
 #include "app_obd_dsp/obd_data_cache.h"
 #include "app_obd_dsp/obd_pid_table.h"
 #include "app_obd_dsp/vehicle_profiles.h"
+#include "../ui_lang.h"
 
 lv_obj_t *ui_ScreenPageObdData;
 
@@ -38,7 +39,7 @@ static void derived(int id, char *o, size_t ol)
         static const char *const p[] = {"AUTO", "J1850 PWM", "J1850 VPW", "ISO 9141", "KWP SLOW", "KWP FAST",
                                         "CAN 11 500K", "CAN 29 500K", "CAN 11 250K", "CAN 29 250K"};
         uint8_t n = elm327_active_protocol();
-        if (elm327_ble_is_connected()) snprintf(o, ol, "%s", n < 10 ? p[n] : "?");
+        if (elm327_ble_is_connected()) snprintf(o, ol, "%s", n < 10 ? TR(p[n]) : "?");
         break;
     }
     case D_VIN: if (elm327_scan_vin()[0]) snprintf(o, ol, "%s", elm327_scan_vin()); break;
@@ -59,8 +60,8 @@ static void derived(int id, char *o, size_t ol)
     case D_FUEL_L: if ((v = obd_data_get_ext(OBD_EXT_FUEL_LEVEL)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld %%", (long)v); break;
     case D_FUEL_P: if ((v = obd_data_get_ext(OBD_EXT_FUEL_PRESSURE)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld KPA", (long)v); break;
     case D_DOORS:
-        if ((v = obd_data_get_doors()) == 0) strcpy(o, "CLOSED");
-        else if (v > 0) snprintf(o, ol, "OPEN%s%s%s%s%s", v & 16 ? " D" : "", v & 8 ? " P" : "", v & 4 ? " RR" : "",
+        if ((v = obd_data_get_doors()) == 0) strcpy(o, TR("CLOSED"));
+        else if (v > 0) snprintf(o, ol, TR("OPEN%s%s%s%s%s"), v & 16 ? " D" : "", v & 8 ? " P" : "", v & 4 ? " RR" : "",
                                  v & 2 ? " RL" : "", v & 1 ? " T" : "");
         break;
     }
@@ -101,8 +102,8 @@ static void refresh(lv_timer_t *t)
                                         v, strcmp(v, "-") ? "" : "#");
         }
     }
-    if (!elm327_ble_is_connected()) lv_label_set_text(s_sub, "OBD NOT CONNECTED");
-    else lv_label_set_text_fmt(s_sub, "%d OF %d READ", read, total);
+    if (!elm327_ble_is_connected()) lv_label_set_text(s_sub, TR("OBD NOT CONNECTED"));
+    else lv_label_set_text_fmt(s_sub, TR("%d OF %d READ"), read, total);
 }
 
 // the cells carry their colours (recolour codes)
@@ -135,7 +136,7 @@ void ui_ScreenPageObdData_screen_init(void)
     lv_obj_t *scr = ui_ScreenPageObdData = lv_obj_create(NULL);
     rmc_screen(scr);
     lv_obj_add_event_cb(scr, on_screen, LV_EVENT_ALL, NULL);
-    rmc_title(scr, "LIVE DATA", 30);
+    rmc_title(scr, TR("LIVE DATA"), 30);
     s_sub = lv_label_create(scr);
     lv_obj_set_style_text_font(s_sub, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(s_sub, lv_color_hex(RMC_DIM), 0);
@@ -165,10 +166,10 @@ void ui_ScreenPageObdData_screen_init(void)
     lv_obj_add_event_cb(s_table, on_draw, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     s_rows = 0;
-    for (int d = 0; d < D_COUNT; d++) add_row((int16_t)(-(d + 1)), s_dname[d]);
+    for (int d = 0; d < D_COUNT; d++) add_row((int16_t)(-(d + 1)), TR(s_dname[d]));
     for (size_t i = 0; i < obd_pid_count(); i++) {
         const obd_pid_info_t *p = obd_pid_at(i);
-        add_row(p->pid, p->name);
+        add_row(p->pid, TR(p->name));
     }
     elm327_scan_set_active(true);
     refresh(NULL);

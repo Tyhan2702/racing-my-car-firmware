@@ -15,6 +15,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "../ui_lang.h"
 
 static const char *TAG_BLE_UI = "ble_scan_ui";
 
@@ -97,7 +98,7 @@ static void scan_result_cb(const ble_scan_result_t *dev, int total_count) {
         memcpy(s_obd_macs[s_obd_mac_count], dev->addr, 6);
         s_obd_mac_count++;
 
-        lv_label_set_text_fmt(s_label_status, "FOUND %d", total_count);
+        lv_label_set_text_fmt(s_label_status, TR("FOUND %d"), total_count);
         lvgl_unlock_ui();
     }
 }
@@ -128,7 +129,7 @@ static void scan_result_cb_gauge(const gauge_pair_scan_result_t *dev, int total_
         memcpy(s_gauge_macs[s_gauge_mac_count], dev->addr, 6);
         s_gauge_mac_count++;
 
-        lv_label_set_text_fmt(s_label_status, "FOUND %d", total_count);
+        lv_label_set_text_fmt(s_label_status, TR("FOUND %d"), total_count);
         lvgl_unlock_ui();
     }
 }
@@ -151,7 +152,7 @@ static void on_device_selected(lv_event_t *e) {
         gauge_pair_ble_scan_stop();
         s_scanning = false;
 
-        lv_label_set_text(s_label_status, "PAIRING...");
+        lv_label_set_text(s_label_status, TR("PAIRING..."));
         if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
         gauge_pair_ble_connect(mac, name, on_pair_result);
         return;
@@ -179,7 +180,7 @@ static void on_device_selected(lv_event_t *e) {
     if (s_saved_panel)    lv_obj_clear_flag(s_saved_panel,    LV_OBJ_FLAG_HIDDEN);
     if (s_label_saved_hdr) lv_obj_clear_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
 
-    lv_label_set_text_fmt(s_label_status, "Connecting: %s", name);
+    lv_label_set_text_fmt(s_label_status, TR("Connecting: %s"), name);
     if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
 
     elm327_ble_connect_by_addr(mac, name);
@@ -203,11 +204,11 @@ static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]) {
         if (s_saved_panel)    lv_obj_clear_flag(s_saved_panel,    LV_OBJ_FLAG_HIDDEN);
         if (s_label_saved_hdr) lv_obj_clear_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
 
-        lv_label_set_text(s_label_status, "Paired!");
+        lv_label_set_text(s_label_status, TR("Paired!"));
         ui_menu_go_home_later(800);
     } else {
         ESP_LOGW(TAG_BLE_UI, "Pairing failed, rescanning");
-        lv_label_set_text(s_label_status, "Pair failed, retrying...");
+        lv_label_set_text(s_label_status, TR("Pair failed, retrying..."));
         // When the native BLE scan window (15s) expires, no callback notifies here, so s_scanning stays true.
         // This is a place where a forced rescan is intended, so reset it before calling to avoid being blocked by the dedup check in start_scan().
         s_scanning = false;
@@ -237,7 +238,7 @@ static void on_saved_device_delete(lv_event_t *e) {
 
     if (s_saved_panel)    lv_obj_add_flag(s_saved_panel,    LV_OBJ_FLAG_HIDDEN);
     if (s_label_saved_hdr) lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN);
-    if (s_label_status)   lv_label_set_text(s_label_status, "SAVED DEVICE REMOVED");
+    if (s_label_status)   lv_label_set_text(s_label_status, TR("SAVED DEVICE REMOVED"));
 
     s_scanning = false;   // the native scan window expiry does not reset via callback; reset before forcing a rescan
     start_scan();         // list nearby devices again so a new one can be picked straight away
@@ -252,7 +253,7 @@ static void start_scan(void) {
     s_scan_started_ms = lv_tick_get();
 
     if (s_list) lv_obj_clean(s_list);
-    if (s_label_status) lv_label_set_text(s_label_status, "SCANNING...");
+    if (s_label_status) lv_label_set_text(s_label_status, TR("SCANNING..."));
     if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
 
     if (s_slave_mode) {
@@ -281,12 +282,12 @@ static void page_tick(lv_timer_t *t)
     (void)t;
     if (lv_scr_act() != ui_ScreenPageBLEScan) return;
     if (!s_slave_mode && s_label_saved_hdr && nvs_cfg_get()->ble_device_name[0] != '\0')
-        { bool on = elm327_ble_is_connected(); lv_label_set_text(s_label_saved_hdr, on ? "SAVED - CONNECTED" : "SAVED - CONNECTING..."); lv_obj_set_style_text_color(s_label_saved_hdr, lv_color_hex(on ? RMC_GREEN : RMC_DIM), 0); }
+        { bool on = elm327_ble_is_connected(); lv_label_set_text(s_label_saved_hdr, on ? TR("SAVED - CONNECTED") : TR("SAVED - CONNECTING...")); lv_obj_set_style_text_color(s_label_saved_hdr, lv_color_hex(on ? RMC_GREEN : RMC_DIM), 0); }
     if (s_scanning && lv_tick_elaps(s_scan_started_ms) > 15500) {
         s_scanning = false;
         if (!s_slave_mode) elm327_ble_scan_only_stop();
         if (s_spinner) lv_obj_add_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
-        if (s_label_status) lv_label_set_text(s_label_status, "TAP SCAN TO LOOK AGAIN");
+        if (s_label_status) lv_label_set_text(s_label_status, TR("TAP SCAN TO LOOK AGAIN"));
     }
 }
 
@@ -319,10 +320,10 @@ void ui_ScreenPageBLEScan_screen_init(void)
     // Racing My Car look (ui_rmc_style.h): title, the saved device in a card, then the devices nearby
     lv_obj_t *scr = ui_ScreenPageBLEScan = lv_obj_create(NULL);
     rmc_screen(scr);
-    rmc_title(scr, s_slave_mode ? "FIND MASTER" : "OBD DEVICE", 36);
+    rmc_title(scr, s_slave_mode ? TR("FIND MASTER") : TR("OBD DEVICE"), 36);
 
     s_label_status = lv_label_create(scr);
-    lv_label_set_text(s_label_status, "SCANNING...");
+    lv_label_set_text(s_label_status, TR("SCANNING..."));
     lv_obj_set_style_text_font(s_label_status, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(s_label_status, lv_color_hex(RMC_DIM), 0);
     lv_obj_align(s_label_status, LV_ALIGN_TOP_MID, 0, 66);
@@ -339,7 +340,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
     s_saved_panel = rmc_card(scr, RMC_CARD_W, 62);
     lv_obj_align(s_saved_panel, LV_ALIGN_TOP_MID, 0, 92);
     s_label_saved_hdr = lv_label_create(s_saved_panel);
-    lv_label_set_text(s_label_saved_hdr, "SAVED");
+    lv_label_set_text(s_label_saved_hdr, TR("SAVED"));
     lv_obj_set_style_text_font(s_label_saved_hdr, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(s_label_saved_hdr, lv_color_hex(RMC_DIM), 0);
     lv_obj_align(s_label_saved_hdr, LV_ALIGN_TOP_LEFT, 0, 8);
@@ -369,7 +370,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
 
     // ==== NEARBY ====
     lv_obj_t *label_nearby = lv_label_create(scr);
-    lv_label_set_text(label_nearby, "NEARBY");
+    lv_label_set_text(label_nearby, TR("NEARBY"));
     lv_obj_set_style_text_font(label_nearby, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(label_nearby, lv_color_hex(RMC_DIM), 0);
     lv_obj_align(label_nearby, LV_ALIGN_TOP_LEFT, 70, 170);
@@ -388,7 +389,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_align(scan, LV_ALIGN_TOP_RIGHT, -70, 164);
     lv_obj_add_event_cb(scan, on_rescan, LV_EVENT_CLICKED, NULL);
     lv_obj_t *scan_l = lv_label_create(scan);
-    lv_label_set_text(scan_l, "SCAN");
+    lv_label_set_text(scan_l, TR("SCAN"));
     lv_obj_set_style_text_font(scan_l, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(scan_l, lv_color_hex(RMC_YELLOW), 0);
     lv_obj_set_style_text_color(scan_l, lv_color_hex(0x000000), LV_STATE_PRESSED);

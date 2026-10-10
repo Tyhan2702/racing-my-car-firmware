@@ -20,6 +20,7 @@
 #include "esp_timer.h"
 #include "nvs.h"
 #include "cJSON.h"
+#include "../ui_lang.h"
 
 #define IDLE_MS 60000      // a minute without a touch on the menu pages -> back to the gauge
 #define STAY_MS 1500       // on a theme page this long -> it becomes the page shown at boot
@@ -160,12 +161,12 @@ static void none_screen_init(void)
     lv_img_set_src(logo, &imgRmcMarkSmall);
     lv_obj_align(logo, LV_ALIGN_CENTER, 0, -70);
     lv_obj_t *t = lv_label_create(scr);
-    lv_label_set_text(t, "NO THEME YET");
+    lv_label_set_text(t, TR("NO THEME YET"));
     lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize20, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(C_PICK), 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, -18);
     lv_obj_t *h = lv_label_create(scr);
-    lv_label_set_text(h, "OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE UP FOR THE MENU");
+    lv_label_set_text(h, TR("OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE UP FOR THE MENU"));
     lv_obj_set_style_text_font(h, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(h, lv_color_hex(0x9A9A9A), 0);
     lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
@@ -296,7 +297,7 @@ static void ui_ScreenPageMenu_screen_init(void)
         lv_obj_set_style_img_recolor_opa(ic, LV_OPA_COVER, 0);
         lv_obj_center(ic);
         lv_obj_t *l = s_label[b] = lv_label_create(scr);
-        lv_label_set_text(l, ITEMS[item].name);
+        lv_label_set_text(l, TR(ITEMS[item].name));
         lv_obj_set_style_text_font(l, &ui_font_FontTypoderSize16, 0);
         lv_label_set_long_mode(l, LV_LABEL_LONG_CLIP);       // one line
         lv_obj_set_width(l, 110);
@@ -371,7 +372,7 @@ static void open_boot(void)
     if (!boot_media_mount() || !boot_block_player_create(scr, &canvas)) {
         lv_obj_del(scr);
         s_closing = false;
-        gc_toast("NO BOOT ANIMATION YET");
+        gc_toast(TR("NO BOOT ANIMATION YET"));
         return;
     }
     if (canvas) lv_obj_clear_flag(canvas, LV_OBJ_FLAG_CLICKABLE);

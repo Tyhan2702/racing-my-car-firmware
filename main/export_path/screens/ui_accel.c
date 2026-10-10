@@ -17,6 +17,7 @@
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "app_obd_dsp/obd_data_cache.h"
+#include "../ui_lang.h"
 
 lv_obj_t *ui_ScreenPageAccel;
 
@@ -92,9 +93,9 @@ static bool is_slave(void) { return nvs_cfg_get()->device_role == 1; }
 // "" when a test can start, else why not
 static const char *not_ready(void)
 {
-    if (is_slave()) return "USE THE MAIN GAUGE";
-    if (!elm327_ble_is_connected()) return "OBD NOT CONNECTED";
-    if (obd_data_get_speed() > 0) return "STOP THE CAR TO START";
+    if (is_slave()) return TR("USE THE MAIN GAUGE");
+    if (!elm327_ble_is_connected()) return TR("OBD NOT CONNECTED");
+    if (obd_data_get_speed() > 0) return TR("STOP THE CAR TO START");
     return "";
 }
 static void fmt_time(char *o, size_t ol, uint16_t cs) { snprintf(o, ol, "%u.%02u", cs / 100, cs % 100); }
@@ -103,9 +104,9 @@ static void page_refresh(lv_timer_t *t)
 {
     (void)t;
     const char *why = not_ready();
-    if (!why[0]) lv_label_set_text_fmt(s_status, "READY  %d KM/H", obd_data_get_speed());
+    if (!why[0]) lv_label_set_text_fmt(s_status, TR("READY  %d KM/H"), obd_data_get_speed());
     else lv_label_set_text(s_status, why);
-    lv_obj_set_style_text_color(s_status, lv_color_hex(!why[0] ? RMC_GREEN : strcmp(why, "STOP THE CAR TO START") ? RMC_DIM : RMC_YELLOW), 0);
+    lv_obj_set_style_text_color(s_status, lv_color_hex(!why[0] ? RMC_GREEN : strcmp(why, TR("STOP THE CAR TO START")) ? RMC_DIM : RMC_YELLOW), 0);
     for (int i = 0; i < 2; i++) lv_obj_set_style_border_color(s_card[i], lv_color_hex(!why[0] ? RMC_YELLOW : 0x3A3A3C), 0);
 }
 
@@ -141,7 +142,7 @@ void ui_ScreenPageAccel_screen_init(void)
     lv_obj_t *scr = ui_ScreenPageAccel = lv_obj_create(NULL);
     rmc_screen(scr);
     lv_obj_add_event_cb(scr, on_page, LV_EVENT_ALL, NULL);
-    rmc_title(scr, "ACCEL TEST", 40);
+    rmc_title(scr, TR("ACCEL TEST"), 40);
     for (int i = 0; i < 2; i++) {
         lv_obj_t *c = s_card[i] = rmc_card(scr, 264, 80);
         lv_obj_align(c, LV_ALIGN_TOP_MID, 0, 84 + i * 92);
@@ -162,13 +163,13 @@ void ui_ScreenPageAccel_screen_init(void)
             char b[12], l[12];
             fmt_time(b, sizeof(b), s_rec[i].best[0]);
             fmt_time(l, sizeof(l), s_rec[i].last[0][0]);
-            lv_label_set_text_fmt(s, "BEST %s  LAST %s", b, l);
-        } else lv_label_set_text(s, "TAP TO START");
+            lv_label_set_text_fmt(s, TR("BEST %s  LAST %s"), b, l);
+        } else lv_label_set_text(s, TR("TAP TO START"));
     }
     s_status = lv_label_create(scr);
     lv_obj_set_style_text_font(s_status, &ui_font_FontTypoderSize16, 0);
     lv_obj_align(s_status, LV_ALIGN_TOP_MID, 0, 272);
-    lv_obj_t *h = rmc_pill(scr, "HISTORY", false, 130, history_open);
+    lv_obj_t *h = rmc_pill(scr, TR("HISTORY"), false, 130, history_open);
     lv_obj_align(h, LV_ALIGN_TOP_MID, 0, 296);
     page_refresh(NULL);
     s_page_timer = lv_timer_create(page_refresh, 300, NULL);
@@ -200,7 +201,7 @@ static void history_open(lv_event_t *e)
     lv_obj_t *scr = s_hist = lv_obj_create(NULL);
     rmc_screen(scr);
     lv_obj_add_event_cb(scr, on_hist, LV_EVENT_ALL, NULL);
-    rmc_title(scr, "HISTORY", 40);
+    rmc_title(scr, TR("HISTORY"), 40);
     lv_obj_t *t = lv_table_create(scr);
     lv_obj_set_size(t, 290, 252);
     lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 82);
@@ -228,8 +229,8 @@ static void history_open(lv_event_t *e)
         lv_table_set_row_cnt(t, row + 1);
         if (r->n) {
             fmt_time(a, sizeof(a), r->best[0]);
-            lv_table_set_cell_value_fmt(t, row++, 0, "#FFDD00 %s#\n#8E8E93 BEST# %s S", TESTS[i].name, a);
-        } else lv_table_set_cell_value_fmt(t, row++, 0, "#FFDD00 %s#\n#48484A NO RUN YET#", TESTS[i].name);
+            lv_table_set_cell_value_fmt(t, row++, 0, TR("#FFDD00 %s#\n#8E8E93 BEST# %s S"), TESTS[i].name, a);
+        } else lv_table_set_cell_value_fmt(t, row++, 0, TR("#FFDD00 %s#\n#48484A NO RUN YET#"), TESTS[i].name);
         for (int k = 0; k < r->n; k++) {
             fmt_time(a, sizeof(a), r->last[k][0]);
             fmt_time(b, sizeof(b), r->last[k][1]);
@@ -288,7 +289,7 @@ static void hold_show(int64_t held)
         lv_obj_align(s_hold_label, LV_ALIGN_TOP_MID, 0, 40);
     }
     int left = (int)((HOLD_EXIT_US - held + 999999) / 1000000);
-    lv_label_set_text_fmt(s_hold_label, "EXIT IN %d", left < 1 ? 1 : left);
+    lv_label_set_text_fmt(s_hold_label, TR("EXIT IN %d"), left < 1 ? 1 : left);
 }
 
 static void run_leave(void)
@@ -331,12 +332,12 @@ static void exit_ask(void)
     lv_obj_add_flag(s_exit_box, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(s_exit_box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *t = lv_label_create(s_exit_box);
-    lv_label_set_text(t, "EXIT TEST?");
+    lv_label_set_text(t, TR("EXIT TEST?"));
     lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize24, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(t, LV_ALIGN_CENTER, 0, -30);
-    exit_btn("CANCEL", 0x2C2C2E, 0xFFFFFF, -66, false);
-    exit_btn("EXIT", RMC_YELLOW, 0x000000, 66, true);
+    exit_btn(TR("CANCEL"), 0x2C2C2E, 0xFFFFFF, -66, false);
+    exit_btn(TR("EXIT"), RMC_YELLOW, 0x000000, 66, true);
 }
 
 static void show(const char *big, const lv_font_t *font, uint32_t color, const char *mid, const char *small, const char *hint)
@@ -357,7 +358,7 @@ static void finish(bool ok, const char *why)
     if (s_exit_box) { lv_obj_del(s_exit_box); s_exit_box = NULL; }
     if (!ok) {
         s_state = R_FAIL;
-        show("FAILED", &ui_font_FontTypoderSize44, C_RED, why, "", "TAP TO CONTINUE");
+        show(TR("FAILED"), &ui_font_FontTypoderSize44, C_RED, why, "", TR("TAP TO CONTINUE"));
         return;
     }
     s_state = R_DONE;
@@ -379,7 +380,7 @@ static void finish(bool ok, const char *why)
     fmt_time(b, sizeof(b), s_times[2]);
     fmt_time(c, sizeof(c), s_times[3]);
     snprintf(sp, sizeof(sp), "%s  %s\n%s  %s\n%s  %s", T->split[0], a, T->split[1], b, T->split[2], c);
-    show(t, &ui_font_FontTypoderSize56, RMC_YELLOW, s_best ? "NEW BEST" : T->name, sp, "TAP TO CONTINUE");
+    show(t, &ui_font_FontTypoderSize56, RMC_YELLOW, s_best ? TR("NEW BEST") : T->name, sp, TR("TAP TO CONTINUE"));
     lv_obj_set_style_text_color(s_mid, lv_color_hex(s_best ? RMC_GREEN : RMC_DIM), 0);
 }
 
@@ -398,7 +399,7 @@ static void take(const sample_t *s)
     if (s->v < 0.5f) {
         if (s_state <= R_GO) s_zero_us = s->us;
     } else if (s_state == R_COUNT) {
-        finish(false, "FALSE START");                         // moved before GO
+        finish(false, TR("FALSE START"));                         // moved before GO
         return;
     } else if (!s_t0) {
         // first moments in motion: the start is where the speed line through the first moving sample and one a few
@@ -420,7 +421,7 @@ static void take(const sample_t *s)
         }
         if (s->v > s_vmax) s_vmax = s->v;
         if (s_marks_done == 3 && s_t0) { finish(true, NULL); return; }
-        if (s_vmax - s->v > 8.0f) { finish(false, "SPEED DROPPED"); return; }
+        if (s_vmax - s->v > 8.0f) { finish(false, TR("SPEED DROPPED")); return; }
     }
     s_prev = *s;
     s_have_prev = true;
@@ -440,7 +441,7 @@ static void run_tick(lv_timer_t *t)
     if (head - s_tail > 128) s_tail = head - 128;
     while (s_tail != head && s_state < R_DONE) take(&s_ring[s_tail++ & 127]);
     if (s_state >= R_DONE) return;
-    if (!elm327_ble_is_connected() || (s_last_sample_us && now - s_last_sample_us > 2000000)) { finish(false, "NO OBD DATA"); return; }
+    if (!elm327_ble_is_connected() || (s_last_sample_us && now - s_last_sample_us > 2000000)) { finish(false, TR("NO OBD DATA")); return; }
 
     char big[16], mid[32];
     const accel_test_t *T = &TESTS[s_test];
@@ -449,24 +450,24 @@ static void run_tick(lv_timer_t *t)
         if (el >= 3000000) { s_state = R_GO; s_t_start = now; }
         else {
             snprintf(big, sizeof(big), "%d", 3 - (int)(el / 1000000));
-            show(big, &ui_font_FontTypoderSize140, 0xFFFFFF, T->name, "", "HOLD TO EXIT");
+            show(big, &ui_font_FontTypoderSize140, 0xFFFFFF, T->name, "", TR("HOLD TO EXIT"));
             return;
         }
     }
     if (s_state == R_GO) {
-        if (now - s_t_start > 30000000) { finish(false, "NO START"); return; }
-        if (!s_last_sample_us && now - s_t_start > 3000000) { finish(false, "NO OBD DATA"); return; }   // no speed at all
-        show("GO", &ui_font_FontTypoderSize56, RMC_GREEN, T->name, "", "HOLD TO EXIT");
+        if (now - s_t_start > 30000000) { finish(false, TR("NO START")); return; }
+        if (!s_last_sample_us && now - s_t_start > 3000000) { finish(false, TR("NO OBD DATA")); return; }   // no speed at all
+        show(TR("GO"), &ui_font_FontTypoderSize56, RMC_GREEN, T->name, "", TR("HOLD TO EXIT"));
         return;
     }
     // running
     int64_t from = T->from ? s_mark_us[0] : s_t0;
-    if (now - (s_t0 ? s_t0 : now) > 60000000) { finish(false, "TOO SLOW"); return; }
+    if (now - (s_t0 ? s_t0 : now) > 60000000) { finish(false, TR("TOO SLOW")); return; }
     snprintf(mid, sizeof(mid), "%d KM/H", (int)(s_v + 0.5f));
     if (!from) {
         if (T->from) snprintf(big, sizeof(big), "%d", (int)(s_v + 0.5f));
         else strcpy(big, "0.00");
-        show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, T->from ? "TO 60 KM/H" : mid, "", "HOLD TO EXIT");
+        show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, T->from ? TR("TO 60 KM/H") : mid, "", TR("HOLD TO EXIT"));
         return;
     }
     int64_t cs = (now - from) / 10000;
@@ -479,7 +480,7 @@ static void run_tick(lv_timer_t *t)
         size_t k = strlen(sp);
         snprintf(sp + k, sizeof(sp) - k, "%s%s  %lld.%02lld", k ? "\n" : "", T->split[i], (long long)(d / 100), (long long)(d % 100));
     }
-    show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, mid, sp, "HOLD TO EXIT");
+    show(big, &ui_font_FontTypoderSize56, 0xFFFFFF, mid, sp, TR("HOLD TO EXIT"));
 }
 
 static void on_run(lv_event_t *e)

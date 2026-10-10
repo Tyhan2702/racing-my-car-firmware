@@ -7,6 +7,7 @@
 #include "esp_system.h"
 #include "theme_engine/theme_interface.h"
 #include "app_obd_dsp/theme_stack.h"
+#include "../ui_lang.h"
 
 static lv_obj_t *s_overlay;
 static lv_obj_t *s_status;
@@ -40,7 +41,7 @@ static void on_delete(lv_event_t *e)
     int left = -1;
     bool ok = theme_stack_remove_page_owner(s_page_id, &left);
     if (s_status) {
-        lv_label_set_text(s_status, ok ? "Deleted. Restarting..." : left == 0 ? "Last theme: it stays" : "Could not delete");
+        lv_label_set_text(s_status, ok ? TR("Deleted. Restarting...") : left == 0 ? TR("Last theme: it stays") : "Could not delete");
     }
     if (!ok && left == 0) lv_obj_clear_state(btn, LV_STATE_DISABLED);
     if (ok) {
@@ -84,19 +85,19 @@ void ui_theme_delete_prompt(void)
     lv_obj_clear_flag(s_overlay, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *title = lv_label_create(s_overlay);
-    lv_label_set_text(title, "DELETE THEME?");
+    lv_label_set_text(title, TR("DELETE THEME?"));
     lv_obj_set_style_text_font(title, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFDD00), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_align(title, LV_ALIGN_CENTER, 0, -60);
 
     s_status = lv_label_create(s_overlay);
-    lv_label_set_text_fmt(s_status, "Theme page %u of %u", (unsigned)(ui_theme_gauge_page_index + 1), (unsigned)theme_page_list_count());
+    lv_label_set_text_fmt(s_status, TR("Theme page %u of %u"), (unsigned)(ui_theme_gauge_page_index + 1), (unsigned)theme_page_list_count());
     lv_obj_set_style_text_font(s_status, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(s_status, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_align(s_status, LV_ALIGN_CENTER, 0, -22);
 
-    button(s_overlay, "Cancel", 0x444444, -62, on_cancel);
-    button(s_overlay, "Delete", 0xD32F2F, 62, on_delete);
+    button(s_overlay, TR("Cancel"), 0x444444, -62, on_cancel);
+    button(s_overlay, TR("Delete"), 0xD32F2F, 62, on_delete);
 }
 
 // Theme widgets only show data, but LVGL makes many of them clickable by default (bars, plain panels). A press on

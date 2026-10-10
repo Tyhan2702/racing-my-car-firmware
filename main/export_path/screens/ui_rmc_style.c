@@ -1,6 +1,7 @@
 // Racing My Car look for system pages (see ui_rmc_style.h).
 #include "../ui.h"
 #include "ui_rmc_style.h"
+#include "../ui_lang.h"
 
 void rmc_screen(lv_obj_t *scr)
 {
@@ -13,7 +14,7 @@ void rmc_screen(lv_obj_t *scr)
 lv_obj_t *rmc_title(lv_obj_t *scr, const char *text, int y)
 {
     lv_obj_t *t = lv_label_create(scr);
-    lv_label_set_text(t, text);
+    lv_label_set_text(t, TR(text));
     lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize24, 0);
     lv_obj_set_style_text_color(t, lv_color_hex(RMC_YELLOW), 0);
     lv_obj_align(t, LV_ALIGN_TOP_MID, 0, y);
@@ -37,7 +38,7 @@ lv_obj_t *rmc_card(lv_obj_t *parent, int w, int h)
 lv_obj_t *rmc_row(lv_obj_t *card, const char *label, int y)
 {
     lv_obj_t *l = lv_label_create(card);
-    lv_label_set_text(l, label);
+    lv_label_set_text(l, TR(label));
     lv_obj_set_style_text_font(l, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(RMC_DIM), 0);
     lv_obj_align(l, LV_ALIGN_TOP_LEFT, 0, y);
@@ -67,7 +68,7 @@ lv_obj_t *rmc_pill(lv_obj_t *parent, const char *text, bool primary, int w, lv_e
     lv_obj_set_ext_click_area(b, 8);
     if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *l = lv_label_create(b);
-    lv_label_set_text(l, text);
+    lv_label_set_text(l, TR(text));
     lv_obj_set_style_text_font(l, &ui_font_FontTypoderSize20, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(primary ? 0x000000 : 0xFFFFFF), 0);
     lv_obj_center(l);
@@ -77,7 +78,7 @@ lv_obj_t *rmc_pill(lv_obj_t *parent, const char *text, bool primary, int w, lv_e
 lv_obj_t *rmc_hint(lv_obj_t *scr, const char *text)
 {
     lv_obj_t *h = lv_label_create(scr);
-    lv_label_set_text(h, text);
+    lv_label_set_text(h, TR(text));
     lv_obj_set_style_text_font(h, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(h, lv_color_hex(0x666666), 0);
     lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);

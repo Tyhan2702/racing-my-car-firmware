@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "../ui_lang.h"
 
 #ifndef OBD_GAUGE_BUILD_TAG
 #define OBD_GAUGE_BUILD_TAG "unknown"
@@ -37,20 +38,20 @@ void ui_ScreenPageOTAMode_screen_init(void)
     // Racing My Car look (ui_rmc_style.h): title, busy ring, the hotspot in a card, the state under it
     lv_obj_t *scr = ui_ScreenPageOTAMode = lv_obj_create(NULL);
     rmc_screen(scr);
-    rmc_title(scr, "WI-FI UPDATE", 52);
+    rmc_title(scr, TR("WI-FI UPDATE"), 52);
     lv_obj_t *busy = rmc_spinner(scr, 34);
     lv_obj_align(busy, LV_ALIGN_TOP_MID, 0, 92);
 
     lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 82);
     lv_obj_align(card, LV_ALIGN_CENTER, 0, 10);
-    s_ssid = rmc_row(card, "WI-FI", 14);
+    s_ssid = rmc_row(card, TR("WI-FI"), 14);
     lv_label_set_text(s_ssid, "RMC - 1.85 Gauge");   // until Wi-Fi is up and the full name is known
-    lv_obj_t *pw = rmc_row(card, "PASSWORD", 46);
+    lv_obj_t *pw = rmc_row(card, TR("PASSWORD"), 46);
     lv_label_set_text(pw, "88888888");
     lv_obj_set_style_text_color(pw, lv_color_hex(RMC_YELLOW), 0);
 
     ui_LabelOTAModeStatus = lv_label_create(scr);
-    lv_label_set_text(ui_LabelOTAModeStatus, "STARTING WI-FI...");
+    lv_label_set_text(ui_LabelOTAModeStatus, TR("STARTING WI-FI..."));
     lv_obj_set_style_text_font(ui_LabelOTAModeStatus, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(RMC_DIM), 0);
     lv_obj_set_style_text_align(ui_LabelOTAModeStatus, LV_TEXT_ALIGN_CENTER, 0);
@@ -59,12 +60,12 @@ void ui_ScreenPageOTAMode_screen_init(void)
     lv_obj_align(ui_LabelOTAModeStatus, LV_ALIGN_CENTER, 0, 74);
 
     ui_LabelOTAModeVersion = lv_label_create(scr);   // the firmware release now on the gauge, e.g. FIRMWARE v35
-    lv_label_set_text_fmt(ui_LabelOTAModeVersion, "FIRMWARE %s", esp_app_get_description()->version);
+    lv_label_set_text_fmt(ui_LabelOTAModeVersion, TR("FIRMWARE %s"), esp_app_get_description()->version);
     lv_obj_set_style_text_font(ui_LabelOTAModeVersion, &ui_font_FontTypoderSize16, 0);
     lv_obj_set_style_text_color(ui_LabelOTAModeVersion, lv_color_hex(0x666666), 0);
     lv_obj_set_style_text_align(ui_LabelOTAModeVersion, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(ui_LabelOTAModeVersion, LV_ALIGN_BOTTOM_MID, 0, -64);
-    rmc_hint(scr, "SWIPE TO EXIT");
+    rmc_hint(scr, TR("SWIPE TO EXIT"));
 
     lv_obj_add_event_cb(scr, ui_event_ota_mode_background, LV_EVENT_ALL, NULL);
 
@@ -94,7 +95,7 @@ void ui_ScreenPageOTAMode_screen_init(void)
         ESP_LOGE(TAG, "Failed to start WiFi OTA server");
         rs485_brake_temp_resume();
         if (ui_LabelOTAModeStatus) {
-            lv_label_set_text(ui_LabelOTAModeStatus, "WI-FI DID NOT START");
+            lv_label_set_text(ui_LabelOTAModeStatus, TR("WI-FI DID NOT START"));
             lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF453A), 0);
         }
     }
