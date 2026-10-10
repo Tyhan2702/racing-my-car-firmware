@@ -173,6 +173,16 @@ static int64_t s_zc6_can_temp_probe_last_us = 0;    // last time we briefly ente
 #define CAN_SIDE_WINDOW_MS   1100u
 #define CAN_SIDE_GIVE_UP     5
 static volatile bool s_can_side_seen = false;
+// ---- Supported PIDs and fallbacks ----
+// 01 00 / 01 20 / 01 40 tell which mode 01 PIDs the car answers (bitmaps of every ECU that replies, OR-ed). A PID the
+// car says it lacks, or that got no answer 5 times while the bus was alive, is replaced by the next one that measures
+// the same thing: battery 01 42 → the adapter's own voltmeter (ATRV); AFR 01 44 (commanded) → 01 34 → 01 24
+// (wide-range O2 sensor 1, measured λ); throttle 01 11 → 01 45 (relative). Never applied to RPM/speed/coolant.
+static uint32_t s_pid_sup[3];
+static uint8_t s_pid_sup_known;          // bit r: the 01 (r*0x20) bitmap arrived
+static uint8_t s_pid_fail[0x60];
+static volatile uint8_t s_expect_pid;    // the 01 PID whose reply comes next (0 = none)
+static volatile bool s_expect_atrv;
 static int64_t s_can_side_last_us = 0;
 static uint8_t s_can_side_misses = 0;
 bool elm327_ble_send_ascii_blocking(const char *ascii_cmd);
@@ -720,6 +730,36 @@ static void can_side_listen(const vehicle_override_t *ov)
     s_can_side_last_us = esp_timer_get_time();
 }
 
+static bool pid_ok(uint8_t pid)
+{
+    if (pid == 0 || pid >= 0x60) return true;
+    if (s_pid_fail[pid] >= 5) return false;
+    uint8_t r = (uint8_t)((pid - 1) / 32);
+    if (!(s_pid_sup_known & (1u << r))) return true;      // car never said: just ask
+    return (s_pid_sup[r] >> (31 - ((pid - 1) % 32))) & 1u;
+}
+static void send_pid(uint8_t pid)
+{
+    char cmd[8];
+    snprintf(cmd, sizeof(cmd), "01 %02X\r", pid);
+    s_expect_pid = pid;                  // checked by the reply handler (the send returns before the reply)
+    elm327_ble_send_ascii_blocking(cmd);
+}
+// Sends the first PID of the list the car can answer; false when none can
+static bool send_first_pid(const uint8_t *pids, size_t n)
+{
+    for (size_t i = 0; i < n; i++) if (pid_ok(pids[i])) { send_pid(pids[i]); return true; }
+    return false;
+}
+static void pid_support_reset(void)
+{
+    memset(s_pid_sup, 0, sizeof(s_pid_sup));
+    s_pid_sup_known = 0;
+    memset(s_pid_fail, 0, sizeof(s_pid_fail));
+    s_expect_pid = 0;
+    s_expect_atrv = false;
+}
+
 static void zc6_can_monitor_probe_window(uint32_t window_ms)
 {
     if (window_ms == 0) return;
@@ -955,12 +995,18 @@ static void do_elm_init(void) {
         elm327_ble_send_ascii_blocking(init_cmds[i]);
         vTaskDelay(pdMS_TO_TICKS(30));
     }
+    pid_support_reset();
     // Bus warm-up: send 01 00 a few extra times to give the vehicle CAN/ELM protocol time to handshake (the bus may not be awake on a cold start)
     for (int probe = 0; probe < 3; ++probe) {
         if (!s_connected) { ESP_LOGW(TAG, "BLE disconnected during bus warm-up, aborting"); return; }
         elm327_ble_send_ascii_blocking("01 00\r");
         vTaskDelay(pdMS_TO_TICKS(150));
     }
+    // which PIDs this car answers (01 00 above, then 01 20 and 01 40); no answer = unknown, every PID is asked
+    elm327_ble_send_ascii_blocking("01 20\r");
+    vTaskDelay(pdMS_TO_TICKS(150));
+    elm327_ble_send_ascii_blocking("01 40\r");
+    vTaskDelay(pdMS_TO_TICKS(150));
 
     // ---- Init the oil-temp query strategy (based on vehicle profile config) ----
     init_oil_temp_strategy();
@@ -1196,24 +1242,29 @@ static void obd_poll_task(void *arg) {
             case 4:// Engine load (0x04, 0~100%)
                 elm327_ble_send_ascii_blocking("01 04\r");
                 break;
-            case 5:// Throttle position TPS (skip when CAN already provides it)
+            case 5:// Throttle position TPS (skip when CAN already provides it); 01 45 relative when 01 11 is missing
                 if (!(can_broadcast && can_has_tps)) {
-                    elm327_ble_send_ascii_blocking("01 11\r");
+                    static const uint8_t tps_pids[] = {0x11, 0x45};
+                    send_first_pid(tps_pids, sizeof(tps_pids));
                 }
                 break;
-            case 7:// Battery voltage (0x42)
-                elm327_ble_send_ascii_blocking("01 42\r");
+            case 7:// Battery voltage (0x42); the adapter's own voltmeter (ATRV, at the OBD socket) when the car lacks it
+                if (pid_ok(0x42)) send_pid(0x42);
+                else { s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); }
                 break;
             case 8:// Boost pressure: intake manifold absolute pressure (0x0B, kPa), queried only for turbo profiles
                 {
                     const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->has_boost) {
-                        elm327_ble_send_ascii_blocking("01 0B\r");
+                    if (vp && vp->has_boost && pid_ok(0x0B)) {
+                        send_pid(0x0B);
                     }
                 }
                 break;
-            case 9:// Air-fuel ratio AFR (01 44, Commanded Equivalence Ratio)
-                elm327_ble_send_ascii_blocking("01 44\r");
+            case 9:// Air-fuel ratio AFR: 01 44 commanded λ, else the wide-range O2 sensor 1 (01 34, 01 24: measured λ)
+                {
+                    static const uint8_t afr_pids[] = {0x44, 0x34, 0x24};
+                    send_first_pid(afr_pids, sizeof(afr_pids));
+                }
                 break;
             case 10:// Engine oil pressure (Mode 22 DID, per-profile: 4436=B58, 586F=N55) — physical header, only for OBD-oil-pressure profiles
                 if (mv_query(MV_OIL_PRESSURE)) break;   // brand method list
@@ -2149,6 +2200,33 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         // Any valid data frame header received → refresh the "valid data" timestamp and set the flag
         if (p41 || p62 || p61) mark_obd_data_valid();
 
+        // supported-PID bitmaps (01 00 / 20 / 40) from every ECU that answered
+        for (const char *q = p41; q && s_protocol_detect_idx < 0; q = strstr(q + 3, "41 ")) {
+            unsigned pid = 0, a = 0, b = 0, c = 0, d = 0;
+            if (sscanf(q, "41 %x %x %x %x %x", &pid, &a, &b, &c, &d) == 5 && (pid == 0x00 || pid == 0x20 || pid == 0x40)) {
+                uint8_t r = (uint8_t)(pid / 0x20);
+                s_pid_sup[r] |= (a << 24) | (b << 16) | (c << 8) | d;
+                s_pid_sup_known |= (uint8_t)(1u << r);
+            }
+        }
+        if (s_expect_pid) {                 // the reply to send_pid(): count misses only while the bus is alive
+            uint8_t ep = s_expect_pid;
+            char want[8];
+            s_expect_pid = 0;
+            snprintf(want, sizeof(want), "41 %02X", ep);
+            if (strstr(buf, want)) s_pid_fail[ep] = 0;
+            else if (ep < sizeof(s_pid_fail) && s_pid_fail[ep] < 255 &&
+                     esp_timer_get_time() - s_last_obd_valid_us < 3000000) s_pid_fail[ep]++;
+        }
+        if (s_expect_atrv) {                // "12.6V" from the adapter's own voltmeter
+            s_expect_atrv = false;
+            const char *q = buf;
+            while (*q && !isdigit((unsigned char)*q)) q++;
+            float v = 0;
+            if (*q && sscanf(q, "%f", &v) == 1 && v > 6.0f && v < 20.0f && s_cbs.on_parsed_control_module_voltage)
+                s_cbs.on_parsed_control_module_voltage((uint32_t)(v * 1000.0f + 0.5f));
+        }
+
         if (s_mv_pending >= 0) {
             int8_t sig = s_mv_pending;
             s_mv_pending = -1;
@@ -2210,6 +2288,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             s_cbs.on_parsed_intake_temp((uint32_t)((int32_t)d[0] - 40));
                         break;
                     case 0x11: // Throttle position TPS (0~100%)
+                    case 0x45: // Relative throttle position (cars without 01 11)
                         if (dc >= 1 && s_cbs.on_parsed_throttle_position && s_protocol_detect_idx < 0)
                             s_cbs.on_parsed_throttle_position((uint32_t)d[0] * 100 / 255);
                         break;
@@ -2234,6 +2313,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             s_cbs.on_parsed_control_module_voltage((d[0] << 8) | d[1]);
                         break;
                     case 0x44: // Air-fuel ratio AFR - Commanded Equivalence Ratio (λ)
+                    case 0x34: // O2 sensor 1 wide range: λ in A,B (same scale), current in C,D
+                    case 0x24: // O2 sensor 1 wide range: λ in A,B (same scale), voltage in C,D
                         // λ = (A*256+B)/32768, range 0~<2
                         // AFR = λ × 14.7, stored ×100: 1470 = 14.70:1
                         if (dc >= 2 && s_cbs.on_parsed_afr && s_protocol_detect_idx < 0) {
