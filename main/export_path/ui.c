@@ -149,7 +149,7 @@ static void ui_build_theme_snapshot(obd_snapshot_t *out,
     out->load = (load < 0) ? 0 : (load > 100 ? 100 : (uint8_t)load);
     for (int i = 0; i < OBD_EXT_COUNT && i < (int)(sizeof(out->ext) / sizeof(out->ext[0])); i++) {
         int32_t v = obd_data_get_ext((obd_ext_t)i);
-        out->ext[i] = (v == OBD_EXT_INVALID) ? 0 : v;
+        out->ext[i] = v;   // OBD_EXT_INVALID (INT32_MIN) when the car does not give it: the theme shows "-"
     }
 }
 

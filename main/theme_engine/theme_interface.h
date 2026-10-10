@@ -38,8 +38,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  intake_temp;      // 0-255°C (IAT)
     uint8_t  load;             // 0-100% engine load
     uint8_t  _reserved[2];
-    int32_t  ext[13];          // obd_data_cache.h obd_ext_t order, its units; 0 when the car does not give it
+    int32_t  ext[13];          // obd_data_cache.h obd_ext_t order, its units; THEME_NO_VALUE when the car does not give it
 } obd_snapshot_t;
+#define THEME_NO_VALUE INT32_MIN   // a value the car does not give: labels show "-", dials rest at their minimum
 // "obd.<field>" names of ext[], in obd_ext_t order
 #define THEME_EXT_SOURCES "obd.map", "obd.fuel_level", "obd.ign_adv", "obd.fuel_pressure", "obd.ltft", "obd.stft", \
                           "obd.maf", "obd.ethanol", "obd.o2", "obd.egt", "obd.trans_temp", "obd.dtc_count", "obd.knock"

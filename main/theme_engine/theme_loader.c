@@ -563,6 +563,10 @@ void theme_update_data(const obd_snapshot_t *obd) {
             continue;
         }
         value = page_sweep_value(bind, value);
+        bool none = value == THEME_NO_VALUE;
+        if (bind->kind != BINDING_KIND_LABEL &&
+            (none || (value == 127 && strcmp(bind->data_source, "obd.gear") == 0)))
+            value = bind->range_min;   // nothing to show (or gear unknown): dials and bars rest at the bottom, not full
 
         switch (bind->kind) {
         case BINDING_KIND_ARC: {
@@ -595,7 +599,7 @@ void theme_update_data(const obd_snapshot_t *obd) {
             break;
         }
         case BINDING_KIND_LABEL: {
-            const char *word = strcmp(bind->data_source, "obd.gear") == 0 ? gear_word(bind->widget, value) : NULL;
+            const char *word = none ? "-" : strcmp(bind->data_source, "obd.gear") == 0 ? gear_word(bind->widget, value) : NULL;
             if (word) {
                 char text[48];
                 format_with_word(bind->format, word, text, sizeof(text));
