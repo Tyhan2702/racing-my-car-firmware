@@ -61,7 +61,7 @@ static void open_boot(void);
 static const menu_item_t ITEMS[] = {
     {"obd",      "OBD",      &imgMenu_obd,      open_obd},
     {"data",     "DATA",     &imgMenu_data,     open_data},
-    {"settings", "SETTINGS", &imgMenu_settings, open_settings},
+    {"settings", "SETUP",    &imgMenu_settings, open_settings},   // short, to fit four in the top row (the page says SETTINGS)
     {"games",    "GAMES",    &imgMenu_games,    open_games},
     {"boot",     "BOOT",     &imgMenu_boot,     open_boot},
     {"ota",      "UPDATE",   &imgMenu_ota,      open_ota},
@@ -275,10 +275,11 @@ static void ui_ScreenPageMenu_screen_init(void)
     s_btn_n = s_order_n < ITEM_COUNT ? s_order_n : ITEM_COUNT;
     if (s_last < 0 && s_btn_n) s_last = s_order[0];
     // rows of three; seven buttons: four on top, three below, a little smaller so the top row fits the round screen
-    int per1 = s_btn_n > 6 ? 4 : 3, bs = s_btn_n > 6 ? 66 : BTN, cs = s_btn_n > 6 ? 80 : COL;
+    int per1 = s_btn_n > 6 ? 4 : 3, bs = s_btn_n > 6 ? 66 : BTN, cs = s_btn_n > 6 ? 84 : COL;
     for (int b = 0; b < s_btn_n; b++) {
         int row = b < per1 ? 0 : 1, in_row = row ? s_btn_n - per1 : (s_btn_n < per1 ? s_btn_n : per1), col = row ? b - per1 : b;
-        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * cs), y = row ? ROW2 : ROW1;
+        int step = row && s_btn_n > 6 ? COL : cs;           // the lower row of three keeps the usual spacing, a bit higher
+        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * step), y = row ? (s_btn_n > 6 ? ROW2 - 10 : ROW2) : ROW1;
         int item = s_btn_item[b] = s_order[b];
         lv_obj_t *btn = s_btn[b] = lv_obj_create(scr);
         lv_obj_remove_style_all(btn);
@@ -299,9 +300,10 @@ static void ui_ScreenPageMenu_screen_init(void)
         lv_obj_t *l = s_label[b] = lv_label_create(scr);
         lv_label_set_text(l, ITEMS[item].name);
         lv_obj_set_style_text_font(l, &ui_font_FontTypoderSize16, 0);
-        lv_obj_set_width(l, cs);
+        lv_label_set_long_mode(l, LV_LABEL_LONG_CLIP);       // one line
+        lv_obj_set_width(l, 110);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_pos(l, x - cs / 2, y + bs / 2 + 6);
+        lv_obj_set_pos(l, x - 55, y + bs / 2 + 6);
     }
     highlight(s_last);
 }

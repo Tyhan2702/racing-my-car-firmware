@@ -4,6 +4,7 @@
 // voltmeter and the VIN. A swipe left or right goes back to the menu.
 #include <stdio.h>
 #include <string.h>
+#include "esp_attr.h"
 #include "../ui.h"
 #include "ui_menu.h"
 #include "ui_rmc_style.h"
@@ -16,11 +17,12 @@ lv_obj_t *ui_ScreenPageObdData;
 
 enum { D_VEHICLE = 0, D_PROTOCOL, D_VIN, D_BATTERY, D_AFR, D_OIL_T, D_OIL_P, D_GEAR, D_TRANS, D_KNOCK, D_FUEL_L, D_FUEL_P,
        D_DOORS, D_COUNT };
-static const char *const s_dname[D_COUNT] = {"VEHICLE", "PROTOCOL", "VIN", "BATTERY", "AIR FUEL RATIO", "OIL TEMP",
+static const char *const s_dname[D_COUNT] = {"VEHICLE", "PROTOCOL", "VIN", "BATTERY", "AFR", "OIL TEMP",
                                              "OIL PRESSURE", "GEAR", "TRANS TEMP", "KNOCK RETARD", "FUEL LEVEL",
                                              "FUEL PRESSURE", "DOORS"};
 #define MAX_ROWS 240
 static int16_t s_row[MAX_ROWS];          // < 0: derived value -(id+1); else a mode 01 PID
+static EXT_RAM_BSS_ATTR char s_name[MAX_ROWS][20], s_val[MAX_ROWS][40];
 static uint16_t s_rows;
 static lv_obj_t *s_table, *s_sub;
 static lv_timer_t *s_timer;
@@ -66,9 +68,9 @@ static void add_row(int16_t r, const char *name)
 {
     if (s_rows >= MAX_ROWS) return;
     s_row[s_rows] = r;
+    snprintf(s_name[s_rows], sizeof(s_name[0]), "%s", name);
+    s_val[s_rows][0] = 0;                // set by the first refresh
     lv_table_set_row_cnt(s_table, s_rows + 1);
-    lv_table_set_cell_value(s_table, s_rows, 0, name);
-    lv_table_set_cell_value(s_table, s_rows, 1, "-");
     s_rows++;
 }
 
@@ -91,23 +93,21 @@ static void refresh(lv_timer_t *t)
             if (!elm327_scan_get((uint8_t)s_row[i], d, &n) || !obd_pid_format((uint8_t)s_row[i], d, n, v, sizeof(v))) strcpy(v, "-");
         }
         if (s_row[i] != -(D_VEHICLE + 1) && s_row[i] != -(D_PROTOCOL + 1)) { total++; read += strcmp(v, "-") != 0; }
-        const char *cur = lv_table_get_cell_value(s_table, i, 1);
-        if (!cur || strcmp(cur, v) != 0) lv_table_set_cell_value(s_table, i, 1, v);
+        if (strcmp(s_val[i], v) != 0) {   // one centred cell: the name in grey over the value ("-" in dark grey)
+            snprintf(s_val[i], sizeof(s_val[0]), "%s", v);
+            lv_table_set_cell_value_fmt(s_table, i, 0, "#8E8E93 %s#\n%s%s%s", s_name[i], strcmp(v, "-") ? "" : "#48484A ",
+                                        v, strcmp(v, "-") ? "" : "#");
+        }
     }
     if (!elm327_ble_is_connected()) lv_label_set_text(s_sub, "OBD NOT CONNECTED");
     else lv_label_set_text_fmt(s_sub, "%d OF %d READ", read, total);
 }
 
-// "-" in grey, values in white, names in grey
+// the cells carry their colours (recolour codes)
 static void on_draw(lv_event_t *e)
 {
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
-    if (dsc->part != LV_PART_ITEMS || !dsc->label_dsc) return;
-    uint32_t row = dsc->id / 2, col = dsc->id % 2;
-    const char *v = lv_table_get_cell_value(s_table, (uint16_t)row, (uint16_t)col);
-    bool live = col == 1 && v && strcmp(v, "-") != 0;
-    dsc->label_dsc->color = lv_color_hex(live ? 0xFFFFFF : RMC_DIM);
-    if (col == 1) dsc->label_dsc->align = LV_TEXT_ALIGN_RIGHT;
+    if (dsc->part == LV_PART_ITEMS && dsc->label_dsc) dsc->label_dsc->flag |= LV_TEXT_FLAG_RECOLOR;
 }
 
 static void on_screen(lv_event_t *e)
@@ -140,11 +140,12 @@ void ui_ScreenPageObdData_screen_init(void)
     lv_obj_align(s_sub, LV_ALIGN_TOP_MID, 0, 62);
 
     s_table = lv_table_create(scr);
-    lv_obj_set_size(s_table, 300, 262);
+    lv_obj_set_size(s_table, 280, 270);
     lv_obj_align(s_table, LV_ALIGN_TOP_MID, 0, 88);
-    lv_table_set_col_cnt(s_table, 2);
-    lv_table_set_col_width(s_table, 0, 150);
-    lv_table_set_col_width(s_table, 1, 150);
+    lv_table_set_col_cnt(s_table, 1);
+    lv_table_set_col_width(s_table, 0, 280);
+    lv_obj_set_style_text_align(s_table, LV_TEXT_ALIGN_CENTER, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(s_table, lv_color_hex(0xFFFFFF), LV_PART_ITEMS);
     lv_obj_set_style_bg_opa(s_table, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_table, 0, 0);
     lv_obj_set_style_pad_all(s_table, 0, 0);
@@ -153,7 +154,7 @@ void ui_ScreenPageObdData_screen_init(void)
     lv_obj_set_style_border_side(s_table, LV_BORDER_SIDE_BOTTOM, LV_PART_ITEMS);
     lv_obj_set_style_border_color(s_table, lv_color_hex(RMC_CARD), LV_PART_ITEMS);
     lv_obj_set_style_border_width(s_table, 1, LV_PART_ITEMS);
-    lv_obj_set_style_pad_ver(s_table, 7, LV_PART_ITEMS);
+    lv_obj_set_style_pad_ver(s_table, 6, LV_PART_ITEMS);
     lv_obj_set_style_pad_hor(s_table, 4, LV_PART_ITEMS);
     lv_obj_set_style_text_font(s_table, &ui_font_FontTypoderSize16, LV_PART_ITEMS);
     lv_obj_set_scrollbar_mode(s_table, LV_SCROLLBAR_MODE_OFF);
