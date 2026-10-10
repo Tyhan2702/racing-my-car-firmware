@@ -1499,6 +1499,9 @@ static void obd_poll_task(void *arg) {
 // A reply by fixed byte positions: p points just after the echoed service + PID ("61 51", "62 10 7B"). With ATCAF1/ATS1/ATH0 the ELM327 prints a
 // multi-frame reply as "021\r0: 61 51 00 ..\r1: 00 00 52 ..\r2: .." (the N: prefix stands for the ISO-TP frame, its PCI
 // byte is not printed), a single frame as "61 85 05 20 82". Returns the data bytes after "61 XX", in order.
+// The data bytes from p on: the rest of p's line, then only the "N:" continuation frames of a multi-frame (ISO-TP)
+// reply. A line without that prefix is someone else's reply (a second tester on the bus) landing between our frames:
+// it is skipped, not read as part of ours.
 static int parse_reply_data(const char *p, uint8_t *out, int max_out) {
     int count = 0;
     bool line_start = false;
@@ -1507,8 +1510,9 @@ static int parse_reply_data(const char *p, uint8_t *out, int max_out) {
         if (line_start) {
             const char *q = p;
             while (isdigit((unsigned char)*q)) q++;
-            if (q > p && *q == ':') p = q + 1;   // the "N:" frame prefix
             line_start = false;
+            if (q > p && *q == ':') { p = q + 1; continue; }   // the "N:" frame prefix
+            p += strcspn(p, "\r\n>");                          // not one of our frames: skip the line
             continue;
         }
         if (*p == ' ') { p++; continue; }
@@ -2442,6 +2446,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             s_expect_pid = 0;
             snprintf(want, sizeof(want), "41 %02X", ep);
             const char *hit = strstr(buf, want);
+            while (hit && hit != buf && hit[-1] != '\r' && hit[-1] != '\n') hit = strstr(hit + 1, want);   // a reply starts a line
             if (hit && s_scan_active && ep < sizeof(s_scan_n)) {   // the DATA page shows the raw reply
                 uint8_t tmp[SCAN_RAW];
                 int n = parse_reply_data(hit + 5, tmp, SCAN_RAW);
