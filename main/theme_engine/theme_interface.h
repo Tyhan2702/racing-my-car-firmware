@@ -36,8 +36,14 @@ typedef struct __attribute__((packed)) {
     uint16_t afr;              // Air-fuel ratio * 100 (e.g. 1470 = 14.70)
     uint8_t  throttle;         // 0-100%
     uint8_t  intake_temp;      // 0-255°C (IAT)
-    uint8_t  _reserved[3];     // padding to 16 bytes
-} obd_snapshot_t;  // 16 bytes total
+    uint8_t  load;             // 0-100% engine load
+    uint8_t  _reserved[2];
+    int32_t  ext[13];          // obd_data_cache.h obd_ext_t order, its units; 0 when the car does not give it
+} obd_snapshot_t;
+// "obd.<field>" names of ext[], in obd_ext_t order
+#define THEME_EXT_SOURCES "obd.map", "obd.fuel_level", "obd.ign_adv", "obd.fuel_pressure", "obd.ltft", "obd.stft", \
+                          "obd.maf", "obd.ethanol", "obd.o2", "obd.egt", "obd.trans_temp", "obd.dtc_count", "obd.knock"
+uint32_t theme_wanted_ext_mask(void);   // ext[] values the page on screen shows (bit n = ext[n])
 
 // ============================================================
 //  Theme Engine API

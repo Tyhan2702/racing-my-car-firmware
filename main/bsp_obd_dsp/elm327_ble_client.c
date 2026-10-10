@@ -621,6 +621,7 @@ static void default_on_parsed_manifold_pressure(uint32_t map_kpa) {
     int16_t boost_x10 = (int16_t)(((int32_t)map_kpa - 100) / 10);
     if (boost_x10 < 0) boost_x10 = 0; // don't display negative pressure (vacuum), floor at 0
     obd_data_set_boost_x10(boost_x10);
+    obd_data_set_ext(OBD_EXT_MAP, (int32_t)map_kpa);
 }
 
 static void can_expire_stale_temp_channels(void)
@@ -751,6 +752,40 @@ static bool send_first_pid(const uint8_t *pids, size_t n)
     for (size_t i = 0; i < n; i++) if (pid_ok(pids[i])) { send_pid(pids[i]); return true; }
     return false;
 }
+// ---- Extra data (themes): the next value a gauge page shows, by its standard PIDs first, then the brand methods ----
+static uint8_t s_ext_next;
+static bool ext_request(obd_ext_t e)
+{
+    static const uint8_t fuel_p[] = {0x0A, 0x23, 0x22, 0x59}, o2[] = {0x14, 0x24, 0x15}, egt[] = {0x78, 0x3C};
+    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    switch (e) {
+    case OBD_EXT_MAP:           return (vp && vp->has_boost) ? true : send_first_pid((const uint8_t[]){0x0B}, 1);  // slot 8 already asks it
+    case OBD_EXT_FUEL_LEVEL:    return send_first_pid((const uint8_t[]){0x2F}, 1) || mv_query(MV_FUEL_LEVEL);
+    case OBD_EXT_IGN_ADV:       return send_first_pid((const uint8_t[]){0x0E}, 1);
+    case OBD_EXT_FUEL_PRESSURE: return send_first_pid(fuel_p, sizeof(fuel_p)) || mv_query(MV_FUEL_PRESSURE);
+    case OBD_EXT_LTFT:          return send_first_pid((const uint8_t[]){0x07}, 1);
+    case OBD_EXT_STFT:          return send_first_pid((const uint8_t[]){0x06}, 1);
+    case OBD_EXT_MAF:           return send_first_pid((const uint8_t[]){0x10}, 1);
+    case OBD_EXT_ETHANOL:       return send_first_pid((const uint8_t[]){0x52}, 1);
+    case OBD_EXT_O2:            return send_first_pid(o2, sizeof(o2));
+    case OBD_EXT_EGT:           return send_first_pid(egt, sizeof(egt));
+    case OBD_EXT_TRANS_TEMP:    return mv_query(MV_TRANS_TEMP);
+    case OBD_EXT_DTC_COUNT:     return send_first_pid((const uint8_t[]){0x01}, 1);
+    case OBD_EXT_KNOCK:         return mv_query(MV_KNOCK);
+    default:                    return false;
+    }
+}
+// One extra per call, round robin over the wanted ones; values the car cannot give are skipped
+static void ext_poll_one(void)
+{
+    uint32_t wanted = obd_data_get_wanted();
+    if (!wanted) return;
+    for (int n = 0; n < OBD_EXT_COUNT; n++) {
+        obd_ext_t e = (obd_ext_t)(s_ext_next++ % OBD_EXT_COUNT);
+        if ((wanted >> e) & 1u) { if (ext_request(e)) return; }
+    }
+}
+
 static void pid_support_reset(void)
 {
     memset(s_pid_sup, 0, sizeof(s_pid_sup));
@@ -1157,7 +1192,7 @@ static void obd_poll_task(void *arg) {
             }
         }
 
-        bool completed_obd_round = (tick_count == 11);
+        bool completed_obd_round = (tick_count == 13);
         {
         switch(tick_count)
         {
@@ -1311,6 +1346,10 @@ static void obd_poll_task(void *arg) {
                     }
                 }
                 break;
+            case 12:// Extra data a gauge page shows (fuel level, ignition advance, trims, MAF, ...), two per round
+            case 13:
+                ext_poll_one();
+                break;
             default:
                 break;
         }
@@ -1320,7 +1359,7 @@ static void obd_poll_task(void *arg) {
         }
 
         tick_count++;
-        if(tick_count >= 12)
+        if(tick_count >= 14)
         {
             tick_count = 0;
         }
@@ -1466,6 +1505,18 @@ static void mv_handle(int sig, const char *buf)
         } else if (sig == MV_OIL_PRESSURE) {
             ok = v >= 0 && v <= 1500;                          // kPa
             if (ok && s_cbs.on_parsed_oil_pressure) s_cbs.on_parsed_oil_pressure((uint32_t)(v * 10));   // hPa
+        } else if (sig == MV_TRANS_TEMP) {
+            ok = v > -40 && v <= 180;
+            if (ok) obd_data_set_ext(OBD_EXT_TRANS_TEMP, v);
+        } else if (sig == MV_KNOCK) {
+            ok = v >= -200 && v <= 600;                        // 0.1° retard
+            if (ok) obd_data_set_ext(OBD_EXT_KNOCK, v);
+        } else if (sig == MV_FUEL_LEVEL) {
+            ok = v >= 0 && v <= 100;
+            if (ok) obd_data_set_ext(OBD_EXT_FUEL_LEVEL, v);
+        } else if (sig == MV_FUEL_PRESSURE) {
+            ok = v >= 0 && v <= 40000;                         // kPa (direct injection rails reach 20 MPa)
+            if (ok) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, v);
         }
     }
     if (ok) mark_obd_data_valid();
@@ -2296,6 +2347,46 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                         if (dc >= 1 && s_cbs.on_parsed_manifold_pressure && s_protocol_detect_idx < 0)
                             s_cbs.on_parsed_manifold_pressure((uint32_t)d[0]);
                         break;
+                    case 0x01: // monitor status: stored trouble codes in A bits 0-6
+                        if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_DTC_COUNT, (int32_t)(d[0] & 0x7F));
+                        break;
+                    case 0x06: // short-term fuel trim bank 1: (A-128)*100/128 %
+                    case 0x07: // long-term fuel trim bank 1
+                        if (dc >= 1 && s_protocol_detect_idx < 0)
+                            obd_data_set_ext(pid == 0x06 ? OBD_EXT_STFT : OBD_EXT_LTFT, ((int32_t)d[0] - 128) * 1000 / 128);
+                        break;
+                    case 0x0A: // fuel pressure (gauge): A*3 kPa
+                        if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, (int32_t)d[0] * 3);
+                        break;
+                    case 0x22: // fuel rail pressure relative to manifold: (256A+B)*0.079 kPa
+                        if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, (int32_t)(((d[0] << 8) | d[1]) * 79 / 1000));
+                        break;
+                    case 0x23: // fuel rail gauge pressure (diesel / direct injection): (256A+B)*10 kPa
+                    case 0x59: // fuel rail absolute pressure
+                        if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, (int32_t)((d[0] << 8) | d[1]) * 10);
+                        break;
+                    case 0x0E: // timing advance: A/2 - 64 °
+                        if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_IGN_ADV, (int32_t)d[0] * 5 - 640);
+                        break;
+                    case 0x10: // MAF: (256A+B)/100 g/s
+                        if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_MAF, (int32_t)((d[0] << 8) | d[1]));
+                        break;
+                    case 0x14: // O2 bank 1 sensor 1 (narrow band): A/200 V
+                    case 0x15: // O2 bank 1 sensor 2
+                        if (dc >= 1 && s_protocol_detect_idx < 0 && d[0] != 0xFF) obd_data_set_ext(OBD_EXT_O2, (int32_t)d[0] * 5);
+                        break;
+                    case 0x2F: // fuel tank level: A*100/255 %
+                        if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_LEVEL, (int32_t)d[0] * 100 / 255);
+                        break;
+                    case 0x3C: // catalyst temperature bank 1 sensor 1: (256A+B)/10 - 40 °C
+                        if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_EGT, (int32_t)((d[0] << 8) | d[1]) / 10 - 40);
+                        break;
+                    case 0x52: // ethanol fuel %: A*100/255
+                        if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_ETHANOL, (int32_t)d[0] * 100 / 255);
+                        break;
+                    case 0x78: // EGT bank 1: A = sensors present, B,C sensor 1: (256B+C)/10 - 40 °C
+                        if (dc >= 3 && s_protocol_detect_idx < 0 && (d[0] & 1)) obd_data_set_ext(OBD_EXT_EGT, (int32_t)((d[1] << 8) | d[2]) / 10 - 40);
+                        break;
                     case 0x5C: // Oil temp PID (standard, used for ZD8)
                         if (dc >= 1 && s_cbs.on_parsed_oil_temp && s_protocol_detect_idx < 0) {
                             int32_t oil_temp = (int32_t)d[0] - 40;
@@ -2324,6 +2415,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             if (afr_x100 >= 800 && afr_x100 <= 2200) {
                                 s_cbs.on_parsed_afr(afr_x100);
                             }
+                            if (pid == 0x24 && dc >= 4)   // wide-range sensor voltage in C,D: (256C+D)*8/65536 V
+                                obd_data_set_ext(OBD_EXT_O2, (int32_t)(((d[2] << 8) | d[3]) * 8000UL / 65536UL));
                         }
                         break;
                     default:

@@ -52,6 +52,40 @@ static const obd_method_t MAZDA_GEAR[] = {
 static const obd_method_t MAZDA_OIL_P[] = {
     {"7E0", NULL, 0x22, 0x0415, 0, 2, true, 1, 1, 0, MV_LINEAR, false},       // kPa, 70 my / 9 models
 };
+// Extra data for themes (OBDb recorded signals; model-years/models counted over 2000-2026). Transmission fluid in °C,
+// fuel level in %, fuel pressure in kPa, knock as ignition retard in 0.1° (Toyota reports feedback, negative = retard).
+static const obd_method_t TOYOTA_TRANS_T[] = {
+    {"7E0", NULL,  0x21, 0x82,   0, 2, false, 1, 256, -40, MV_LINEAR, false},  // pan, 2008-2019 (Corolla 2014)
+    {"700", "708", 0x22, 0x1638, 0, 1, false, 1, 1,   -40, MV_LINEAR, false},  // 177 my / 29 models
+    {"700", "708", 0x22, 0x1627, 0, 2, false, 1, 256, -40, MV_LINEAR, false},  // pan, 156 my / 30 models
+};
+static const obd_method_t TOYOTA_KNOCK[] = {
+    {"700", "708", 0x22, 0x105C, 2, 2, false, -5, 16, 10240, MV_LINEAR, false},          // feedback, 185 my / 30 models
+    {"7E0", NULL,  0x21, 0xB2,   2, 2, false, -20480, 65535, 640, MV_LINEAR, false},     // feedback, 63 my / 19 models
+    {"7E0", NULL,  0x21, 0x37,   6, 2, false, -20480, 65535, 10240, MV_LINEAR, false},   // feedback, 63 my / 19 models
+};
+static const obd_method_t TOYOTA_FUEL_L[] = {
+    {"700", "708", 0x22, 0x1F2F, 0, 1, false, 100, 255, 0, MV_LINEAR, false},  // %, 194 my / 30 models
+};
+static const obd_method_t TOYOTA_FUEL_P[] = {
+    {"700", "708", 0x22, 0x1F6D, 3, 2, false, 10, 1, 0, MV_LINEAR, false},    // direct injection rail, actual, 145 my
+    {"700", "708", 0x22, 0x10CD, 0, 2, false, 1, 10, -3277, MV_LINEAR, false}, // low-pressure side, 137 my / 24 models
+};
+static const obd_method_t HONDA_TRANS_T[] = {
+    {"18DA1EF1", NULL, 0x22, 0x3083, 14, 1, false, 1, 1, -40, MV_LINEAR, true}, // 73 my / 9 models
+    {"18DA1DF1", NULL, 0x22, 0x2201, 26, 1, false, 1, 1, -40, MV_LINEAR, true}, // 65 my / 9 models
+    {"18DA1EF1", NULL, 0x22, 0x2201, 26, 1, false, 1, 1, -40, MV_LINEAR, true}, // 41 my / 6 models
+};
+static const obd_method_t MAZDA_TRANS_T[] = {
+    {"7E0", NULL, 0x22, 0x1E1C, 0, 2, true, 1, 16, 0, MV_LINEAR, false},      // 20 my / 3 models
+    {"7E1", NULL, 0x22, 0x1E1C, 0, 2, true, 1, 16, 0, MV_LINEAR, false},      // transmission ECU, 5 my
+};
+static const obd_method_t MAZDA_KNOCK[] = {
+    {"7E0", NULL, 0x22, 0x1746, 0, 1, false, 1000, 284, 0, MV_LINEAR, false}, // retard, 34 my / 5 models
+};
+static const obd_method_t NISSAN_TRANS_T[] = {
+    {"7E1", NULL, 0x22, 0x110C, 0, 1, false, 1, 1, -40, MV_LINEAR, false},    // CVT/AT ECU
+};
 static const obd_method_t STD_OIL_T[] = {
     {NULL, NULL, 0x01, 0x5C, 0, 1, false, 1, 1, -40, MV_LINEAR, false},
 };
@@ -456,7 +490,9 @@ static const vehicle_profile_t s_profiles[] = {
         .forced_protocol = 0,
         .obd_functional_addr = false,      // physical 7E0: Toyota's engine ECU answers mode 01, 21 and 22 there
         .obd_timeout = 0x19,
-        .methods = { [MV_OIL_TEMP] = MV_SET(TOYOTA_OIL_T), [MV_GEAR] = MV_SET(TOYOTA_GEAR), [MV_OIL_PRESSURE] = MV_SET(TOYOTA_OIL_P) },
+        .methods = { [MV_OIL_TEMP] = MV_SET(TOYOTA_OIL_T), [MV_GEAR] = MV_SET(TOYOTA_GEAR), [MV_OIL_PRESSURE] = MV_SET(TOYOTA_OIL_P),
+                     [MV_TRANS_TEMP] = MV_SET(TOYOTA_TRANS_T), [MV_KNOCK] = MV_SET(TOYOTA_KNOCK),
+                     [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P) },
     },
     {
         // Honda / Acura 2000-2026 (Civic, City, Accord, CR-V, HR-V, Jazz/Fit, ...). Standard PIDs on 7DF, or on the
@@ -474,7 +510,7 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_functional_addr = true,
         .auto_29bit_functional = true,
         .obd_timeout = 0x19,
-        .methods = { [MV_OIL_TEMP] = MV_SET(HONDA_OIL_T), [MV_GEAR] = MV_SET(HONDA_GEAR) },
+        .methods = { [MV_OIL_TEMP] = MV_SET(HONDA_OIL_T), [MV_GEAR] = MV_SET(HONDA_GEAR), [MV_TRANS_TEMP] = MV_SET(HONDA_TRANS_T) },
     },
     {
         // Mazda 2000-2026 (Mazda2/3/6, CX-3/5/30/50/60/9, MX-5, BT-50, ...): standard mode 01 on 7E0, brand lists above.
@@ -489,7 +525,8 @@ static const vehicle_profile_t s_profiles[] = {
         .forced_protocol = 0,
         .obd_functional_addr = false,
         .obd_timeout = 0x19,
-        .methods = { [MV_OIL_TEMP] = MV_SET(MAZDA_OIL_T), [MV_GEAR] = MV_SET(MAZDA_GEAR), [MV_OIL_PRESSURE] = MV_SET(MAZDA_OIL_P) },
+        .methods = { [MV_OIL_TEMP] = MV_SET(MAZDA_OIL_T), [MV_GEAR] = MV_SET(MAZDA_GEAR), [MV_OIL_PRESSURE] = MV_SET(MAZDA_OIL_P),
+                     [MV_TRANS_TEMP] = MV_SET(MAZDA_TRANS_T), [MV_KNOCK] = MV_SET(MAZDA_KNOCK) },
     },
     {
         // Nissan 2000-2026 (Almera, Sylphy/Sentra, X-Trail, Navara, Serena, ...). OBDb has no brand oil temp / gear for
@@ -505,7 +542,7 @@ static const vehicle_profile_t s_profiles[] = {
         .forced_protocol = 0,
         .obd_functional_addr = true,
         .obd_timeout = 0x19,
-        .methods = { [MV_OIL_TEMP] = MV_SET(STD_OIL_T) },
+        .methods = { [MV_OIL_TEMP] = MV_SET(STD_OIL_T), [MV_TRANS_TEMP] = MV_SET(NISSAN_TRANS_T) },
     },
 };
 

@@ -394,6 +394,17 @@ static bool theme_format_is_int_only(const char *fmt) {
     return true;
 }
 
+static const char *const s_ext_sources[] = { THEME_EXT_SOURCES };
+_Static_assert(sizeof(s_ext_sources) / sizeof(s_ext_sources[0]) == sizeof(((obd_snapshot_t *)0)->ext) / sizeof(int32_t), "ext names");
+static uint32_t s_wanted_ext;
+static int theme_ext_index(const char *src)
+{
+    for (int i = 0; i < (int)(sizeof(s_ext_sources) / sizeof(s_ext_sources[0])); i++)
+        if (strcmp(src, s_ext_sources[i]) == 0) return i;
+    return -1;
+}
+uint32_t theme_wanted_ext_mask(void) { return s_wanted_ext; }
+
 // Resolves a "obd.<field>" data_source string against a live snapshot.
 // Returns false if the source name is unrecognized (binding left untouched).
 static bool theme_resolve_data_source(const obd_snapshot_t *obd, const char *src, int32_t *out_value) {
@@ -419,8 +430,12 @@ static bool theme_resolve_data_source(const obd_snapshot_t *obd, const char *src
         *out_value = obd->throttle;
     } else if (strcmp(src, "obd.intake_temp") == 0) {
         *out_value = obd->intake_temp;
+    } else if (strcmp(src, "obd.load") == 0) {
+        *out_value = obd->load;
     } else {
-        return false;
+        int e = theme_ext_index(src);
+        if (e < 0) return false;
+        *out_value = obd->ext[e];
     }
     return true;
 }
@@ -454,7 +469,12 @@ static bool sweep_range(const theme_binding_t *bind, int32_t *lo, int32_t *hi)
         {"obd.rpm", 0, 8000},            {"obd.speed", 0, 255},           {"obd.boost", 0, 200},
         {"obd.coolant_temp", 0, 130},    {"obd.oil_temp", 0, 150},        {"obd.oil_pressure", 0, 100},
         {"obd.battery_voltage", 0, 150}, {"obd.afr", 1000, 2000},         {"obd.throttle", 0, 100},
-        {"obd.intake_temp", 0, 80},      {"obd.gear", 0, 6},
+        {"obd.intake_temp", 0, 80},      {"obd.gear", 0, 6},              {"obd.load", 0, 100},
+        {"obd.map", 0, 250},             {"obd.fuel_level", 0, 100},      {"obd.ign_adv", -100, 500},
+        {"obd.fuel_pressure", 0, 600},   {"obd.ltft", -250, 250},         {"obd.stft", -250, 250},
+        {"obd.maf", 0, 20000},           {"obd.ethanol", 0, 100},         {"obd.o2", 0, 1000},
+        {"obd.egt", 0, 900},             {"obd.trans_temp", 0, 150},      {"obd.dtc_count", 0, 10},
+        {"obd.knock", 0, 100},
     };
     for (size_t i = 0; i < sizeof(scale) / sizeof(scale[0]); i++) {
         if (strcmp(bind->data_source, scale[i].src) == 0) { *lo = scale[i].lo; *hi = scale[i].hi; return true; }
@@ -1018,6 +1038,8 @@ static void theme_add_binding(cJSON *elem, lv_obj_t *widget, theme_binding_kind_
         return;
     }
 
+    int ext = theme_ext_index(src);
+    if (ext >= 0) s_wanted_ext |= 1u << ext;   // the gauge asks the car for it only while a page shows it
     theme_binding_t *bind = &s_ctx.bindings[s_ctx.binding_count++];
     bind->widget = widget;
     bind->kind = kind;
@@ -1255,6 +1277,7 @@ static lv_obj_t* theme_create_custom_page(const char *page_id) {
     // when theme_update_data() timer fires after the old page is deleted
     s_ctx.binding_count = 0;
     memset(s_ctx.bindings, 0, sizeof(s_ctx.bindings));
+    s_wanted_ext = 0;
     s_page_sweep_start_us = esp_timer_get_time();   // every page shown starts with a sweep
 
     lv_obj_t *page = lv_obj_create(NULL);

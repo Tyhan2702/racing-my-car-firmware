@@ -51,6 +51,7 @@ typedef struct __attribute__((packed)) {
 // Multi-gauge linked control packet (slave <-> master; length differs from both OBD and presence packets, dispatched by length)
 #define ESPNOW_CTRL_TEST_START   1   // ask the master to start the linked test (arg unused)
 #define ESPNOW_CTRL_THRESH_SET   2   // sync the RPM warning threshold (arg = threshold)
+#define ESPNOW_CTRL_WANTED       3   // slave -> master: extra data its theme page shows (arg = obd_ext_t bit mask)
 typedef struct __attribute__((packed)) {
     uint16_t magic;
     uint8_t  version;
@@ -105,6 +106,18 @@ typedef struct __attribute__((packed)) {
 } espnow_obd_packet_t;
 
 static char s_master_name[MASTER_NAME_LEN] = {0};  // slave side: name of the last master heard
+
+// Master -> slaves: the extra data (fuel level, trims, ...) the master read for the slaves' theme pages
+typedef struct __attribute__((packed)) {
+    uint16_t magic;
+    uint8_t  version;
+    uint8_t  kind;              // 0xE1
+    uint32_t valid;             // bit n: ext[n] holds a value
+    int32_t  ext[OBD_EXT_COUNT];
+    uint8_t  pad[3];            // keeps the length apart from every other packet
+} espnow_ext_packet_t;
+_Static_assert(sizeof(espnow_ext_packet_t) != sizeof(espnow_obd_packet_t) && sizeof(espnow_ext_packet_t) != sizeof(espnow_ctrl_packet_t) &&
+               sizeof(espnow_ext_packet_t) != sizeof(espnow_presence_t), "espnow packet lengths must differ");
 
 // ---- WiFi + ESP-NOW low-level init (shared by master and slave) ----
 static void wifi_espnow_init(void) {
@@ -188,6 +201,16 @@ static void master_task(void *arg) {
         master_pack(&pkt);
         esp_err_t r = esp_now_send(s_broadcast_mac, (const uint8_t *)&pkt, sizeof(pkt));
         if (r != ESP_OK) ESP_LOGW(TAG, "esp_now_send err=%d", r);
+        static uint8_t s_ext_tick;
+        if (++s_ext_tick >= 5) {          // extra data changes slowly: every 5th broadcast
+            s_ext_tick = 0;
+            espnow_ext_packet_t ep = { .magic = ESPNOW_MAGIC, .version = ESPNOW_VER, .kind = 0xE1 };
+            for (int i = 0; i < OBD_EXT_COUNT; i++) {
+                ep.ext[i] = obd_data_get_ext((obd_ext_t)i);
+                if (ep.ext[i] != OBD_EXT_INVALID) ep.valid |= 1u << i;
+            }
+            if (ep.valid) esp_now_send(s_broadcast_mac, (const uint8_t *)&ep, sizeof(ep));
+        }
         vTaskDelay(pdMS_TO_TICKS(s_linktest_active ? 20 : BROADCAST_INTERVAL_MS));
     }
 }
@@ -265,6 +288,8 @@ static void handle_ctrl(const espnow_ctrl_packet_t *c) {
         }
     } else if (c->cmd == ESPNOW_CTRL_THRESH_SET) {
         app_event_send(APP_EVT_ESPNOW_THRESH_SYNC, (uint32_t)c->arg);
+    } else if (c->cmd == ESPNOW_CTRL_WANTED) {
+        if (s_is_master) obd_data_note_wanted_remote(c->arg);
     }
 }
 
@@ -276,6 +301,12 @@ static void handle_rx(const uint8_t *mac, const uint8_t *data, int len) {
     } else if (len == (int)sizeof(espnow_ctrl_packet_t)) {
         const espnow_ctrl_packet_t *c = (const espnow_ctrl_packet_t *)data;
         if (c->magic == ESPNOW_MAGIC && c->version == ESPNOW_VER) handle_ctrl(c);
+    } else if (len == (int)sizeof(espnow_ext_packet_t)) {
+        if (s_is_master) return;
+        const espnow_ext_packet_t *ep = (const espnow_ext_packet_t *)data;
+        if (ep->magic != ESPNOW_MAGIC || ep->version != ESPNOW_VER || ep->kind != 0xE1) return;
+        for (int i = 0; i < OBD_EXT_COUNT; i++)
+            if ((ep->valid >> i) & 1u) obd_data_set_ext((obd_ext_t)i, ep->ext[i]);
     } else if (len == (int)sizeof(espnow_presence_t)) {
         if (!s_is_master) return;  // only the master tallies slaves
         const espnow_presence_t *pr = (const espnow_presence_t *)data;
@@ -328,6 +359,11 @@ static void slave_presence_task(void *arg) {
     for (;;) {
         pr.position = nvs_device_position_get();
         esp_now_send(s_broadcast_mac, (const uint8_t *)&pr, sizeof(pr));
+        uint32_t wanted = obd_data_get_wanted_local();   // extra data this slave's theme page shows: the master reads it
+        if (wanted) {
+            espnow_ctrl_packet_t c = { .magic = ESPNOW_MAGIC, .version = ESPNOW_VER, .cmd = ESPNOW_CTRL_WANTED, .arg = (uint16_t)wanted };
+            esp_now_send(s_broadcast_mac, (const uint8_t *)&c, sizeof(c));
+        }
         vTaskDelay(pdMS_TO_TICKS(PRESENCE_INTERVAL_MS));
     }
 }

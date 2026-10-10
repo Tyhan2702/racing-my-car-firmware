@@ -63,6 +63,30 @@ void obd_data_set_brake_temp_x10(int16_t temp_x10); // brake temp, 0.1°C
 void obd_data_set_gear(int8_t gear);               // direct gear value: -1=R, 0=N, 1+=forward gear, 127=invalid
 void obd_data_set_brake_rs485_status(brake_rs485_status_t status);
 void obd_data_set_afr_x100(int16_t afr_x100);      // air-fuel ratio AFR, ×100 (1470=14.7:1), -1=invalid
+// ---- Extra data for themes: asked of the car only while a gauge page shows it (obd_data_set_wanted) ----
+typedef enum {
+    OBD_EXT_MAP = 0,        // intake manifold absolute pressure, kPa (01 0B)
+    OBD_EXT_FUEL_LEVEL,     // %, 01 2F / brand
+    OBD_EXT_IGN_ADV,        // ignition advance, 0.1° before TDC (01 0E)
+    OBD_EXT_FUEL_PRESSURE,  // kPa (01 0A / 23 / 22 / 59, brand)
+    OBD_EXT_LTFT,           // long-term fuel trim bank 1, 0.1 % (01 07)
+    OBD_EXT_STFT,           // short-term fuel trim bank 1, 0.1 % (01 06)
+    OBD_EXT_MAF,            // mass air flow, 0.01 g/s (01 10)
+    OBD_EXT_ETHANOL,        // ethanol fuel %, flex-fuel cars only (01 52)
+    OBD_EXT_O2,             // oxygen sensor bank 1 sensor 1, mV (01 14 / 24 / 15)
+    OBD_EXT_EGT,            // exhaust gas temperature, °C (01 78, else catalyst 01 3C)
+    OBD_EXT_TRANS_TEMP,     // transmission fluid, °C (brand)
+    OBD_EXT_DTC_COUNT,      // stored trouble codes (01 01)
+    OBD_EXT_KNOCK,          // knock ignition retard, 0.1° (brand)
+    OBD_EXT_COUNT
+} obd_ext_t;
+#define OBD_EXT_INVALID INT32_MIN
+void    obd_data_set_ext(obd_ext_t which, int32_t value);
+int32_t obd_data_get_ext(obd_ext_t which);          // OBD_EXT_INVALID when the car never gave it (or not for 30 s)
+void     obd_data_set_wanted_local(uint32_t mask);   // bit n = OBD_EXT n is on this gauge's page
+void     obd_data_note_wanted_remote(uint32_t mask); // a linked slave gauge shows these (kept 5 s)
+uint32_t obd_data_get_wanted(void);
+uint32_t obd_data_get_wanted_local(void);
 void obd_data_set_doors(uint8_t mask);              // open doors from a CAN broadcast (CH_DOORS bits)
 int16_t obd_data_get_doors(void);                   // open doors mask, -1 = unknown (no frame in the last 10 s)
 uint16_t obd_data_get_rpm(void);

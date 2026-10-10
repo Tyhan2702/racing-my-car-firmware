@@ -410,3 +410,46 @@ int16_t obd_data_get_doors(void)
     portEXIT_CRITICAL(&s_mux);
     return val;
 }
+
+// ---- Extra data for themes ----
+static int32_t s_ext[OBD_EXT_COUNT];
+static int64_t s_ext_us[OBD_EXT_COUNT];
+static uint32_t s_wanted_local, s_wanted_remote;
+static int64_t s_wanted_remote_us;
+
+void obd_data_set_ext(obd_ext_t which, int32_t value)
+{
+    if ((unsigned)which >= OBD_EXT_COUNT) return;
+    portENTER_CRITICAL(&s_mux);
+    s_ext[which] = value;
+    s_ext_us[which] = esp_timer_get_time();
+    portEXIT_CRITICAL(&s_mux);
+}
+
+int32_t obd_data_get_ext(obd_ext_t which)
+{
+    if ((unsigned)which >= OBD_EXT_COUNT) return OBD_EXT_INVALID;
+    int32_t val;
+    portENTER_CRITICAL(&s_mux);
+    val = (s_ext_us[which] && esp_timer_get_time() - s_ext_us[which] < 30000000LL) ? s_ext[which] : OBD_EXT_INVALID;
+    portEXIT_CRITICAL(&s_mux);
+    return val;
+}
+
+void obd_data_set_wanted_local(uint32_t mask) { s_wanted_local = mask; }
+uint32_t obd_data_get_wanted_local(void) { return s_wanted_local; }
+void obd_data_note_wanted_remote(uint32_t mask)
+{
+    portENTER_CRITICAL(&s_mux);
+    s_wanted_remote = (s_wanted_remote_us && esp_timer_get_time() - s_wanted_remote_us < 5000000LL) ? (s_wanted_remote | mask) : mask;
+    s_wanted_remote_us = esp_timer_get_time();
+    portEXIT_CRITICAL(&s_mux);
+}
+uint32_t obd_data_get_wanted(void)
+{
+    uint32_t m;
+    portENTER_CRITICAL(&s_mux);
+    m = s_wanted_local | ((s_wanted_remote_us && esp_timer_get_time() - s_wanted_remote_us < 5000000LL) ? s_wanted_remote : 0);
+    portEXIT_CRITICAL(&s_mux);
+    return m;
+}

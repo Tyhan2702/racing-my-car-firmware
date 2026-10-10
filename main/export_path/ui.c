@@ -487,6 +487,12 @@ static void ui_build_theme_snapshot(obd_snapshot_t *out,
 
     int16_t iat = obd_data_get_intake_temp();
     out->intake_temp = (iat < 0) ? 0 : (iat > 255 ? 255 : (uint8_t)iat);
+    int16_t load = obd_data_get_load_pct();
+    out->load = (load < 0) ? 0 : (load > 100 ? 100 : (uint8_t)load);
+    for (int i = 0; i < OBD_EXT_COUNT && i < (int)(sizeof(out->ext) / sizeof(out->ext[0])); i++) {
+        int32_t v = obd_data_get_ext((obd_ext_t)i);
+        out->ext[i] = (v == OBD_EXT_INVALID) ? 0 : v;
+    }
 }
 
 void my_timerMain(lv_timer_t * timer)
@@ -619,6 +625,8 @@ void my_timerMain(lv_timer_t * timer)
             }
         }
     }
+    /* Extra data (fuel level, trims, ...) is asked of the car only while a theme page shows it */
+    obd_data_set_wanted_local(scr == ui_ScreenPageThemeGauge ? theme_wanted_ext_mask() : 0);
     /* Theme-provided gauge page: feed the theme engine's arc/bar/label bindings */
     if (scr == ui_ScreenPageThemeGauge) {
         obd_snapshot_t theme_snap;
