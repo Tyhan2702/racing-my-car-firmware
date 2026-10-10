@@ -72,6 +72,13 @@ static const obd_method_t TOYOTA_KNOCK[] = {
 static const obd_method_t TOYOTA_FUEL_L[] = {
     {"700", "708", 0x22, 0x1F2F, 0, 1, false, 100, 255, 0, MV_LINEAR, false},  // %, 194 my / 30 models
 };
+// Corolla / Altis E170 (2014) and other CVT Toyotas: the combination meter (7C0) knows the tank in litres; shown in %
+// of a 50 L tank (Corolla Altis E170; Vios / Yaris 42 L read a little low). OBDb Toyota-Corolla / RAV4 / Yaris.
+static const obd_method_t TOYOTA_CVT_FUEL_L[] = {
+    {"700", "708", 0x22, 0x1F2F, 0, 1, false, 100, 255, 0, MV_LINEAR, false},  // %, newer ECUs
+    {"7C0", "7C8", 0x21, 0x29,   0, 1, false, 1,   1,   0, MV_LINEAR, false},  // A/2 litres -> A/2/50*100 = A %
+    {"7C0", "7C8", 0x22, 0x1022, 0, 2, false, 1,   50,  0, MV_LINEAR, false},  // (256A+B)/100 litres -> /50 %
+};
 static const obd_method_t TOYOTA_FUEL_P[] = {
     {"700", "708", 0x22, 0x1F6D, 3, 2, false, 10, 1, 0, MV_LINEAR, false},    // direct injection rail, actual, 145 my
     {"700", "708", 0x22, 0x10CD, 0, 2, false, 1, 10, -3277, MV_LINEAR, false}, // low-pressure side, 137 my / 24 models
@@ -568,7 +575,7 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_timeout = 0x19,
         .methods = { [MV_OIL_TEMP] = MV_SET(TOYOTA_OIL_T), [MV_GEAR] = MV_SET(TOYOTA_GEAR), [MV_OIL_PRESSURE] = MV_SET(TOYOTA_OIL_P),
                      [MV_TRANS_TEMP] = MV_SET(TOYOTA_TRANS_T), [MV_KNOCK] = MV_SET(TOYOTA_KNOCK),
-                     [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P),
+                     [MV_FUEL_LEVEL] = MV_SET(TOYOTA_CVT_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P),
                      [MV_SHIFT] = MV_SET(TOYOTA_SHIFT) },
         .poll_gap_ms = 10,                 // the engine ECU answers quickly on CAN; the next request waits for the reply anyway
     },

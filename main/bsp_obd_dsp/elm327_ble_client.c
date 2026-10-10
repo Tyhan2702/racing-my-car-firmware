@@ -1705,6 +1705,7 @@ static void mv_handle(int sig, const char *buf)
             ok = v >= -200 && v <= 600;                        // 0.1° retard
             if (ok) obd_data_set_ext(OBD_EXT_KNOCK, v);
         } else if (sig == MV_FUEL_LEVEL) {
+            if (v > 100 && v <= 130) v = 100;                  // a tank filled past its nominal litres
             ok = v >= 0 && v <= 100;
             if (ok) obd_data_set_ext(OBD_EXT_FUEL_LEVEL, v);
         } else if (sig == MV_FUEL_PRESSURE) {
