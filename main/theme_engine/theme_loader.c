@@ -505,6 +505,44 @@ static int32_t page_sweep_value(const theme_binding_t *bind, int32_t value)
     return hi + (int32_t)((value - hi) * f);
 }
 
+// A gear label shows N (neutral, 0), R (reverse, -1) and "-" (unknown, 127) instead of the raw number, when the
+// label's font has the letter (themes made before Studio added N and R to gear fonts keep the digits; "-" is in
+// every font, it is the placeholder). NULL: show the number.
+static bool font_has(const lv_font_t *f, uint32_t ch)
+{
+    lv_font_glyph_dsc_t g;
+    return f && lv_font_get_glyph_dsc(f, &g, ch, 0) && g.box_w > 0;
+}
+static const char *gear_word(lv_obj_t *label, int32_t value)
+{
+    const lv_font_t *f = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+    if (value == 127) return font_has(f, '-') ? "-" : "";
+    if (value == 0 && font_has(f, 'N')) return "N";
+    if (value == -1 && font_has(f, 'R')) return "R";
+    return NULL;
+}
+// The label's printf format with its one number conversion replaced by a word (prefix and suffix kept)
+static void format_with_word(const char *fmt, const char *word, char *out, size_t n)
+{
+    size_t k = 0;
+    const char *p = fmt;
+    bool done = false;
+    while (*p && k + 1 < n) {
+        if (*p == '%' && p[1] == '%') { out[k++] = '%'; p += 2; continue; }
+        if (*p == '%') {
+            p++;
+            while (*p && strchr("-+ #0123456789.l", *p)) p++;   // flags, width, precision, length
+            if (*p) p++;                                         // the conversion
+            if (!done) for (const char *w = word; *w && k + 1 < n; w++) out[k++] = *w;
+            else if (k && out[k - 1] == '.') k--;                // "%d.%02d" (a divisor): the decimals go
+            done = true;
+            continue;
+        }
+        out[k++] = *p++;
+    }
+    out[k] = 0;
+}
+
 void theme_update_data(const obd_snapshot_t *obd) {
     if (!s_ctx.loaded || !obd) {
         return;
@@ -557,7 +595,12 @@ void theme_update_data(const obd_snapshot_t *obd) {
             break;
         }
         case BINDING_KIND_LABEL: {
-            if (bind->divisor > 1) {
+            const char *word = strcmp(bind->data_source, "obd.gear") == 0 ? gear_word(bind->widget, value) : NULL;
+            if (word) {
+                char text[48];
+                format_with_word(bind->format, word, text, sizeof(text));
+                lv_label_set_text(bind->widget, text);
+            } else if (bind->divisor > 1) {
                 // Split e.g. 150/100 -> whole=1, frac=50, so "%d.%02d" -> "1.50"
                 int32_t whole = value / bind->divisor;
                 int32_t frac = value % bind->divisor;
