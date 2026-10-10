@@ -165,6 +165,11 @@ static const vehicle_override_t s_vehicle_overrides[] = {
         .can_rule_count  = 1,
     },
     {
+        .match_name      = "Toyota CVT",
+        .can_rules       = can_rules_toyota,
+        .can_rule_count  = 1,
+    },
+    {
         // BRZ ZC6 Gen1 (2013-2020, FA20 NA, Gen1)
         // RPM stays on OBD; TPS/coolant/oil come from CAN broadcast frames.
         .match_name      = "ZN/C6 CAN",

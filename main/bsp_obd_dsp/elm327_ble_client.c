@@ -21,6 +21,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include "nvs_storage.h"
 
@@ -1574,7 +1575,21 @@ static bool mv_same_header(const obd_method_t *m)
     const char *h = get_vehicle_fixed_header_cmd();
     return m->hdr && h && strncmp(h + 4, m->hdr, strlen(m->hdr)) == 0 && h[4 + strlen(m->hdr)] == '\r';
 }
-// What the gauge shows as the gear: -2 P, -1 R, 0 N, -3 D (no gear number), 1..8 in S / manual mode
+// CVT in D: the step whose overall ratio (gear_ratios x final drive) is nearest to RPM / speed (closest on a log
+// scale, so the low steps, far apart, and the high ones, close together, weigh alike); 1 when (nearly) stopped
+static int8_t cvt_step(const vehicle_profile_t *vp)
+{
+    float rpm = obd_data_get_rpm(), kmh = obd_data_get_speed(), k = vehicle_profile_calc_constant(vp);
+    if (kmh < 5 || rpm < 300 || k <= 0 || vp->gear_count < 1) return 1;
+    float ratio = rpm / (kmh * k), best = 1e9f;
+    int8_t g = 1;
+    for (uint8_t i = 1; i <= vp->gear_count && i < VEHICLE_MAX_GEARS; i++) {
+        float d = fabsf(logf(ratio / (vp->gear_ratios[i] * vp->final_drive_ratio)));
+        if (d < best) { best = d; g = (int8_t)i; }
+    }
+    return g;
+}
+// What the gauge shows as the gear: -2 P, -1 R, 0 N, D: the gear (automatic) / simulated step (CVT) or -3, M1-M7
 static void gear_publish(void)
 {
     bool fresh = s_shift && esp_timer_get_time() - s_shift_us < 3000000;
@@ -1582,8 +1597,13 @@ static void gear_publish(void)
         if (s_tq_gear >= 0 && s_cbs.on_parsed_obd_gear) s_cbs.on_parsed_obd_gear((uint8_t)s_tq_gear);
         return;
     }
-    int8_t g = s_shift == 'P' ? -2 : s_shift == 'R' ? -1 : s_shift == 'N' ? 0 : s_shift == 'D' ? -3
-             : (s_tq_gear >= 1 && s_tq_gear <= 8 ? s_tq_gear : -3);
+    int8_t g = s_shift == 'P' ? -2 : s_shift == 'R' ? -1 : s_shift == 'N' ? 0 : -3;
+    if (s_shift == 'M') g = s_tq_gear >= 1 && s_tq_gear <= 8 ? s_tq_gear : -3;      // manual mode: the ECU's step (M1-M7)
+    else if (s_shift == 'D') {
+        const vehicle_profile_t *vp = vehicle_profile_get_active();
+        if (vp && vp->cvt) g = cvt_step(vp);                                         // CVT: the simulated step from RPM / speed
+        else if (s_tq_gear >= 1 && s_tq_gear <= 8) g = s_tq_gear;                    // automatic: the gear it is in
+    }
     obd_data_set_gear(g);
 }
 // Sends the current method's request (header and receive filter around it); false when the profile has no list for it

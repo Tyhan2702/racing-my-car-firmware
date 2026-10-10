@@ -551,6 +551,27 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_timeout = 0x19,
         .methods = { [MV_OIL_TEMP] = MV_SET(STD_OIL_T), [MV_TRANS_TEMP] = MV_SET(NISSAN_TRANS_T) },
     },
+    // Toyota with a CVT (Corolla / Altis, Vios, Yaris ...): P R N D from the lever, M1-M7 in manual mode, and in D the
+    // simulated step worked out from RPM / speed. Appended so saved vehicle numbers stay the same.
+    {
+        .name = "Toyota CVT",
+        .final_drive_ratio = 1.0f,             // gear_ratios below are overall ratios (CVT x final drive)
+        .tire_rolling_radius_m = 0.316f,
+        .gear_count = 7,
+        .gear_ratios = {0, 15.00f, 8.60f, 5.80f, 4.20f, 3.20f, 2.60f, 2.20f},   // 2014 Corolla Altis CVT-i, 7 simulated steps (owner's gauge, 205/55R16)
+        .gear_tolerance = 0.0f,
+        .oil_temp_strategy = { .primary = OIL_TEMP_MODE_PID_5C, .secondary = OIL_TEMP_MODE_NONE, .tertiary = OIL_TEMP_MODE_NONE, .quaternary = OIL_TEMP_MODE_NONE },
+        .has_boost = true,                 // 010B on the turbo models (MAF engines just don't answer it)
+        .cvt = true,
+        .forced_protocol = 0,
+        .obd_functional_addr = false,      // physical 7E0: Toyota's engine ECU answers mode 01, 21 and 22 there
+        .obd_timeout = 0x19,
+        .methods = { [MV_OIL_TEMP] = MV_SET(TOYOTA_OIL_T), [MV_GEAR] = MV_SET(TOYOTA_GEAR), [MV_OIL_PRESSURE] = MV_SET(TOYOTA_OIL_P),
+                     [MV_TRANS_TEMP] = MV_SET(TOYOTA_TRANS_T), [MV_KNOCK] = MV_SET(TOYOTA_KNOCK),
+                     [MV_FUEL_LEVEL] = MV_SET(TOYOTA_FUEL_L), [MV_FUEL_PRESSURE] = MV_SET(TOYOTA_FUEL_P),
+                     [MV_SHIFT] = MV_SET(TOYOTA_SHIFT) },
+        .poll_gap_ms = 5,                  // the engine ECU answers quickly on CAN: a short gap keeps the RPM lively
+    },
 };
 
 #define PROFILE_COUNT (sizeof(s_profiles) / sizeof(s_profiles[0]))
