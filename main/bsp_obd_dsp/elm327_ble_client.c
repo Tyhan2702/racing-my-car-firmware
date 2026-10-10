@@ -1473,8 +1473,8 @@ static void obd_poll_task(void *arg) {
             }
         }
         // OBD profiles with broadcast extras (Toyota doors): listen between full OBD rounds
-        if (!can_broadcast && completed_obd_round && ov_poll && ov_poll->can_rules && ov_poll->can_rule_count)
-            can_side_listen(ov_poll);
+        if (0 && !can_broadcast && completed_obd_round && ov_poll && ov_poll->can_rules && ov_poll->can_rule_count)
+            (void)can_side_listen;   // off for now: the gauge froze on the 2014 Corolla while connected; ATMA windows are the prime suspect
 
         // Inter-slot idle gap: prefer the override's poll_gap_ms first, then the profile's poll_gap_ms (e.g. ZC/N6, MX-5 ND use 1ms); fall back to the global default 30ms.
         // Too small overwhelms cheap BLE adapters; profiles with fast CAN-bus response can safely go smaller.
