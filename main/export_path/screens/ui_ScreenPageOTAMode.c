@@ -44,7 +44,7 @@ void ui_ScreenPageOTAMode_screen_init(void)
     lv_obj_t *card = rmc_card(scr, RMC_CARD_W, 82);
     lv_obj_align(card, LV_ALIGN_CENTER, 0, 10);
     s_ssid = rmc_row(card, "WI-FI", 14);
-    lv_label_set_text(s_ssid, "OBD-Gauge-OTA");
+    lv_label_set_text(s_ssid, "RMC - 1.85 Gauge");   // until Wi-Fi is up and the full name is known
     lv_obj_t *pw = rmc_row(card, "PASSWORD", 46);
     lv_label_set_text(pw, "88888888");
     lv_obj_set_style_text_color(pw, lv_color_hex(RMC_YELLOW), 0);
@@ -89,7 +89,7 @@ void ui_ScreenPageOTAMode_screen_init(void)
     ESP_LOGI(TAG, "Starting WiFi OTA server from OTA mode screen");
     ota_wifi_info_t info = {0};
     bool started = ota_wifi_server_start(&info, NULL);
-    if (started && info.ssid[0] && s_ssid) lv_label_set_text(s_ssid, info.ssid);   // the real name, not OBD-Gauge-OTA-xxxx
+    if (started && info.ssid[0] && s_ssid) lv_label_set_text(s_ssid, info.ssid);   // the full name, e.g. "RMC - 1.85 Gauge 3F2A"
     if (!started) {
         ESP_LOGE(TAG, "Failed to start WiFi OTA server");
         rs485_brake_temp_resume();
