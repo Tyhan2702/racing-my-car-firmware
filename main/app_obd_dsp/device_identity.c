@@ -83,7 +83,7 @@ const char *device_identity_manifest_json(void)
              "\"build_tag\":\"%s\","
              "\"branch\":\"%s\","
              "\"count\":%u,"
-             "\"features\":[\"factory_reset\",\"locked_boot\"]"
+             "\"features\":[\"factory_reset\",\"locked_boot\",\"theme_zlib\",\"theme_assets_64\"]"
              "},"
              "\"theme_pages\":%u"
              "}",

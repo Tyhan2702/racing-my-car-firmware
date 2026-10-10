@@ -1,4 +1,5 @@
 #include "theme_interface.h"
+#include "app_obd_dsp/rmc_inflate.h"
 #include "esp_log.h"
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
@@ -61,19 +62,27 @@ typedef struct {
 // addition to the dedicated dial_img/ring_img fields, which stay for
 // theme_get_asset()'s "dial"/"ring" back-compat lookup) so "image" layout
 // elements can address them the same way as any other imported image.
-#define THEME_MAX_NAMED_ASSETS 16
+// Pictures may be stored zlib-compressed ("rgb565_z" / "rgba8888_z", with "raw_size"): the app compresses them when the
+// gauge reports "theme_zlib" (about four times more themes fit in the partition). They are inflated into PSRAM when a
+// page first uses them and freed two pages later, so only the pages on screen (and the one leaving it) hold memory.
+#define THEME_MAX_NAMED_ASSETS 64
 typedef struct {
     char name[32];
     const void *data;
     esp_partition_mmap_handle_t handle;
     lv_img_dsc_t img;
+    size_t z_size, raw_size;   // zipped: compressed bytes in flash, inflated size
+    uint8_t *ram;              // zipped: the inflated picture (PSRAM) while a page uses it
+    uint32_t gen;              // the page build that last used it
+    bool zipped;
 } theme_named_asset_t;
+static uint32_t s_page_gen;
 
 // A compiled LVGL binary font ("lv_font_bin" asset), mmap'd from flash like
 // any other named asset. Kept separate from theme_named_asset_t because it's
 // read through lv_fs (see theme_font_fs_*) rather than handed to LVGL as a
 // raw lv_img_dsc_t pointer.
-#define THEME_MAX_NAMED_FONTS 16
+#define THEME_MAX_NAMED_FONTS 48
 typedef struct {
     char name[40];
     const void *data;
@@ -659,11 +668,30 @@ const lv_img_dsc_t* theme_get_asset(const char *asset_name) {
 // "image" elements, which reference arbitrary imported images by name.
 static const lv_img_dsc_t* theme_find_named_asset(const char *name) {
     for (int i = 0; i < s_ctx.named_asset_count; i++) {
-        if (strcmp(s_ctx.named_assets[i].name, name) == 0) {
-            return &s_ctx.named_assets[i].img;
+        theme_named_asset_t *a = &s_ctx.named_assets[i];
+        if (strcmp(a->name, name) != 0) continue;
+        a->gen = s_page_gen;
+        if (a->zipped && !a->ram) {
+            a->ram = rmc_inflate(a->data, a->z_size, a->raw_size);
+            if (!a->ram) { ESP_LOGW(TAG, "Asset '%s': cannot inflate %u bytes", a->name, (unsigned)a->raw_size); return NULL; }
+            a->img.data = a->ram;
+            a->img.data_size = a->raw_size;
         }
+        return &a->img;
     }
     return NULL;
+}
+// A new page is being built: pictures neither it nor the page before it used go back to the heap
+static void theme_release_old_assets(void) {
+    s_page_gen++;
+    for (int i = 0; i < s_ctx.named_asset_count; i++) {
+        theme_named_asset_t *a = &s_ctx.named_assets[i];
+        if (a->ram && a->gen + 1 < s_page_gen) {
+            heap_caps_free(a->ram);
+            a->ram = NULL;
+            a->img.data = NULL;
+        }
+    }
 }
 
 // Looks up a compiled font asset ("lv_font_bin") by its packer-assigned
@@ -746,6 +774,10 @@ void theme_unload(void) {
     // copies of a named_assets[] entry's handle -- unmap only through this
     // table so each mapping is torn down exactly once.
     for (int i = 0; i < s_ctx.named_asset_count; i++) {
+        if (s_ctx.named_assets[i].ram) {
+            heap_caps_free(s_ctx.named_assets[i].ram);
+            s_ctx.named_assets[i].ram = NULL;
+        }
         if (s_ctx.named_assets[i].handle) {
             esp_partition_munmap(s_ctx.named_assets[i].handle);
         }
@@ -894,7 +926,7 @@ static esp_err_t theme_parse_manifest(void) {
 // Defaults to true-color (no alpha) for anything unrecognized, matching the
 // original dial_background behavior.
 static lv_img_cf_t theme_asset_color_format(const char *format) {
-    if (format && strcmp(format, "rgba8888") == 0) {
+    if (format && (strcmp(format, "rgba8888") == 0 || strcmp(format, "rgba8888_z") == 0)) {
         return LV_IMG_CF_TRUE_COLOR_ALPHA;
     }
     return LV_IMG_CF_TRUE_COLOR;
@@ -979,12 +1011,26 @@ static esp_err_t theme_load_assets(void) {
         slot->img.header.w = width_obj ? width_obj->valueint : 360;
         slot->img.header.h = height_obj ? height_obj->valueint : 360;
         slot->img.header.cf = theme_asset_color_format(format);
-        slot->img.data = (const uint8_t *)slot->data;
-        slot->img.data_size = size;
+        size_t fl = format ? strlen(format) : 0;
+        slot->zipped = fl > 2 && strcmp(format + fl - 2, "_z") == 0;
+        slot->ram = NULL;
+        slot->gen = 0;
+        if (slot->zipped) {
+            cJSON *raw = cJSON_GetObjectItem(asset, "raw_size");
+            slot->z_size = size;
+            slot->raw_size = raw ? (size_t)raw->valueint : 0;
+            slot->img.data = NULL;                 // inflated when a page first uses it
+            slot->img.data_size = 0;
+            if (!slot->raw_size) { esp_partition_munmap(slot->handle); ESP_LOGW(TAG, "Asset '%s' has no raw_size", name); continue; }
+        } else {
+            slot->img.data = (const uint8_t *)slot->data;
+            slot->img.data_size = size;
+        }
         s_ctx.named_asset_count++;
         ESP_LOGI(TAG, "Asset '%s' loaded: %zu bytes @ 0x%zx", name, size, offset);
 
-        // Back-compat mirror for theme_get_asset("dial"/"ring")
+        // Back-compat mirror for theme_get_asset("dial"/"ring") (stored plainly only)
+        if (slot->zipped) continue;
         if (strcmp(name, "dial_background") == 0) {
             s_ctx.dial_data = slot->data;
             s_ctx.dial_handle = slot->handle;
@@ -1325,6 +1371,7 @@ static lv_obj_t* theme_create_custom_page(const char *page_id) {
     s_ctx.binding_count = 0;
     memset(s_ctx.bindings, 0, sizeof(s_ctx.bindings));
     s_wanted_ext = 0;
+    theme_release_old_assets();
     s_page_sweep_start_us = esp_timer_get_time();   // every page shown starts with a sweep
 
     lv_obj_t *page = lv_obj_create(NULL);
