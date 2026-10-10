@@ -25,10 +25,14 @@ static const obd_method_t TOYOTA_GEAR[] = {
 static const obd_method_t TOYOTA_OIL_P[] = {
     {"700", "708", 0x22, 0x1074, 0, 2, false, 10, 128, 0, MV_LINEAR, false},  // kPa, 168 my / 30 models
 };
-static const obd_method_t HONDA_OIL_T[] = {   // 29-bit engine ECU, its address differs by model
-    {"18DA10F1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true}, // 46 my / 7 models
-    {"18DA11F1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true}, // 36 my / 8 models
-    {"18DA0EF1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true}, // 11 my / 3 models
+static const obd_method_t HONDA_OIL_T[] = {   // 29-bit engine ECU, its address differs by model; OBDb names two bytes
+    // "engine oil temperature": on the recorded 2015 Civic byte 14 carried it (18..83 °C) and byte 11 read 0, so 14
+    // first. A raw 0 (-40 °C) counts as no reading, so a model using the other byte moves on to it.
+    {"18DA10F1", NULL, 0x22, 0x2666, 14, 1, false, 1, 1, -40, MV_LINEAR, true}, // 46 my / 7 models
+    {"18DA10F1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true},
+    {"18DA11F1", NULL, 0x22, 0x2666, 14, 1, false, 1, 1, -40, MV_LINEAR, true}, // 36 my / 8 models
+    {"18DA11F1", NULL, 0x22, 0x2666, 11, 1, false, 1, 1, -40, MV_LINEAR, true},
+    {"18DA0EF1", NULL, 0x22, 0x2666, 14, 1, false, 1, 1, -40, MV_LINEAR, true}, // 11 my / 3 models
     {NULL,       NULL, 0x01, 0x5C,    0, 1, false, 1, 1, -40, MV_LINEAR, false},
 };
 static const obd_method_t HONDA_GEAR[] = {
@@ -43,7 +47,7 @@ static const obd_method_t MAZDA_OIL_T[] = {
 static const obd_method_t MAZDA_GEAR[] = {
     {"7E0", NULL, 0x22, 0x1E12, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // 20 my / 3 models
     {"7E1", NULL, 0x22, 0x1E12, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // transmission ECU, 10 my / 2 models
-    {"7E0", NULL, 0x22, 0x1E1F, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // 18 my / 3 models
+    {"7E0", NULL, 0x22, 0x1E1F, 0, 1, false, 1, 1, 0, MV_GEAR_PLAIN, false},  // 18 my / 3 models; 4 of 18 recorded replies held no gear (70, 128): last
 };
 static const obd_method_t MAZDA_OIL_P[] = {
     {"7E0", NULL, 0x22, 0x0415, 0, 2, true, 1, 1, 0, MV_LINEAR, false},       // kPa, 70 my / 9 models

@@ -151,6 +151,7 @@ static volatile bool s_elm_ready = true; // initially true so the first ATZ can 
 static volatile bool s_expect_mode21 = false; // true=last command was 21 01, waiting for a 61 01 response
 static uint8_t s_active_protocol = 0;          // ATSP protocol of the current link (7/9 = 29-bit CAN)
 static void mv_reset(void);
+static bool mv_query(int sig);
 // ---- CAN continuous monitor mode (ATMA, parse each frame as it arrives) ----
 static volatile bool s_zc6_can_monitor_active = false;
 static bool s_zc_can_obd_phase = false;          // true=running the standard OBD poll
@@ -1347,12 +1348,12 @@ static void mv_handle(int sig, const char *buf)
     if (m->kind == MV_GEAR_PLAIN || m->kind == MV_GEAR_HONDA) {
         uint8_t gear = (uint8_t)raw;
         if (m->kind == MV_GEAR_HONDA) gear = raw == 0 || raw == 14 ? 0 : raw >= 1 && raw <= 9 ? (uint8_t)raw : 0xFF;
-        ok = raw <= 15;
+        ok = raw <= 15;                                        // larger values are not a gear (seen on Mazda 22 1E1F)
         if (ok && s_cbs.on_parsed_obd_gear) s_cbs.on_parsed_obd_gear(gear);
     } else {
         int32_t v = raw * m->mul / (m->div ? m->div : 1) + m->add;
         if (sig == MV_OIL_TEMP) {
-            ok = v >= -40 && v <= 180;
+            ok = v > -40 && v <= 180;                          // a raw 0 (-40 °C) is "no reading" on these ECUs
             if (ok && s_cbs.on_parsed_oil_temp) s_cbs.on_parsed_oil_temp((uint32_t)v);
         } else if (sig == MV_OIL_PRESSURE) {
             ok = v >= 0 && v <= 1500;                          // kPa
