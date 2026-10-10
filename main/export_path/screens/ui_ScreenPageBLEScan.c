@@ -171,6 +171,7 @@ static void on_device_selected(lv_event_t *e) {
     strncpy(cfg.ble_device_name, name, sizeof(cfg.ble_device_name) - 1);
     cfg.ble_device_name[sizeof(cfg.ble_device_name) - 1] = '\0';
     memcpy(cfg.ble_obd_mac, mac, 6);
+    cfg.protocol = 0;   // a new adapter (maybe on another car): look for the protocol again
     nvs_cfg_set(&cfg);
 
     // Refresh the saved device panel immediately

@@ -11,6 +11,7 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/vehicle_profiles.h"
+#include "bsp_obd_dsp/elm327_ble_client.h"
 #include "esp_system.h"
 
 #define CARD_W 252
@@ -109,6 +110,7 @@ static void on_vehicle(lv_event_t *e)
     cfg.vehicle_profile_idx = (uint8_t)((cfg.vehicle_profile_idx + n + step) % n);
     save(&cfg);
     vehicle_profile_set_active(cfg.vehicle_profile_idx);         // gear detection uses it right away
+    elm327_ble_request_reinit(true);                             // and the OBD link: header, protocol, timeouts
     show_vehicle();
 }
 

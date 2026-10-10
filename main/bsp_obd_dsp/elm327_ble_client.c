@@ -922,6 +922,24 @@ static void do_elm_init(void) {
     s_last_obd_valid_us = esp_timer_get_time();   // give a fresh "valid data" baseline so self-heal doesn't trigger right after init
 }
 
+// The car or the adapter changed (SETTINGS → VEHICLE, a new OBD device): run the ELM init again with the new profile
+// (header, protocol, timeouts) instead of waiting for the next reconnect. redetect also forgets the protocol found by
+// auto-detect on the previous car, so it is looked for again (profiles with a forced protocol don't need it).
+static volatile bool s_reinit_request = false;
+static void forget_detected_protocol(void)
+{
+    const nvs_user_cfg_t *cfg = nvs_cfg_get();
+    if (cfg->protocol == 0) return;
+    nvs_user_cfg_t c = *cfg;
+    c.protocol = 0;
+    nvs_cfg_set(&c);
+}
+void elm327_ble_request_reinit(bool redetect)
+{
+    if (redetect) forget_detected_protocol();
+    s_reinit_request = true;
+}
+
 static void obd_poll_task(void *arg) {
     s_poll_task_handle = xTaskGetCurrentTaskHandle();
     esp_task_wdt_add(NULL);  // register with the watchdog
@@ -944,6 +962,7 @@ static void obd_poll_task(void *arg) {
             vTaskDelay(pdMS_TO_TICKS(300));
             continue;
         }
+        if (s_reinit_request) { s_reinit_request = false; inited = false; }
         // Init only after the notify subscription is ready following a (re)connect; re-runs on every reconnect (fixes "must disconnect/reconnect to get readings")
         if (!inited) {
             vTaskDelay(pdMS_TO_TICKS(300));   // give the subscription a bit more time to settle
@@ -971,6 +990,9 @@ static void obd_poll_task(void *arg) {
                 // equivalent to automatically doing a "manual disconnect/reconnect" (re-subscribe notify + re-run init; by then the bus is usually awake).
                 ESP_LOGW(TAG, "Self-heal escalate: force BLE reconnect (re-init didn't help)");
                 heal_attempts = 0;
+                // the protocol auto-detect saved may belong to another car (or was wrong): look for it again
+                const vehicle_profile_t *vp_heal = vehicle_profile_get_active();
+                if (!(vp_heal && vp_heal->forced_protocol)) forget_detected_protocol();
                 inited = false;
                 esp_ble_gattc_close(s_gattc_if, s_conn_id);
                 vTaskDelay(pdMS_TO_TICKS(300));

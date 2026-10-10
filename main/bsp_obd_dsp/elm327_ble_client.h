@@ -89,6 +89,8 @@ void elm327_ble_disconnect(void);
 
 // Forget the bound adapter (no more auto-reconnect) and drop the connection if there is one.
 void elm327_ble_forget_target(void);
+// The car or adapter changed: init the ELM again with the active profile; redetect = look for the protocol again.
+void elm327_ble_request_reinit(bool redetect);
 
 // WiFi OTA pause/resume: drop the ELM327 link and suppress auto-reconnect +
 // polling during OTA, so the SoftAP gets the full 2.4GHz radio; re-arm
