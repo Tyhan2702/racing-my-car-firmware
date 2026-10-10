@@ -499,9 +499,17 @@ static int elm327_auto_detect_protocol(void) {
 }
 
 static void default_on_parsed_rpm(uint16_t rpm) { obd_data_set_rpm(rpm); }
+// Acceleration test (menu → TEST): every speed reply with its arrival time, before the display rounding below
+static volatile bool s_fast_speed;
+static void (*volatile s_speed_tap)(float kmh, int64_t us);
+void elm327_set_fast_speed(bool on) { s_fast_speed = on; }
+void elm327_set_speed_tap(void (*cb)(float kmh, int64_t us)) { s_speed_tap = cb; }
+
 static void default_on_parsed_speed(uint8_t kmh) {
     const vehicle_profile_t *p = vehicle_profile_get_active();
     float sc = (p && p->speed_scale > 0.0f) ? p->speed_scale : 1.0f;
+    void (*tap)(float, int64_t) = s_speed_tap;
+    if (tap) tap((float)kmh * sc, esp_timer_get_time());
     int32_t v = (int32_t)((float)kmh * sc + 0.5f);
     if (v > 255) v = 255;
     if (p && p->can_broadcast_mode && obd_data_get_rpm() < 800)
@@ -1200,6 +1208,14 @@ static void obd_poll_task(void *arg) {
             }
             ESP_LOGW(TAG, "No valid OBD data >10s, re-init ELM (self-heal #%u)...", heal_attempts);
             inited = false;
+            continue;
+        }
+        // ---- Acceleration test: speed only, as fast as the car answers (each send waits for the previous '>') ----
+        if (s_fast_speed) {
+            static uint8_t n;
+            if (s_zc6_can_monitor_active) zc6_can_monitor_exit();
+            elm327_ble_send_ascii_blocking((++n & 15) ? "01 0D\r" : "01 0C\r");   // RPM now and then
+            vTaskDelay(1);
             continue;
         }
         // ---- Mixed CAN/OBD mode ----

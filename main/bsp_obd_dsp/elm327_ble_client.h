@@ -93,6 +93,9 @@ void elm327_ble_forget_target(void);
 void elm327_ble_request_reinit(bool redetect);
 // DATA page (menu → DATA): while active the poller also walks every PID the car answers, the brand methods, ATRV, VIN
 void elm327_scan_set_active(bool on);
+// Acceleration test (menu → TEST): poll only the speed, as fast as the car answers; tap gets every reply (km/h, time)
+void elm327_set_fast_speed(bool on);
+void elm327_set_speed_tap(void (*cb)(float kmh, int64_t us));
 bool elm327_scan_get(uint8_t pid, uint8_t *d, uint8_t *n);   // last reply's data bytes (up to 14), false when none in 20 s
 int  elm327_scan_supported(uint8_t pid);                     // 1 / 0 from the car's bitmaps, -1 unknown
 const char *elm327_scan_vin(void);                           // "" until read

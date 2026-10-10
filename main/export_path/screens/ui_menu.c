@@ -41,6 +41,7 @@ LV_IMG_DECLARE(imgMenu_ota);
 LV_IMG_DECLARE(imgMenu_info);
 LV_IMG_DECLARE(imgMenu_boot);
 LV_IMG_DECLARE(imgMenu_data);
+LV_IMG_DECLARE(imgMenu_test);
 
 typedef struct {
     const char *key, *name;          // name: the label under the button
@@ -52,6 +53,7 @@ static void open_games(void);
 static void open_settings(void);
 static void open_obd(void);
 static void open_data(void);
+static void open_test(void);
 static void open_ota(void);
 static void open_info(void);
 static void open_boot(void);
@@ -61,7 +63,8 @@ static void open_boot(void);
 static const menu_item_t ITEMS[] = {
     {"obd",      "OBD",      &imgMenu_obd,      open_obd},
     {"data",     "DATA",     &imgMenu_data,     open_data},
-    {"settings", "SETUP",    &imgMenu_settings, open_settings},   // short, to fit four in the top row (the page says SETTINGS)
+    {"test",     "TEST",     &imgMenu_test,     open_test},
+    {"settings", "SETTINGS", &imgMenu_settings, open_settings},
     {"games",    "GAMES",    &imgMenu_games,    open_games},
     {"boot",     "BOOT",     &imgMenu_boot,     open_boot},
     {"ota",      "UPDATE",   &imgMenu_ota,      open_ota},
@@ -193,7 +196,7 @@ void ui_menu_go_home(void)
     // our own screens and the game screens free themselves when deleted; system pages are kept for later
     bool ours = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||
                 (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings) ||
-                (ui_ScreenPageObdData && cur == ui_ScreenPageObdData);
+                (ui_ScreenPageObdData && cur == ui_ScreenPageObdData) || (ui_ScreenPageAccel && cur == ui_ScreenPageAccel);
     lv_obj_t *home = ui_menu_home_screen();   // the theme page is still there when the menu was opened from it
     if (home != cur) load_screen(home, ours);
 }
@@ -274,12 +277,13 @@ static void ui_ScreenPageMenu_screen_init(void)
 
     s_btn_n = s_order_n < ITEM_COUNT ? s_order_n : ITEM_COUNT;
     if (s_last < 0 && s_btn_n) s_last = s_order[0];
-    // rows of three; seven buttons: four on top, three below, a little smaller so the top row fits the round screen
-    int per1 = s_btn_n > 6 ? 4 : 3, bs = s_btn_n > 6 ? 66 : BTN, cs = s_btn_n > 6 ? 84 : COL;
+    // rows of three; more than six buttons: three rows, the buttons a little smaller so all fit the round screen
+    bool three = s_btn_n > 6;
+    int bs = three ? 58 : BTN, cs = three ? 104 : COL;
     for (int b = 0; b < s_btn_n; b++) {
-        int row = b < per1 ? 0 : 1, in_row = row ? s_btn_n - per1 : (s_btn_n < per1 ? s_btn_n : per1), col = row ? b - per1 : b;
-        int step = row && s_btn_n > 6 ? COL : cs;           // the lower row of three keeps the usual spacing, a bit higher
-        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * step), y = row ? (s_btn_n > 6 ? ROW2 - 10 : ROW2) : ROW1;
+        int row = b / 3, in_row = s_btn_n - row * 3 < 3 ? s_btn_n - row * 3 : 3, col = b % 3;
+        static const int rows3[3] = {108, 194, 280};
+        int x = 180 + (int)((col - (in_row - 1) / 2.0f) * cs), y = three ? rows3[row] : (row ? ROW2 : ROW1);
         int item = s_btn_item[b] = s_order[b];
         lv_obj_t *btn = s_btn[b] = lv_obj_create(scr);
         lv_obj_remove_style_all(btn);
@@ -303,7 +307,7 @@ static void ui_ScreenPageMenu_screen_init(void)
         lv_label_set_long_mode(l, LV_LABEL_LONG_CLIP);       // one line
         lv_obj_set_width(l, 110);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_pos(l, x - 55, y + bs / 2 + 6);
+        lv_obj_set_pos(l, x - 55, y + bs / 2 + (three ? 3 : 6));
     }
     highlight(s_last);
 }
@@ -315,7 +319,7 @@ void ui_menu_open(void)
     // the gauge page stays, so closing the menu is instant; the boot animation preview and SETTINGS are freed
     lv_obj_t *cur = lv_scr_act();
     load_screen(ui_ScreenPageMenu, (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings) ||
-                                   (ui_ScreenPageObdData && cur == ui_ScreenPageObdData));
+                                   (ui_ScreenPageObdData && cur == ui_ScreenPageObdData) || (ui_ScreenPageAccel && cur == ui_ScreenPageAccel));
 }
 
 // leaving the menu for another page: the theme page is rebuilt on the way back (frees its memory meanwhile)
@@ -330,6 +334,7 @@ static void open_games(void) { leave_to(&ui_ScreenPageGames, ui_ScreenPageGames_
 static void open_settings(void) { leave_to(&ui_ScreenPageMenuSettings, ui_ScreenPageMenuSettings_screen_init); }
 static void open_obd(void)   { leave_to(&ui_ScreenPageBLEScan, ui_ScreenPageBLEScan_screen_init); }
 static void open_data(void)  { leave_to(&ui_ScreenPageObdData, ui_ScreenPageObdData_screen_init); }
+static void open_test(void)  { leave_to(&ui_ScreenPageAccel, ui_ScreenPageAccel_screen_init); }
 static void open_ota(void)   { leave_to(&ui_ScreenPageOTAMode, ui_ScreenPageOTAMode_screen_init); }
 static void open_info(void)  { leave_to(&ui_ScreenPageEasterEgg, ui_ScreenPageEasterEgg_screen_init); }
 
