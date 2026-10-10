@@ -155,6 +155,7 @@ static volatile bool s_expect_mode21 = false; // true=last command was 21 01, wa
 static uint8_t s_active_protocol = 0;          // ATSP protocol of the current link (7/9 = 29-bit CAN)
 static void mv_reset(void);
 static bool mv_query(int sig);
+static void fails_forget_now_and_then(void);
 // ---- CAN continuous monitor mode (ATMA, parse each frame as it arrives) ----
 static volatile bool s_zc6_can_monitor_active = false;
 static bool s_zc_can_obd_phase = false;          // true=running the standard OBD poll
