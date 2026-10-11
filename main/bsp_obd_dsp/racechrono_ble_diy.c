@@ -867,7 +867,11 @@ void racechrono_ble_diy_start(bool enable_racechrono)
         return;
     }
 
-    s_rc_enabled = enable_racechrono;
+    // The gauge is always visible to the phone and serves the OBD relay (OBD 诊断 reads the car through it while the
+    // gauge keeps reading too): the services and the advert no longer depend on the RACECHRONO setting, which now
+    // only starts the RaceChrono data stream.
+    s_rc_enabled = true;
+    bool stream = enable_racechrono;
 
     if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED ||
         esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
@@ -888,7 +892,7 @@ void racechrono_ble_diy_start(bool enable_racechrono)
         return;
     }
 
-    if (s_rc_enabled && !s_stream_task) {
+    if (stream && !s_stream_task) {
         xTaskCreate(stream_task, "rc_stream", 4096, NULL, 4, &s_stream_task);
     }
 
