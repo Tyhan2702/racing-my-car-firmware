@@ -16,6 +16,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "../ui_lang.h"
+#include "game_core.h"
+#include "esp_system.h"
 
 static const char *TAG_BLE_UI = "ble_scan_ui";
 
@@ -305,6 +307,18 @@ static void on_page_event(lv_event_t *e)
     }
 }
 
+// A gauge set to SLAVE by mistake never reads the car (it waits for a master): one tap back to a gauge of its own
+static void restart_now(lv_timer_t *t) { (void)t; esp_restart(); }
+static void on_use_alone(lv_event_t *e)
+{
+    (void)e;
+    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    cfg.device_role = ESPNOW_ROLE_STANDALONE;
+    nvs_cfg_set(&cfg);
+    gc_toast("RESTARTING...");
+    lv_timer_create(restart_now, 1200, NULL);
+}
+
 static void on_rescan(lv_event_t *e)
 {
     (void)e;
@@ -367,6 +381,14 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_center(del_lbl);
     lv_obj_add_event_cb(del_btn, on_saved_device_delete, LV_EVENT_CLICKED, NULL);
     if (!has_saved) { lv_obj_add_flag(s_saved_panel, LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(s_label_saved_hdr, LV_OBJ_FLAG_HIDDEN); }
+    if (s_slave_mode && !has_saved) {                            // say why there is no OBD here
+        lv_obj_t *why = lv_label_create(scr);
+        lv_label_set_text(why, TR("SLAVE GAUGE:\nSHOWS THE MASTER'S DATA,\nNO OBD ADAPTER"));
+        lv_obj_set_style_text_font(why, &ui_font_FontTypoderSize16, 0);
+        lv_obj_set_style_text_color(why, lv_color_hex(RMC_DIM), 0);
+        lv_obj_set_style_text_align(why, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(why, LV_ALIGN_TOP_MID, 0, 96);
+    }
 
     // ==== NEARBY ====
     lv_obj_t *label_nearby = lv_label_create(scr);
@@ -396,7 +418,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_center(scan_l);
 
     s_list = lv_list_create(scr);
-    lv_obj_set_size(s_list, RMC_CARD_W, 106);   // stays inside the round screen
+    lv_obj_set_size(s_list, RMC_CARD_W, s_slave_mode ? 70 : 106);   // stays inside the round screen
     lv_obj_align(s_list, LV_ALIGN_TOP_MID, 0, 202);
     lv_obj_set_style_bg_opa(s_list, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_list, 0, 0);
@@ -404,6 +426,11 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_set_style_pad_row(s_list, 8, 0);
     lv_obj_set_style_radius(s_list, 0, 0);
     lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_OFF);
+
+    if (s_slave_mode) {                                          // back to a gauge that reads the car itself
+        lv_obj_t *alone = rmc_pill(scr, "USE ALONE", true, 200, on_use_alone);
+        lv_obj_align(alone, LV_ALIGN_TOP_MID, 0, 280);
+    }
 
     lv_obj_add_event_cb(scr, ui_event_ble_scan_background, LV_EVENT_GESTURE, NULL);
     lv_obj_add_event_cb(scr, on_page_event, LV_EVENT_ALL, NULL);   // rescans on every visit

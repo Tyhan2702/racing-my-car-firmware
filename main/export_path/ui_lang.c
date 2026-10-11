@@ -76,6 +76,10 @@ static const char *const s_zh[][2] = {
     {"EXIT GAME?", "退出游戏？"}, {"PARK TO PLAY", "停车后才能玩"}, {"NOT ENOUGH MEMORY", "内存不足"}, {"HOLD 5 SEC TO EXIT", "长按 5 秒退出"},
     {"NO RECORD YET", "还没有纪录"}, {"NO GAMES YET\n\nINSTALL THEM IN THE\nRACING MY CAR APP\n(GAUGE > GAMES)", "还没有游戏\n\n请在 RACING MY CAR APP\n安装（仪表 > 游戏）"},
     {"BEST %ld%s%s", "最佳 %ld%s%s"},
+    // slave mode, explained (a gauge set to SLAVE by mistake finds no OBD adapter)
+    {"SLAVE GAUGE:\nSHOWS THE MASTER'S DATA,\nNO OBD ADAPTER", "这台仪表现在是副仪表：\n只显示主仪表的数据，\n不连接 OBD 接头"},
+    {"USE ALONE", "改为单独使用"}, {"RESTARTING...", "正在重启…"},
+    {"READS THE CAR", "连接 OBD"}, {"FOLLOWS A MASTER", "跟随主仪表"},
 };
 
 uint8_t ui_lang_get(void) { return nvs_cfg_get()->language == UI_LANG_ZH ? UI_LANG_ZH : UI_LANG_EN; }
