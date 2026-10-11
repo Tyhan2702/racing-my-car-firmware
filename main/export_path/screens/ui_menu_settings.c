@@ -117,7 +117,7 @@ static void on_vehicle(lv_event_t *e)
 
 // ---------- several gauges: mode, position, boot intro (were the firmware's own MULTI-GAUGE page) ----------
 static lv_obj_t *s_mode_val, *s_pos_val, *s_intro_val, *s_mode_note;
-static const char *const MODE_NOTES[] = {"READS THE CAR", "FOLLOWS A MASTER", "READS THE CAR"};   // what each mode does with OBD
+static const char *const MODE_NOTES[] = {"READS THE CAR", "NO OBD (SLAVE)", "READS THE CAR"};   // what each mode does with OBD
 static const char *const MODES[] = {"MASTER", "SLAVE", "ALONE"};    // device_role 0/1/2
 static const char *const INTROS[] = {"OFF", "VIDEO", "VIDEO"};      // intro_enable 0/(1)/2 (VIDEO: the app's boot animation)
 static void show_multi(void)
@@ -387,9 +387,10 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     lv_obj_align(lv_obj_get_child(c, 0), LV_ALIGN_LEFT_MID, 0, 0);
 
     s_mode_val = choice_card("GAUGE MODE", on_mode);
+    lv_obj_set_height(lv_obj_get_parent(s_mode_val), 118);           // a line more: what the mode does with OBD
     s_mode_note = lv_label_create(lv_obj_get_parent(s_mode_val));       // a slave never connects the OBD adapter
     lv_obj_set_style_text_font(s_mode_note, &ui_font_FontTypoderSize16, 0);
-    lv_obj_align(s_mode_note, LV_ALIGN_TOP_RIGHT, 0, 12);
+    lv_obj_align(s_mode_note, LV_ALIGN_TOP_LEFT, 0, 34);
     s_pos_val = choice_card("GAUGE POSITION", on_pos);
     s_intro_val = choice_card("BOOT INTRO", on_intro);
     show_multi();

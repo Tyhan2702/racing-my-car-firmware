@@ -79,7 +79,7 @@ static const char *const s_zh[][2] = {
     // slave mode, explained (a gauge set to SLAVE by mistake finds no OBD adapter)
     {"SLAVE GAUGE:\nSHOWS THE MASTER'S DATA,\nNO OBD ADAPTER", "这台仪表现在是副仪表：\n只显示主仪表的数据，\n不连接 OBD 接头"},
     {"USE ALONE", "改为单独使用"}, {"RESTARTING...", "正在重启…"},
-    {"READS THE CAR", "连接 OBD"}, {"FOLLOWS A MASTER", "跟随主仪表"},
+    {"READS THE CAR", "连接 OBD 读取车辆"}, {"NO OBD (SLAVE)", "跟随主仪表，不连 OBD"},
 };
 
 uint8_t ui_lang_get(void) { return nvs_cfg_get()->language == UI_LANG_ZH ? UI_LANG_ZH : UI_LANG_EN; }
