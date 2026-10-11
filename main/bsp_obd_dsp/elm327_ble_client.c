@@ -2018,6 +2018,12 @@ static void relay_serve(void)
     if (!bar2 || s_zc6_can_monitor_active) { racechrono_ble_diy_obd_reply("?\r>", 3); return; }
     *bar1 = *bar2 = '\0';
     const char *hdr = req, *rx = bar1 + 1, *cmd = bar2 + 1;
+    if (!strcmp(cmd, "RMC DOORS")) {                     // the gauge's own reading (CAN broadcast), not an adapter request
+        char r[24];
+        int n = snprintf(r, sizeof(r), "DOORS %d\r>", (int)obd_data_get_doors());
+        racechrono_ble_diy_obd_reply(r, (size_t)n);
+        return;
+    }
     if (!relay_hex(hdr, strlen(hdr), 8) || !relay_hex(rx, strlen(rx), 8) || !relay_allowed(cmd)) { racechrono_ble_diy_obd_reply("?\r>", 3); return; }
     char line[32];
     if (*hdr) { snprintf(line, sizeof(line), "ATSH%s\r", hdr); elm327_ble_send_ascii_blocking(line); }
