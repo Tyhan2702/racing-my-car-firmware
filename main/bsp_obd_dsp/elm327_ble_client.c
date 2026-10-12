@@ -83,9 +83,12 @@ static inline void mark_obd_data_valid(void) {
 bool elm327_ble_send_ascii_blocking(const char *ascii_cmd);
 static void elm_wait_ready(void);
 
+// "01 0C 1": the ELM327 returns as soon as one ECU has answered instead of waiting out its timeout for others (only on
+// CAN with the engine ECU's own header, and only when this adapter takes it; checked at the end of do_elm_init)
+static bool s_single_resp = false;
 static bool send_rpm_request(const char *site)
 {
-    bool ok = elm327_ble_send_ascii_blocking("01 0C\r");
+    bool ok = elm327_ble_send_ascii_blocking(s_single_resp ? "01 0C 1\r" : "01 0C\r");
     if (!ok) {
         ESP_LOGW(TAG, "[RPM][REQ:%s] send failed", site);
     }
@@ -772,10 +775,17 @@ static bool pid_ok(uint8_t pid)
     if (!(s_pid_sup_known & (1u << r))) return true;      // car never said: just ask
     return (s_pid_sup[r] >> (31 - ((pid - 1) % 32))) & 1u;
 }
+// a plain mode 01 request (no reply check), with the quick answer when the adapter takes it
+static void send_std(uint8_t pid)
+{
+    char cmd[12];
+    snprintf(cmd, sizeof(cmd), s_single_resp ? "01 %02X 1\r" : "01 %02X\r", pid);
+    elm327_ble_send_ascii_blocking(cmd);
+}
 static void send_pid(uint8_t pid)
 {
-    char cmd[8];
-    snprintf(cmd, sizeof(cmd), "01 %02X\r", pid);
+    char cmd[12];
+    snprintf(cmd, sizeof(cmd), s_single_resp ? "01 %02X 1\r" : "01 %02X\r", pid);
     elm_wait_ready();                    // the previous reply is read first, else it would be checked against this PID
     s_expect_pid = pid;                  // checked by the reply handler (the send returns before the reply)
     elm327_ble_send_ascii_blocking(cmd);
@@ -1140,6 +1150,16 @@ static void do_elm_init(void) {
     s_zc_can_obd_round_started = false;
     s_zc6_can_temp_probe_last_us = 0;
     s_can_side_last_us = 0; s_can_side_misses = 0;   // a new link may be another car
+    // the quick answer: CAN with the engine ECU's own header (7E0 / 18DA10F1) and an adapter that takes "01 0C 1"
+    s_single_resp = false;
+    if (s_connected && fixed_header_cmd && (strstr(fixed_header_cmd, "7E0") || strstr(fixed_header_cmd, "DA10F1"))) {
+        elm_wait_ready();
+        s_got_valid_data = false;
+        elm327_ble_send_ascii_blocking("01 0C 1\r");
+        for (int i = 0; i < 24 && !s_got_valid_data && s_connected; i++) vTaskDelay(pdMS_TO_TICKS(25));
+        s_single_resp = s_got_valid_data;
+        ESP_LOGI(TAG, "quick answer (01 xx 1): %s", s_single_resp ? "on" : "off");
+    }
     s_last_obd_valid_us = esp_timer_get_time();   // give a fresh "valid data" baseline so self-heal doesn't trigger right after init
 }
 
@@ -1227,7 +1247,7 @@ static void obd_poll_task(void *arg) {
         if (s_fast_speed) {
             static uint8_t n;
             if (s_zc6_can_monitor_active) zc6_can_monitor_exit();
-            elm327_ble_send_ascii_blocking((++n & 15) ? "01 0D\r" : "01 0C\r");   // RPM now and then
+            if (n++ & 15) send_std(0x0D); else send_rpm_request("fast");   // RPM now and then
             vTaskDelay(1);
             continue;
         }
@@ -1298,7 +1318,7 @@ static void obd_poll_task(void *arg) {
                 send_rpm_request("slot0");
                 break;
             case 1:// Intake air temp
-                elm327_ble_send_ascii_blocking("01 0F\r");
+                send_std(0x0F);
                 break;
             case 6: // Auto oil-temp query (based on vehicle strategy)
                 if (mv_query(MV_OIL_TEMP)) break;   // brand method list (CAN mode gets it from passive CAN, skip when available)
@@ -1366,15 +1386,15 @@ static void obd_poll_task(void *arg) {
                 }
                 break;
             case 2:// Vehicle speed
-                elm327_ble_send_ascii_blocking("01 0D\r");
+                send_std(0x0D);
                 break;
             case 3:// Coolant temp (skip when CAN already provides it)
                 if (!(can_broadcast && can_has_coolant)) {
-                    elm327_ble_send_ascii_blocking("01 05\r");
+                    send_std(0x05);
                 }
                 break;
             case 4:// Engine load (0x04, 0~100%)
-                elm327_ble_send_ascii_blocking("01 04\r");
+                send_std(0x04);
                 break;
             case 5:// Throttle position TPS (skip when CAN already provides it); 01 45 relative when 01 11 is missing
                 if (!(can_broadcast && can_has_tps)) {
@@ -1461,7 +1481,11 @@ static void obd_poll_task(void *arg) {
             scan_step();
             scan_step();
         } else if ((!can_broadcast || can_obd_primary) && tick_count != 0) {
-            send_rpm_request("dup");
+            // between the slots: RPM twice, then the speed (it used to come round once in ~28 requests; the CVT step and
+            // the speed readout follow the car much closer now)
+            static uint8_t dupn;
+            if (++dupn % 3 == 0 && pid_ok(0x0D)) send_std(0x0D);
+            else send_rpm_request("dup");
         }
 
         tick_count++;
@@ -2230,6 +2254,12 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         s_connected = true;
         s_conn_id = param->connect.conn_id;
         memcpy(s_peer_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+        {   // the shortest BLE interval (7.5-15 ms): each OBD request / reply is not held up waiting for the next radio slot
+            esp_ble_conn_update_params_t cp = {0};
+            memcpy(cp.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+            cp.min_int = 0x06; cp.max_int = 0x0C; cp.latency = 0; cp.timeout = 400;
+            esp_ble_gap_update_conn_params(&cp);
+        }
         if (s_cbs.on_connected) s_cbs.on_connected();
         request_discovery();
         break;
