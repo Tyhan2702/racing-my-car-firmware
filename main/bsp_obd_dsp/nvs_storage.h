@@ -38,6 +38,10 @@ typedef struct {
                                  // position, then all flash at threshold; logic in ui.c)
     uint8_t rc_enabled;          // RaceChrono BLE service: 0=off (minimal mode), 1=on (full RC+Pair+Info+OTA)
     uint8_t language;            // interface language: 0=English, 1=Chinese (export_path/ui_lang.c)
+    uint8_t car_set;             // 车型 (app_obd_dsp/vehicle_pick.c): 0 = not picked yet (shown from vehicle_profile_idx),
+                                 // 1 = OBD2 标准, 2 = the car below (vehicle_catalog.h indexes)
+    uint8_t car_brand, car_model, car_alt;   // car_alt 1: the model's 备用 profile
+    uint16_t car_year;           // 0: a model without years (其他车型)
                                  // NOTE: new fields MUST be appended at the END of this struct;
                                  // see the load_blob grow logic comment in nvs_storage.c.
 } nvs_user_cfg_t;

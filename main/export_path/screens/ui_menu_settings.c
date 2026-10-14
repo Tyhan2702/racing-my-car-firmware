@@ -11,6 +11,7 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/vehicle_profiles.h"
+#include "app_obd_dsp/vehicle_pick.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "esp_system.h"
 #include "../ui_lang.h"
@@ -95,25 +96,138 @@ static void on_bright(lv_event_t *e)
     }
 }
 
-// ---------- vehicle ----------
+// ---------- vehicle: OBD2 标准, or 专车专用 by brand → model → year (→ 读法), as on the phone and the 7" dash ----------
+static lv_obj_t *s_pick;                                          // the picker page over the settings, while open
+static vehicle_pick_t s_at;                                       // the brand / model / year picked so far
 static void show_vehicle(void)
 {
-    const vehicle_profile_t *p = vehicle_profile_get(nvs_cfg_get()->vehicle_profile_idx);
-    lv_label_set_text(s_vehicle_val, p && p->name ? p->name : "OBD2");
+    char b[96]; vehicle_pick_label(vehicle_pick_get(), ui_lang_get() == UI_LANG_ZH, b, sizeof(b));
+    lv_label_set_text(s_vehicle_val, b);
 }
-static void on_vehicle(lv_event_t *e)
+enum { PK_ROOT, PK_BRAND, PK_MODEL, PK_YEAR, PK_ALT };
+static void picker(int step);
+static void pick_done(vehicle_pick_t p)
 {
-    int step = (int)(intptr_t)lv_event_get_user_data(e);
-    uint8_t n = 0;
-    vehicle_profile_get_all(&n);
-    if (!n) return;
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
-    cfg.vehicle_profile_idx = (uint8_t)((cfg.vehicle_profile_idx + n + step) % n);
-    save(&cfg);
-    vehicle_profile_set_active(cfg.vehicle_profile_idx);         // gear detection uses it right away
-    elm327_ble_request_reinit(true);                             // and the OBD link: header, protocol, timeouts
+    vehicle_pick_set(p);                                          // the profile: gear detection uses it right away
+    elm327_ble_request_reinit(true);                              // and the OBD link: header, protocol, timeouts
+    if (s_pick) { lv_obj_del(s_pick); s_pick = NULL; }
     show_vehicle();
 }
+static void on_pick(lv_event_t *e)
+{
+    intptr_t v = (intptr_t)lv_event_get_user_data(e);
+    int step = (int)(v >> 16), i = (int)(v & 0xffff);
+    const vc_model_t *m;
+    switch (step) {
+    case PK_ROOT: if (i == 0) pick_done((vehicle_pick_t){.obd2 = true}); else picker(PK_BRAND); break;
+    case PK_BRAND: s_at = (vehicle_pick_t){.brand = (uint8_t)i}; picker(PK_MODEL); break;
+    case PK_MODEL: s_at.model = (uint8_t)i; s_at.year = 0; m = &VC_BRANDS[s_at.brand].models[i];
+        if (m->from) picker(PK_YEAR); else if (m->alt) picker(PK_ALT); else pick_done(s_at);
+        break;
+    case PK_YEAR: s_at.year = (uint16_t)i; m = &VC_BRANDS[s_at.brand].models[s_at.model];
+        if (m->alt) picker(PK_ALT); else { s_at.alt = 0; pick_done(s_at); }
+        break;
+    case PK_ALT: s_at.alt = (uint8_t)i; pick_done(s_at); break;
+    }
+}
+static void on_pick_back(lv_event_t *e)
+{
+    int step = (int)(intptr_t)lv_event_get_user_data(e);
+    const vc_model_t *m = &VC_BRANDS[s_at.brand].models[s_at.model];
+    if (step == PK_ROOT) { lv_obj_del(s_pick); s_pick = NULL; return; }
+    picker(step == PK_BRAND ? PK_ROOT : step == PK_MODEL ? PK_BRAND : step == PK_YEAR ? PK_MODEL : m->from ? PK_YEAR : PK_MODEL);
+}
+static void on_pick_gesture(lv_event_t *e) { lv_indev_wait_release(lv_indev_get_act()); }   // a swipe here is not "back to the menu"
+static void pick_row(lv_obj_t *list, const char *title, const char *note, bool cur, int step, int i)
+{
+    lv_obj_t *r = lv_btn_create(list);
+    lv_obj_remove_style_all(r);
+    lv_obj_set_size(r, CARD_W, note ? 62 : 50);
+    lv_obj_set_style_bg_color(r, lv_color_hex(C_CARD), 0); lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(r, 18, 0); lv_obj_set_style_pad_hor(r, 16, 0);
+    lv_obj_set_style_border_color(r, lv_color_hex(C_ACCENT), 0); lv_obj_set_style_border_width(r, cur ? 2 : 0, 0);
+    lv_obj_add_flag(r, LV_OBJ_FLAG_SNAPPABLE);
+    lv_obj_clear_flag(r, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_t *t = lv_label_create(r);
+    lv_label_set_text(t, title); lv_label_set_long_mode(t, LV_LABEL_LONG_DOT); lv_obj_set_size(t, CARD_W - 32, 22);   // one line, … when longer
+    lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize16, 0);
+    lv_obj_set_style_text_color(t, lv_color_hex(cur ? C_ACCENT : 0xFFFFFF), 0);
+    lv_obj_align(t, note ? LV_ALIGN_TOP_LEFT : LV_ALIGN_LEFT_MID, 0, note ? 10 : 0);
+    if (note) {
+        lv_obj_t *n = lv_label_create(r);
+        lv_label_set_text(n, note); lv_label_set_long_mode(n, LV_LABEL_LONG_DOT); lv_obj_set_size(n, CARD_W - 32, 22);
+        lv_obj_set_style_text_font(n, &ui_font_FontTypoderSize16, 0);
+        lv_obj_set_style_text_color(n, lv_color_hex(C_DIM), 0);
+        lv_obj_align(n, LV_ALIGN_BOTTOM_LEFT, 0, -9);
+    }
+    lv_obj_add_event_cb(r, on_pick, LV_EVENT_CLICKED, (void *)(intptr_t)(step << 16 | i));
+}
+static void picker(int step)
+{
+    bool zh = ui_lang_get() == UI_LANG_ZH;
+    vehicle_pick_t now = vehicle_pick_get();
+    if (s_pick) lv_obj_del(s_pick);
+    s_pick = lv_obj_create(ui_ScreenPageMenuSettings);
+    lv_obj_remove_style_all(s_pick);
+    lv_obj_set_size(s_pick, 360, 360);
+    lv_obj_set_style_bg_color(s_pick, lv_color_hex(0x000000), 0); lv_obj_set_style_bg_opa(s_pick, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(s_pick, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(s_pick, on_pick_gesture, LV_EVENT_GESTURE, NULL);
+    lv_obj_t *list = lv_obj_create(s_pick);
+    lv_obj_remove_style_all(list);
+    lv_obj_set_size(list, 360, 360);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(list, 10, 0); lv_obj_set_style_pad_ver(list, 70, 0);
+    lv_obj_set_scroll_dir(list, LV_DIR_VER); lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(list, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    // the title and where we are (scroll away with the list), then 返回 as its own row
+    static const char *const titles[] = {"VEHICLE", "BRAND", "MODEL", "YEAR", "READING"};
+    lv_obj_t *t = lv_label_create(list);
+    lv_label_set_text(t, TR(titles[step]));
+    lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize24, 0); lv_obj_set_style_text_color(t, lv_color_hex(C_ACCENT), 0);
+    const vc_brand_t *b = step >= PK_MODEL ? &VC_BRANDS[s_at.brand] : NULL;
+    const vc_model_t *m = step >= PK_YEAR ? &b->models[s_at.model] : NULL;
+    if (b) {
+        char where[96]; snprintf(where, sizeof(where), "%s%s%s", b->name, m ? " > " : "", m ? vehicle_model_name(m, zh) : "");
+        lv_obj_t *w = lv_label_create(list); lv_label_set_text(w, where); lv_label_set_long_mode(w, LV_LABEL_LONG_DOT); lv_obj_set_width(w, CARD_W);
+        lv_obj_set_style_text_align(w, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(w, &ui_font_FontTypoderSize16, 0); lv_obj_set_style_text_color(w, lv_color_hex(C_DIM), 0);
+    }
+    lv_obj_t *back = round_btn(list, "<", LV_ALIGN_CENTER, 0, 0, on_pick_back, (void *)(intptr_t)step);
+    lv_obj_clear_flag(back, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    char buf[96], note[96];
+    if (step == PK_ROOT) {
+        pick_row(list, TR("OBD2 STANDARD"), TR("EVERY CAR"), now.obd2, PK_ROOT, 0);
+        pick_row(list, TR("CAR-SPECIFIC"), TR("BY MODEL & YEAR"), !now.obd2, PK_ROOT, 1);
+    } else if (step == PK_BRAND) {
+        for (int i = 0; i < VC_BRAND_COUNT; i++) pick_row(list, VC_BRANDS[i].name, NULL, !now.obd2 && now.brand == i, PK_BRAND, i);
+    } else if (step == PK_MODEL) {
+        for (int i = 0; i < b->count; i++) {
+            const vc_model_t *x = &b->models[i];
+            const char *code = zh && x->code_zh ? x->code_zh : x->code, *nt = zh && x->note_zh ? x->note_zh : x->note;
+            snprintf(buf, sizeof(buf), "%s", vehicle_model_name(x, zh));     // the code and the years on the line below
+            if (x->from) snprintf(note, sizeof(note), "%s%s%u-%u", code ? code : "", code ? " · " : "", (unsigned)x->from, (unsigned)x->to);
+            else snprintf(note, sizeof(note), "%s", nt ? nt : "");
+            pick_row(list, buf, note[0] ? note : NULL, !now.obd2 && now.brand == s_at.brand && now.model == i, PK_MODEL, i);
+        }
+    } else if (step == PK_YEAR) {
+        for (int y = m->from; y <= m->to; y++) { snprintf(buf, sizeof(buf), "%d", y); pick_row(list, buf, NULL, !now.obd2 && now.brand == s_at.brand && now.model == s_at.model && now.year == y, PK_YEAR, y); }
+    } else {
+        pick_row(list, TR("STANDARD (BEST)"), m->profile, true, PK_ALT, 0);
+        pick_row(list, TR("FALLBACK"), m->alt, false, PK_ALT, 1);
+    }
+    // the current choice in view
+    lv_obj_update_layout(list);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(list); i++) {
+        lv_obj_t *c = lv_obj_get_child(list, i);
+        if (lv_obj_get_style_border_width(c, 0) > 0) { lv_obj_scroll_to_view(c, LV_ANIM_OFF); break; }
+    }
+}
+static void on_vehicle(lv_event_t *e) { picker(PK_ROOT); }
+#ifdef SIMULATOR
+void ui_settings_sim_pick(int step, int brand, int model) { s_at = (vehicle_pick_t){.brand = (uint8_t)brand, .model = (uint8_t)model}; picker(step); }   // the simulator's shots
+#endif
 
 // ---------- several gauges: mode, position, boot intro (were the firmware's own MULTI-GAUGE page) ----------
 static lv_obj_t *s_mode_val, *s_pos_val, *s_intro_val, *s_mode_note;
@@ -291,7 +405,7 @@ static void on_screen(lv_event_t *e)
     if (code == LV_EVENT_DELETE) {
         if (lv_event_get_target(e) != ui_ScreenPageMenuSettings) return;   // the old page after a language change
         if (s_confirm_timer) { lv_timer_del(s_confirm_timer); s_confirm_timer = NULL; }
-        s_confirm_btn = NULL;
+        s_confirm_btn = NULL; s_pick = NULL;
         ui_ScreenPageMenuSettings = NULL;
         return;
     }
@@ -356,13 +470,13 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     show_lang();
 
     // vehicle
-    c = card("VEHICLE", 96);
-    round_btn(c, "<", LV_ALIGN_BOTTOM_LEFT, -6, -10, on_vehicle, (void *)(intptr_t)-1);
-    round_btn(c, ">", LV_ALIGN_BOTTOM_RIGHT, 6, -10, on_vehicle, (void *)(intptr_t)1);
-    s_vehicle_val = value_label(c, LV_ALIGN_BOTTOM_MID, 0, -22, &ui_font_FontTypoderSize16);
+    c = card("VEHICLE", 96);                                     // tap: OBD2 标准 / brand → model → year
+    lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(c, on_vehicle, LV_EVENT_CLICKED, NULL);
+    round_btn(c, ">", LV_ALIGN_BOTTOM_RIGHT, 6, -10, on_vehicle, NULL);
+    s_vehicle_val = value_label(c, LV_ALIGN_BOTTOM_LEFT, 0, -10, &ui_font_FontTypoderSize16);
     lv_label_set_long_mode(s_vehicle_val, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(s_vehicle_val, CARD_W - 140);
-    lv_obj_set_style_text_align(s_vehicle_val, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_size(s_vehicle_val, CARD_W - 80, 44);                // two lines: "2014 Toyota" / "Corolla Altis"
     show_vehicle();
 
     // shift light: rpm and flash
