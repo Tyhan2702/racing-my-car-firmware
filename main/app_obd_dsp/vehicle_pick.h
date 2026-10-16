@@ -11,5 +11,6 @@ typedef struct { bool obd2; uint8_t brand, model, alt; uint16_t year; } vehicle_
 int vehicle_profile_find(const char *name);                      // the profile's index in vehicle_profiles.c, or -1
 vehicle_pick_t vehicle_pick_get(void);                            // what is picked (from the profile when never picked)
 void vehicle_pick_set(vehicle_pick_t p);                          // stores it and makes its profile the active one
+bool vehicle_cars_store(const char *json, size_t n);              // the published cars the app sends (vehicle_added.c); keeps the pick
 void vehicle_pick_label(vehicle_pick_t p, bool zh, char *out, size_t n);   // "2014 Toyota Corolla Altis", "OBD2 STANDARD"
 const char *vehicle_model_name(const vc_model_t *m, bool zh);

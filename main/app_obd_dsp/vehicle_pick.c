@@ -4,6 +4,7 @@
 #include "vehicle_pick.h"
 #include "vehicle_profiles.h"
 #include "bsp_obd_dsp/nvs_storage.h"
+#include "vehicle_added.h"
 
 int vehicle_profile_find(const char *name)
 {
@@ -47,6 +48,17 @@ void vehicle_pick_set(vehicle_pick_t p)
     if (idx >= 0) cfg.vehicle_profile_idx = (uint8_t)idx;
     nvs_cfg_set(&cfg);
     if (idx >= 0) vehicle_profile_set_active((uint8_t)idx);
+}
+bool vehicle_cars_store(const char *json, size_t n)
+{
+    vehicle_pick_t p = vehicle_pick_get();
+    const vc_model_t *m = model_of(p); uint8_t b = 0, md = 0;
+    if (!vc_added_store(json, n, m ? m->id : NULL, &b, &md)) return false;
+    if (!m) return true;
+    if (b == 0xFF) p = (vehicle_pick_t){.obd2 = true};                // the car was taken off the list
+    else { p.brand = b; p.model = md; }
+    vehicle_pick_set(p);
+    return true;
 }
 const char *vehicle_model_name(const vc_model_t *m, bool zh) { return zh && m->name_zh ? m->name_zh : m->name; }
 void vehicle_pick_label(vehicle_pick_t p, bool zh, char *out, size_t n)

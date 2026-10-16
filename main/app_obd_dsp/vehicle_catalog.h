@@ -3,51 +3,51 @@
 // (vehicle_profiles.c by name) and, where there is one, a 备用 profile for when the first cannot read the car.
 #pragma once
 #include <stdint.h>
-typedef struct { const char *name, *name_zh, *code, *code_zh, *note, *note_zh; uint16_t from, to; const char *profile, *alt; } vc_model_t;
+typedef struct { const char *name, *name_zh, *code, *code_zh, *note, *note_zh; uint16_t from, to; const char *profile, *alt, *id; } vc_model_t;
 typedef struct { const char *name; const vc_model_t *models; uint8_t count; } vc_brand_t;
 #define VC_OBD2_PROFILE "OBD2 Generic"
 static const vc_model_t VC_MODELS_0[] = {
-    {"Corolla Altis", "Corolla Altis", "E170", "E170", NULL, NULL, 2014, 2018, "Toyota CVT", NULL},
-    {"86", "86", "ZN6", "ZN6", NULL, NULL, 2012, 2020, "ZN/C6 CAN", "ZN/C6 PID"},
-    {"GR86", "GR86", "ZN8", "ZN8", NULL, NULL, 2022, 2026, "ZD8", "ZD8 OBD"},
-    {"GR Supra", "GR Supra", "A90", "A90", NULL, NULL, 2019, 2026, "Supra A90", NULL},
-    {"Other models", "其他车型", NULL, NULL, "Conventional automatic", "一般自排", 0, 0, "Toyota", NULL},
+    {"Corolla Altis", "Corolla Altis", "E170", "E170", NULL, NULL, 2014, 2018, "Toyota CVT", NULL, "toyota-corolla-altis-e170"},
+    {"86", "86", "ZN6", "ZN6", NULL, NULL, 2012, 2020, "ZN/C6 CAN", "ZN/C6 PID", "toyota-86-zn6"},
+    {"GR86", "GR86", "ZN8", "ZN8", NULL, NULL, 2022, 2026, "ZD8", "ZD8 OBD", "toyota-gr86-zn8"},
+    {"GR Supra", "GR Supra", "A90", "A90", NULL, NULL, 2019, 2026, "Supra A90", NULL, "toyota-gr-supra-a90"},
+    {"Other models", "其他车型", NULL, NULL, "Conventional automatic", "一般自排", 0, 0, "Toyota", NULL, "toyota-other"},
 };
 static const vc_model_t VC_MODELS_1[] = {
-    {"BRZ", "BRZ", "ZC6", "ZC6", NULL, NULL, 2013, 2020, "ZN/C6 CAN", "ZN/C6 PID"},
-    {"BRZ", "BRZ", "ZD8", "ZD8", NULL, NULL, 2022, 2026, "ZD8", "ZD8 OBD"},
+    {"BRZ", "BRZ", "ZC6", "ZC6", NULL, NULL, 2013, 2020, "ZN/C6 CAN", "ZN/C6 PID", "subaru-brz-zc6"},
+    {"BRZ", "BRZ", "ZD8", "ZD8", NULL, NULL, 2022, 2026, "ZD8", "ZD8 OBD", "subaru-brz-zd8"},
 };
 static const vc_model_t VC_MODELS_2[] = {
-    {"MX-5", "MX-5", "ND", "ND", NULL, NULL, 2015, 2026, "MX-5 ND", NULL},
-    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Mazda", NULL},
+    {"MX-5", "MX-5", "ND", "ND", NULL, NULL, 2015, 2026, "MX-5 ND", NULL, "mazda-mx-5-nd"},
+    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Mazda", NULL, "mazda-other"},
 };
 static const vc_model_t VC_MODELS_3[] = {
-    {"3/4 Series, M3/M4", "3/4 系、M3/M4", "G20/G22/G80/G82", "G20/G22/G80/G82", NULL, NULL, 2019, 2026, "BMW F/G", "BMW G OBD"},
-    {"F-series", "F 系列", "F30 etc.", "F30 等", NULL, NULL, 2012, 2019, "BMW F/G", NULL},
-    {"E-series", "E 系列", "E90/E92 M3, E87 130i, E46, E39", "E90/E92 M3、E87 130i、E46、E39", NULL, NULL, 1998, 2013, "BMW E", NULL},
+    {"3/4 Series, M3/M4", "3/4 系、M3/M4", "G20/G22/G80/G82", "G20/G22/G80/G82", NULL, NULL, 2019, 2026, "BMW F/G", "BMW G OBD", "bmw-g20-g80"},
+    {"F-series", "F 系列", "F30 etc.", "F30 等", NULL, NULL, 2012, 2019, "BMW F/G", NULL, "bmw-f"},
+    {"E-series", "E 系列", "E90/E92 M3, E87 130i, E46, E39", "E90/E92 M3、E87 130i、E46、E39", NULL, NULL, 1998, 2013, "BMW E", NULL, "bmw-e"},
 };
 static const vc_model_t VC_MODELS_4[] = {
-    {"John Cooper Works", "John Cooper Works", "F56", "F56", NULL, NULL, 2015, 2026, "JCW F56", NULL},
-    {"Clubman", "Clubman", "R55", "R55", NULL, NULL, 2008, 2014, "MINI R55", NULL},
+    {"John Cooper Works", "John Cooper Works", "F56", "F56", NULL, NULL, 2015, 2026, "JCW F56", NULL, "mini-jcw-f56"},
+    {"Clubman", "Clubman", "R55", "R55", NULL, NULL, 2008, 2014, "MINI R55", NULL, "mini-clubman-r55"},
 };
 static const vc_model_t VC_MODELS_5[] = {
-    {"911 / Boxster / Cayman", "911 / Boxster / Cayman", "997.2 / 987.2", "997.2 / 987.2", NULL, NULL, 2009, 2012, "POS 997.2", NULL},
-    {"911 / Boxster / Cayman", "911 / Boxster / Cayman", "997.1 / 987.1", "997.1 / 987.1", NULL, NULL, 2005, 2008, "POS 997.1", NULL},
+    {"911 / Boxster / Cayman", "911 / Boxster / Cayman", "997.2 / 987.2", "997.2 / 987.2", NULL, NULL, 2009, 2012, "POS 997.2", NULL, "porsche-997-2"},
+    {"911 / Boxster / Cayman", "911 / Boxster / Cayman", "997.1 / 987.1", "997.1 / 987.1", NULL, NULL, 2005, 2008, "POS 997.1", NULL, "porsche-997-1"},
 };
 static const vc_model_t VC_MODELS_6[] = {
-    {"Giulia 2.0T", "Giulia 2.0T", NULL, NULL, NULL, NULL, 2017, 2026, "Giulia 2.0T", NULL},
+    {"Giulia 2.0T", "Giulia 2.0T", NULL, NULL, NULL, NULL, 2017, 2026, "Giulia 2.0T", NULL, "alfa-romeo-giulia-2-0t"},
 };
 static const vc_model_t VC_MODELS_7[] = {
-    {"Integra", "Integra", NULL, NULL, NULL, NULL, 2023, 2026, "Honda Integra", NULL},
-    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Honda", NULL},
+    {"Integra", "Integra", NULL, NULL, NULL, NULL, 2023, 2026, "Honda Integra", NULL, "honda-integra"},
+    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Honda", NULL, "honda-other"},
 };
 static const vc_model_t VC_MODELS_8[] = {
-    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Jeep", NULL},
+    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Jeep", NULL, "jeep-other"},
 };
 static const vc_model_t VC_MODELS_9[] = {
-    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Nissan", NULL},
+    {"Other models", "其他车型", NULL, NULL, NULL, NULL, 0, 0, "Nissan", NULL, "nissan-other"},
 };
-static const vc_brand_t VC_BRANDS[] = {
+static const vc_brand_t VC_BUILTIN[] = {
     {"Toyota", VC_MODELS_0, 5},
     {"Subaru", VC_MODELS_1, 2},
     {"Mazda", VC_MODELS_2, 2},
@@ -59,4 +59,9 @@ static const vc_brand_t VC_BRANDS[] = {
     {"Jeep", VC_MODELS_8, 1},
     {"Nissan", VC_MODELS_9, 1},
 };
-#define VC_BRAND_COUNT 10
+#define VC_BUILTIN_COUNT 10
+// the built-in list plus the published cars the app sent (vehicle_added.c)
+extern const vc_brand_t *vc_brands;
+extern int vc_brand_count;
+#define VC_BRANDS vc_brands
+#define VC_BRAND_COUNT vc_brand_count

@@ -45,6 +45,8 @@
 #include "app_obd_dsp/boot_media_mount.h"
 #include "app_obd_dsp/theme_mount.h"
 #include "app_obd_dsp/device_identity.h"
+#include "app_obd_dsp/vehicle_added.h"
+#include "app_obd_dsp/vehicle_pick.h"
 #include "app_obd_dsp/theme_stack.h"
 #include "export_path/screens/game_core.h"
 #include "bsp_obd_dsp/rs485_brake_temp.h"
@@ -606,6 +608,30 @@ static esp_err_t games_post_handler(httpd_req_t *req)
     httpd_resp_send(req, json, strlen(json));
     free(json);
     return ESP_OK;
+}
+
+// GET /ota/cars: {"hash"} of the published cars kept ("" none); POST /ota/cars: the JSON list (vehicle_added.c), the
+// app sends it when the hash differs from the phone's list
+static esp_err_t cars_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) return send_err(req, "unauthorized");
+    if (req->method == HTTP_POST) {
+        if (req->content_len <= 0 || req->content_len > VC_ADDED_BYTES) return send_err(req, "bad body");
+        char *body = malloc(req->content_len);
+        if (!body) return send_err(req, "no memory");
+        int got = 0;
+        while (got < req->content_len) {
+            int r = httpd_req_recv(req, body + got, req->content_len - got);
+            if (r <= 0) { if (r == HTTPD_SOCK_ERR_TIMEOUT) continue; free(body); return send_err(req, "receive failed"); }
+            got += r;
+        }
+        bool ok = vehicle_cars_store(body, got);
+        free(body);
+        if (!ok) return send_err(req, "bad cars list");
+    }
+    char json[40];
+    snprintf(json, sizeof(json), "{\"ok\":true,\"hash\":\"%s\"}", vc_added_hash());
+    return send_json_response(req, 200, json);
 }
 
 // GET /ota/status
@@ -1861,7 +1887,7 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     config.recv_wait_timeout = 2;                  // 2s per recv call, Content-Length模式下不应该超时
     config.send_wait_timeout = 300;
     // Reduce httpd memory usage
-    config.max_uri_handlers = 32;                    // 28 handlers (incl. OPTIONS preflight for POST routes), +4 headroom
+    config.max_uri_handlers = 32;                    // 30 handlers (incl. OPTIONS preflight for POST routes), +4 headroom
     config.max_resp_headers = 4;                     // minimal headers
     config.max_open_sockets = 7;                     // max allowed by LWIP_MAX_SOCKETS (10 - 3 internal)
     config.backlog_conn = 5;                         // accept队列长度
@@ -1928,6 +1954,10 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     httpd_register_uri_handler(s_httpd, &games_get_uri);
     httpd_uri_t games_post_uri = { .uri = "/ota/games", .method = HTTP_POST, .handler = games_post_handler };
     httpd_register_uri_handler(s_httpd, &games_post_uri);
+    httpd_uri_t cars_get_uri = { .uri = "/ota/cars", .method = HTTP_GET, .handler = cars_handler };
+    httpd_register_uri_handler(s_httpd, &cars_get_uri);
+    httpd_uri_t cars_post_uri = { .uri = "/ota/cars", .method = HTTP_POST, .handler = cars_handler };
+    httpd_register_uri_handler(s_httpd, &cars_post_uri);
 
     httpd_uri_t status_uri = {
         .uri = "/ota/status",
