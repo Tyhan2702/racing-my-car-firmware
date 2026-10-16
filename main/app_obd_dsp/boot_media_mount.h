@@ -15,8 +15,12 @@ bool boot_media_mount(void);
 // Unmount
 void boot_media_unmount(void);
 
-// Check whether the boot_block media files exist
+// Which animation the calls below work on: 0 the boot animation (default), 1 the key-off animation
+void boot_media_select(int slot);
+// Check whether the chosen slot holds an animation
 bool boot_media_has_block_video(void);
+// Whether a key-off animation is installed (whatever slot is chosen)
+bool boot_media_has_outro(void);
 
 // Restore the active boot_block pair from the previous backup if an update was interrupted.
 bool boot_media_recover_previous_if_needed(void);

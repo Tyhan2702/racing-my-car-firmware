@@ -115,6 +115,7 @@ typedef struct {
 
     // bootmedia
     uint32_t manifest_size;
+    int slot;                 // bootmedia: 0 the boot animation, 1 the key-off one (/ota/outromedia)
 } ota_recv_t;
 
 static ota_recv_t s_recv = {0};
@@ -1292,7 +1293,18 @@ static esp_err_t theme_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-// POST /ota/bootmedia/prepare
+// POST /ota/outromedia/erase — no key-off animation any more (the website's 关机动画: 不用)
+static esp_err_t outromedia_erase_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) return send_err(req, "unauthorized");
+    if (!boot_media_mount()) return send_err(req, "mount failed");
+    boot_media_select(1);
+    bool ok = boot_media_invalidate_manifest();
+    boot_media_select(0);
+    return ok ? send_json_response(req, 200, "{\"ok\":true}") : send_err(req, "erase failed");
+}
+
+// POST /ota/bootmedia/prepare (and /ota/outromedia/prepare: the same for the key-off animation)
 // App 在上传分块之前调用一次，仅验证分区容量和 PSRAM。
 // 这里绝不擦除 Flash，旧动画会保留到新数据完整校验通过。
 static esp_err_t bootmedia_prepare_handler(httpd_req_t *req)
@@ -1318,7 +1330,9 @@ static esp_err_t bootmedia_prepare_handler(httpd_req_t *req)
         return send_err(req, "invalid prepare sizes");
     }
 
+    boot_media_select(strstr(req->uri, "outromedia") ? 1 : 0);   // /ota/outromedia/prepare: the key-off slot
     size_t free_space = boot_media_get_free_space();
+    boot_media_select(0);
     const size_t needed_space = (size_t)(total_size - manifest_size);
     if (free_space < needed_space) {
         char err_msg[80];
@@ -1418,11 +1432,15 @@ static esp_err_t bootmedia_handler(httpd_req_t *req)
         if (!boot_media_mount()) {
             return send_err(req, "mount failed");
         }
+        int slot = strstr(req->uri, "outromedia") ? 1 : 0;
+        boot_media_select(slot);
         size_t free_space = boot_media_get_free_space();
+        boot_media_select(0);
         size_t needed_space = (size_t)(total_size - manifest_size);
         if (free_space < needed_space) {
             return send_err(req, "bootmedia too large");
         }
+        s_recv.slot = slot;
         if (!allocate_upload_buffer(total_size, "bootmedia")) {
             recv_reset();
             return send_err(req, "no memory for bootmedia buffer");
@@ -1636,6 +1654,7 @@ static esp_err_t bootmedia_handler(httpd_req_t *req)
     vTaskDelay(pdMS_TO_TICKS(200));
 
     esp_err_t write_err = ESP_OK;
+    boot_media_select(s_recv.slot);   // the gauge restarts below, so the choice need not be undone
     if (!boot_media_invalidate_manifest()) {
         write_err = ESP_FAIL;
     }
@@ -1842,7 +1861,7 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     config.recv_wait_timeout = 2;                  // 2s per recv call, Content-Length模式下不应该超时
     config.send_wait_timeout = 300;
     // Reduce httpd memory usage
-    config.max_uri_handlers = 28;                    // 25 handlers (incl. OPTIONS preflight for POST routes), +3 headroom
+    config.max_uri_handlers = 32;                    // 28 handlers (incl. OPTIONS preflight for POST routes), +4 headroom
     config.max_resp_headers = 4;                     // minimal headers
     config.max_open_sockets = 7;                     // max allowed by LWIP_MAX_SOCKETS (10 - 3 internal)
     config.backlog_conn = 5;                         // accept队列长度
@@ -1932,6 +1951,14 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
         .handler = options_handler,
     };
     httpd_register_uri_handler(s_httpd, &firmware_opt_uri);
+
+    // the key-off animation: the same upload into the bootmedia partition's second slot (the apps call these natively)
+    httpd_uri_t outro_prepare_uri = {.uri = "/ota/outromedia/prepare", .method = HTTP_POST, .handler = bootmedia_prepare_handler};
+    httpd_register_uri_handler(s_httpd, &outro_prepare_uri);
+    httpd_uri_t outro_uri = {.uri = "/ota/outromedia", .method = HTTP_POST, .handler = bootmedia_handler};
+    httpd_register_uri_handler(s_httpd, &outro_uri);
+    httpd_uri_t outro_erase_uri = {.uri = "/ota/outromedia/erase", .method = HTTP_POST, .handler = outromedia_erase_handler};
+    httpd_register_uri_handler(s_httpd, &outro_erase_uri);
 
     httpd_uri_t bootmedia_prepare_uri = {
         .uri = "/ota/bootmedia/prepare",

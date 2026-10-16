@@ -44,11 +44,23 @@ void obd_data_rpm_override_set(bool en, uint16_t val)
     portEXIT_CRITICAL(&s_mux);
 }
 
+static int64_t s_rpm_last_us = 0;   // when an RPM reading last arrived (the key-off animation watches for silence)
+
 void obd_data_set_rpm(uint16_t rpm)
 {
+    int64_t now = esp_timer_get_time();
     portENTER_CRITICAL(&s_mux);
     s_rpm_smooth = rpm;  // CAN 100Hz data is already clean, no smoothing needed
+    s_rpm_last_us = now;
     portEXIT_CRITICAL(&s_mux);
+}
+
+uint32_t obd_data_rpm_age_ms(void)
+{
+    portENTER_CRITICAL(&s_mux);
+    int64_t last = s_rpm_last_us;
+    portEXIT_CRITICAL(&s_mux);
+    return last ? (uint32_t)((esp_timer_get_time() - last) / 1000) : UINT32_MAX;
 }
 
 void obd_data_reset_temp_cache(void)

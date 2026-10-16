@@ -46,6 +46,8 @@ typedef struct {
 } obd_data_snapshot_t;
 
 void obd_data_set_rpm(uint16_t rpm);
+// ms since the last RPM reading arrived; UINT32_MAX if none yet (the key-off animation: the car went quiet)
+uint32_t obd_data_rpm_age_ms(void);
 // RPM override layer: for multi-gauge linkage tests. When enabled, get_rpm returns val; disabling restores the real value.
 void obd_data_rpm_override_set(bool en, uint16_t val);
 void obd_data_reset_temp_cache(void);

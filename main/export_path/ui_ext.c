@@ -24,11 +24,14 @@
 #include "app_obd_dsp/boot_media_mount.h"
 #include "theme_engine/theme_interface.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 #include "esp_random.h"
 #include "lvgl.h"
 #include <string.h>
 #include <stdio.h>
 #include "ui_lang.h"
+#include "app_obd_dsp/ota_wifi_server.h"
+#include "app_obd_dsp/ota_update_ble.h"
 
 static const char *TAG = "ui_ext";
 
@@ -543,4 +546,59 @@ void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
             }
         }
     }
+}
+
+/* ================================================================
+ *  Key-off animation (the 7" dash's rule, dash7 main/anim.c): once the car has been read, RPM readings silent for
+ *  6 s mean the engine is off: the key-off animation from the bootmedia partition's second slot plays (if one is
+ *  installed), then the backlight goes off. A fresh reading means the key is back on: the gauge restarts, which plays
+ *  its boot animations and reconnects as at power-up. Needs constant power: on switched power it simply goes dark.
+ * ================================================================ */
+#define KEYOFF_SILENT_MS 6000
+static enum {KO_ON, KO_PLAYING, KO_DARK} s_ko = KO_ON;
+static lv_obj_t *s_ko_screen = NULL;
+static lv_timer_t *s_ko_timer = NULL;
+static int64_t s_ko_start_us = 0;
+
+static void keyoff_dark(void)
+{
+    Set_Backlight(0);
+    s_ko = KO_DARK;
+}
+
+static void keyoff_timer_cb(lv_timer_t *t)
+{
+    boot_block_player_update((uint32_t)((esp_timer_get_time() - s_ko_start_us) / 1000));
+    if (!boot_block_player_is_finished()) return;
+    lv_timer_del(s_ko_timer); s_ko_timer = NULL;
+    keyoff_dark();   // the last frame stays on screen under the dark backlight; the player is freed at restart
+}
+
+void ui_ext_keyoff_tick(void)
+{
+    uint32_t age = obd_data_rpm_age_ms();
+    if (s_ko != KO_ON) {
+        if (age < 1000) { ESP_LOGI(TAG, "key-off: RPM again, restarting"); esp_restart(); }
+        return;
+    }
+    // never while updating (the app's Wi-Fi / BLE update silences the car on purpose) or before the car was read
+    if (age == UINT32_MAX || age < KEYOFF_SILENT_MS) return;
+    if (ota_wifi_server_is_busy() || ota_update_ble_is_active() || (ui_ScreenPageOTAMode && lv_scr_act() == ui_ScreenPageOTAMode)) return;
+    ESP_LOGI(TAG, "key-off: RPM silent %lu ms", (unsigned long)age);
+    if (!boot_media_mount() || !boot_media_has_outro()) { keyoff_dark(); return; }
+    boot_media_select(1);
+    s_ko_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(s_ko_screen, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_ko_screen, 255, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_ko_screen, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_ko_screen, 360, LV_PART_MAIN);
+    lv_obj_clear_flag(s_ko_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *canvas = NULL;
+    bool ok = boot_block_player_create(s_ko_screen, &canvas);
+    boot_media_select(0);
+    if (!ok) { ESP_LOGE(TAG, "key-off animation failed to load"); lv_obj_del(s_ko_screen); s_ko_screen = NULL; keyoff_dark(); return; }
+    lv_scr_load(s_ko_screen);
+    s_ko_start_us = esp_timer_get_time();
+    s_ko_timer = lv_timer_create(keyoff_timer_cb, 33, NULL);
+    s_ko = KO_PLAYING;
 }

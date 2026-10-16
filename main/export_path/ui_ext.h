@@ -48,6 +48,7 @@ void ui_ext_sweep_trigger(bool ble_now, bool is_slave);
 bool ui_ext_boot_video_tick(void);        // video boot mode; returns true to make my_timerMain return early
 void ui_ext_intro_tick(bool is_slave);    // boot flow: Logo -> theme (slaves follow the master)
 void ui_ext_no_signal_update(bool signal_ok); // "NO SIGNAL" overlay on gauge pages
+void ui_ext_keyoff_tick(void);              // key-off: RPM silent 6 s -> key-off animation, backlight off; RPM again -> restart
 void ui_ext_doors_update(void);                // "DOOR OPEN" overlay on gauge pages (cars that broadcast their doors)
 
 /* ---- RPM warning flash (migrated from ui.c my_timerMain) ---- */
