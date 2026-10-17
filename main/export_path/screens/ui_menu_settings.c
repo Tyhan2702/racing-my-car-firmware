@@ -233,7 +233,7 @@ void ui_settings_sim_pick(int step, int brand, int model) { s_at = (vehicle_pick
 static lv_obj_t *s_mode_val, *s_pos_val, *s_intro_val, *s_mode_note;
 static const char *const MODE_NOTES[] = {"READS THE CAR", "NO OBD (SLAVE)", "READS THE CAR"};   // what each mode does with OBD
 static const char *const MODES[] = {"MASTER", "SLAVE", "ALONE"};    // device_role 0/1/2
-static const char *const INTROS[] = {"OFF", "VIDEO", "VIDEO"};      // intro_enable 0/(1)/2 (VIDEO: the app's boot animation)
+static const char *const INTROS[] = {"OFF", "ON", "ON"};      // intro_enable 0/(1)/2: 自定义开关机动画 (the app's boot + key-off animations, after / before the platform's)
 static void show_multi(void)
 {
     uint8_t role = nvs_cfg_get()->device_role, intro = nvs_intro_enable_get(), pos = nvs_device_position_get();
@@ -506,7 +506,7 @@ void ui_ScreenPageMenuSettings_screen_init(void)
     lv_obj_set_style_text_font(s_mode_note, &ui_font_FontTypoderSize16, 0);
     lv_obj_align(s_mode_note, LV_ALIGN_TOP_LEFT, 0, 34);
     s_pos_val = choice_card("GAUGE POSITION", on_pos);
-    s_intro_val = choice_card("BOOT INTRO", on_intro);
+    s_intro_val = choice_card("CUSTOM BOOT/OFF", on_intro);
     show_multi();
 
     action_card("TRIP", "RESET TRIP", do_reset_trip);

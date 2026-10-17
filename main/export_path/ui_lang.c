@@ -11,9 +11,9 @@ static const char *const s_zh[][2] = {
     // settings
     {"SETTINGS", "设置"}, {"BRIGHTNESS", "亮度"}, {"VEHICLE", "车型"}, {"BRAND", "品牌"}, {"MODEL", "型号"}, {"YEAR", "年份"}, {"READING", "读法"}, {"OBD2 STANDARD", "OBD2 标准"}, {"EVERY CAR", "所有车通用"},
     {"CAR-SPECIFIC", "专车专用"}, {"BY MODEL & YEAR", "按品牌、型号、年份"}, {"STANDARD (BEST)", "标准（推荐）"}, {"FALLBACK", "备用"}, {"LANGUAGE", "语言"}, {"GAUGE MODE", "仪表模式"}, {"GAUGE POSITION", "仪表位置"},
-    {"BOOT INTRO", "开机动画"}, {"SHIFT LIGHT RPM", "换挡提示转速"}, {"SHIFT LIGHT FLASH", "换挡闪烁"}, {"RACECHRONO", "RACECHRONO"},
+    {"CUSTOM BOOT/OFF", "自定义开关机动画"}, {"SHIFT LIGHT RPM", "换挡提示转速"}, {"SHIFT LIGHT FLASH", "换挡闪烁"}, {"RACECHRONO", "RACECHRONO"},
     {"TRIP", "里程"}, {"RESET TRIP", "清零里程"}, {"TRIP RESET", "里程已清零"}, {"GAUGE", "仪表"}, {"RESTART", "重启仪表"},
-    {"MASTER", "主仪表"}, {"SLAVE", "副仪表"}, {"ALONE", "单独使用"}, {"OFF", "关闭"}, {"VIDEO", "视频"},
+    {"MASTER", "主仪表"}, {"SLAVE", "副仪表"}, {"ALONE", "单独使用"}, {"OFF", "关闭"}, {"ON", "打开"}, {"VIDEO", "视频"},
     {"RESTART TO APPLY", "重启后生效"}, {"APPLIES AFTER A RESTART", "重启后生效"}, {"SWIPE LEFT / RIGHT: BACK", "左右滑动返回"}, {"TAP AGAIN", "再点一次确认"},
     // DATA page
     {"LIVE DATA", "实时数据"}, {"PROTOCOL", "协议"}, {"VIN", "车架号"}, {"BATTERY", "电瓶电压"}, {"AFR", "空燃比"}, {"OIL TEMP", "机油温度"},

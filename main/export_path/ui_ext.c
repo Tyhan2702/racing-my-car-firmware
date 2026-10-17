@@ -15,6 +15,7 @@
 #include "ui_ext.h"
 #include "ui.h"
 #include "bsp_obd_dsp/nvs_storage.h"
+#include "app_obd_dsp/rmc_inflate.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/obd_data_cache.h"
@@ -550,8 +551,9 @@ void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
 
 /* ================================================================
  *  Key-off animation (the 7" dash's rule, dash7 main/anim.c): once the car has been read, RPM readings silent for
- *  6 s mean the engine is off: the key-off animation from the bootmedia partition's second slot plays (if one is
- *  installed), then the backlight goes off. A fresh reading means the key is back on: the gauge restarts, which plays
+ *  6 s mean the engine is off: the owner's key-off animation from the bootmedia partition's second slot plays (only
+ *  with 自定义开关机动画 on, the setting that also lets his boot animation play), then always the platform's 光晕淡出
+ *  (built in, platform_outro_anim.c), then the backlight goes off (owner, 2026-10-17). A fresh reading means the key is back on: the gauge restarts, which plays
  *  its boot animations and reconnects as at power-up. Needs constant power: on switched power it simply goes dark.
  * ================================================================ */
 #define KEYOFF_SILENT_MS 6000
@@ -566,10 +568,40 @@ static void keyoff_dark(void)
     s_ko = KO_DARK;
 }
 
+extern const char platform_outro_manifest[];
+extern const uint8_t platform_outro_data[];
+extern const size_t platform_outro_data_size, platform_outro_raw_size;
+static uint8_t *s_ko_raw;                      // the platform animation inflated in PSRAM while it plays (kept until restart)
+static bool s_ko_platform;
+static void keyoff_timer_cb(lv_timer_t *t);
+/** Starts one key-off animation on the key-off screen: the owner's (bootmedia slot 1) or the platform's (built in). */
+static bool keyoff_play(bool platform)
+{
+    if (!s_ko_screen) {
+        s_ko_screen = lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(s_ko_screen, lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(s_ko_screen, 255, LV_PART_MAIN);
+        lv_obj_set_style_border_width(s_ko_screen, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(s_ko_screen, 360, LV_PART_MAIN);
+        lv_obj_clear_flag(s_ko_screen, LV_OBJ_FLAG_SCROLLABLE);
+        lv_scr_load(s_ko_screen);
+    } else boot_block_player_destroy();
+    lv_obj_t *canvas = NULL; bool ok = false;
+    if (platform) {
+        if (!s_ko_raw) s_ko_raw = rmc_inflate(platform_outro_data, platform_outro_data_size, platform_outro_raw_size);
+        if (s_ko_raw) { boot_block_player_set_embedded(platform_outro_manifest, s_ko_raw, platform_outro_raw_size); ok = boot_block_player_create(s_ko_screen, &canvas); }
+        boot_block_player_set_embedded(NULL, NULL, 0);
+    } else { boot_media_select(1); ok = boot_block_player_create(s_ko_screen, &canvas); boot_media_select(0); }
+    if (!ok) { ESP_LOGE(TAG, "key-off animation (%s) failed to load", platform ? "platform" : "own"); return false; }
+    s_ko_platform = platform; s_ko_start_us = esp_timer_get_time();
+    if (!s_ko_timer) s_ko_timer = lv_timer_create(keyoff_timer_cb, 33, NULL);
+    return true;
+}
 static void keyoff_timer_cb(lv_timer_t *t)
 {
     boot_block_player_update((uint32_t)((esp_timer_get_time() - s_ko_start_us) / 1000));
     if (!boot_block_player_is_finished()) return;
+    if (!s_ko_platform && keyoff_play(true)) return;   // the owner's ended: the platform's 光晕淡出 last
     lv_timer_del(s_ko_timer); s_ko_timer = NULL;
     keyoff_dark();   // the last frame stays on screen under the dark backlight; the player is freed at restart
 }
@@ -585,20 +617,7 @@ void ui_ext_keyoff_tick(void)
     if (age == UINT32_MAX || age < KEYOFF_SILENT_MS) return;
     if (ota_wifi_server_is_busy() || ota_update_ble_is_active() || (ui_ScreenPageOTAMode && lv_scr_act() == ui_ScreenPageOTAMode)) return;
     ESP_LOGI(TAG, "key-off: RPM silent %lu ms", (unsigned long)age);
-    if (!boot_media_mount() || !boot_media_has_outro()) { keyoff_dark(); return; }
-    boot_media_select(1);
-    s_ko_screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(s_ko_screen, lv_color_black(), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(s_ko_screen, 255, LV_PART_MAIN);
-    lv_obj_set_style_border_width(s_ko_screen, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(s_ko_screen, 360, LV_PART_MAIN);
-    lv_obj_clear_flag(s_ko_screen, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *canvas = NULL;
-    bool ok = boot_block_player_create(s_ko_screen, &canvas);
-    boot_media_select(0);
-    if (!ok) { ESP_LOGE(TAG, "key-off animation failed to load"); lv_obj_del(s_ko_screen); s_ko_screen = NULL; keyoff_dark(); return; }
-    lv_scr_load(s_ko_screen);
-    s_ko_start_us = esp_timer_get_time();
-    s_ko_timer = lv_timer_create(keyoff_timer_cb, 33, NULL);
+    bool own = nvs_intro_enable_get() == 2 && boot_media_mount() && boot_media_has_outro();
+    if (!(own && keyoff_play(false)) && !keyoff_play(true)) { keyoff_dark(); return; }
     s_ko = KO_PLAYING;
 }
