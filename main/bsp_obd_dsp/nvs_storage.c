@@ -32,12 +32,12 @@ static nvs_stat_t     s_stat = {0};   // runtime-only stats, not persisted (rese
 static SemaphoreHandle_t s_mux;
 
 // Multi-gauge boot animation settings (separate blob):
-// intro_enable 0=OFF 1=RACE 2=VIDEO (the single boot_block flashed via the phone app; default)
+// intro_enable 0=OFF (default since v78) 1=RACE 2=VIDEO (the owner's boot / key-off animations from the app)
 static struct __attribute__((packed)) {
     uint8_t intro_enable;   // 0=OFF 1=RACE 2=VIDEO
     uint8_t device_position; // 1/2/3
     uint8_t boot_mode;      // 0=default animation, 1=custom image, 2=video
-} s_mg = { 2, 1, 0 };
+} s_mg = { 0, 1, 0 };   // 自定义开关机动画 (CUSTOM BOOT/OFF) starts OFF: only the platform's animations until the owner turns it on (owner, 2026-10-17)
 
 /* Forward declarations */
 static esp_err_t load_blob(const char *ns,const char *key,void *out,size_t len);
