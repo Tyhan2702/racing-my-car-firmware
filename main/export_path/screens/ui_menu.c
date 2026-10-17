@@ -157,20 +157,29 @@ static void none_screen_init(void)
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_add_event_cb(scr, on_none, LV_EVENT_ALL, NULL);
-    lv_obj_t *logo = lv_img_create(scr);
-    lv_img_set_src(logo, &imgRmcMarkSmall);
-    lv_obj_align(logo, LV_ALIGN_CENTER, 0, -70);
-    lv_obj_t *t = lv_label_create(scr);
-    lv_label_set_text(t, TR("NO THEME YET"));
-    lv_obj_set_style_text_font(t, &ui_font_FontTypoderSize20, 0);
-    lv_obj_set_style_text_color(t, lv_color_hex(C_PICK), 0);
-    lv_obj_align(t, LV_ALIGN_CENTER, 0, -18);
-    lv_obj_t *h = lv_label_create(scr);
-    lv_label_set_text(h, TR("OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE UP FOR THE MENU"));
-    lv_obj_set_style_text_font(h, &ui_font_FontTypoderSize16, 0);
-    lv_obj_set_style_text_color(h, lv_color_hex(0x9A9A9A), 0);
-    lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(h, LV_ALIGN_CENTER, 0, 48);
+    // only the message (owner, 2026-10-17); a tap or a swipe up still opens the menu, as on a theme page.
+    // A centred column, so wrapped English lines push the rest down instead of overlapping.
+    lv_obj_t *col = lv_obj_create(scr);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_size(col, 290, LV_SIZE_CONTENT);
+    lv_obj_center(col);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(col, 14, 0);
+    lv_obj_clear_flag(col, LV_OBJ_FLAG_CLICKABLE);   // taps reach the screen (menu)
+    static const struct { const char *text; const lv_font_t *font; uint32_t color; } L[] = {
+        {"Racing My Car", &ui_font_FontTypoderSize20, C_TEXT},   // the platform's name, the same in both languages
+        {"INSTALL A THEME", &ui_font_FontTypoderSize24, C_PICK},
+        {"GET ONE IN THE STORE\nOF THE APP OR WEBSITE", &ui_font_FontTypoderSize16, 0x9A9A9A},
+    };
+    for (int i = 0; i < 3; i++) {
+        lv_obj_t *l = lv_label_create(col);
+        lv_label_set_text(l, i ? TR(L[i].text) : L[i].text);
+        lv_obj_set_width(l, LV_PCT(100));
+        lv_obj_set_style_text_font(l, L[i].font, 0);
+        lv_obj_set_style_text_color(l, lv_color_hex(L[i].color), 0);
+        lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    }
 }
 
 lv_obj_t *ui_menu_home_screen(void)

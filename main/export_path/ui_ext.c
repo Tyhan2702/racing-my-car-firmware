@@ -101,21 +101,9 @@ static void boot_video_timer_cb(lv_timer_t *t)
     }
 }
 
-// Jump to the BLE scan page and mark the boot flow done (shared by slaves not bound to a master, and masters/standalone units with no OBD device configured)
-static void boot_goto_ble_scan(void)
-{
-    if (ui_ScreenPageBLEScan == NULL) ui_ScreenPageBLEScan_screen_init();
-    lv_scr_load_anim(ui_ScreenPageBLEScan, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
-    ui_ScreenPageLogo = NULL;
-    imageLogo = NULL;
-    s_boot_done = true;
-}
-
 // Enter the default page when boot finishes (called on Logo timeout or after the boot animation completes)
 static void boot_enter_default_page(void)
 {
-    const nvs_user_cfg_t *pg_cfg = nvs_cfg_get();
-
     // If a custom theme with pages is loaded, boot directly into the first theme page
     uint8_t page_count = theme_page_list_count();
     if (page_count > 0) {
@@ -133,22 +121,8 @@ static void boot_enter_default_page(void)
         return;
     }
 
-    if (pg_cfg->device_role == ESPNOW_ROLE_SLAVE) {
-        // Slave: not yet bound to a master → go to the BLE page to pair (ui_ScreenPageBLEScan enters "FIND MASTER" mode automatically per role);
-        // if already bound, do nothing and fall through to the same default_page branch as the master, showing gauge data directly.
-        const uint8_t *bound_mac = espnow_link_get_bound_master_mac();
-        bool bound = (bound_mac[0] | bound_mac[1] | bound_mac[2] | bound_mac[3] | bound_mac[4] | bound_mac[5]) != 0;
-        if (!bound) {
-            boot_goto_ble_scan();
-            return;
-        }
-    } else if (pg_cfg->ble_device_name[0] == '\0') {
-        // First flash with no saved device: go straight to the BLE scan page and let the user pick manually
-        boot_goto_ble_scan();
-        return;
-    }
-
-    // no theme: the "no theme" page (ui_menu.c), never the firmware's own gauge pages (default_page is not used)
+    // no theme: only the "install a theme" message (ui_menu.c), never the firmware's own pages, not even BLE pairing
+    // (OBD pairing stays in the menu: tap or swipe up)
     lv_scr_load_anim(ui_menu_home_screen(), LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
     ui_ScreenPageLogo = NULL;
     imageLogo = NULL;

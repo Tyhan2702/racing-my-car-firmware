@@ -6,8 +6,8 @@
 static const char *const s_zh[][2] = {
     // menu
     {"OBD", "OBD"}, {"DATA", "数据"}, {"TEST", "测试"}, {"SET", "设置"}, {"GAMES", "游戏"}, {"BOOT", "开机"}, {"UPDATE", "更新"}, {"VERSION", "版本"},
-    {"NO THEME YET", "还没有主题"}, {"NO BOOT ANIMATION YET", "还没有开机动画"},
-    {"OPEN THE RACING MY CAR APP\nAND TAP RESTORE DEFAULT THEMES\n\nSWIPE UP FOR THE MENU", "打开 RACING MY CAR APP\n点恢复默认主题\n\n向上滑动打开菜单"},
+    {"INSTALL A THEME", "请安装主题"}, {"NO BOOT ANIMATION YET", "还没有开机动画"},
+    {"GET ONE IN THE STORE\nOF THE APP OR WEBSITE", "在 App 或网站的「商店」安装主题"},
     // settings
     {"SETTINGS", "设置"}, {"BRIGHTNESS", "亮度"}, {"VEHICLE", "车型"}, {"BRAND", "品牌"}, {"MODEL", "型号"}, {"YEAR", "年份"}, {"READING", "读法"}, {"OBD2 STANDARD", "OBD2 标准"}, {"EVERY CAR", "所有车通用"},
     {"CAR-SPECIFIC", "专车专用"}, {"BY MODEL & YEAR", "按品牌、型号、年份"}, {"STANDARD (BEST)", "标准（推荐）"}, {"FALLBACK", "备用"}, {"LANGUAGE", "语言"}, {"GAUGE MODE", "仪表模式"}, {"GAUGE POSITION", "仪表位置"},
