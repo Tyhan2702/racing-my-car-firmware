@@ -159,6 +159,7 @@ static volatile bool s_expect_mode21 = false; // true=last command was 21 01, wa
 static uint8_t s_active_protocol = 0;          // ATSP protocol of the current link (7/9 = 29-bit CAN)
 static void mv_reset(void);
 static bool mv_query(int sig);
+static void send_ext22(uint8_t ta, uint16_t did);
 static void fails_forget_now_and_then(void);
 static void relay_serve(void);
 // ---- CAN continuous monitor mode (ATMA, parse each frame as it arrives) ----
@@ -1336,7 +1337,8 @@ static void obd_poll_task(void *arg) {
                         bool need_phys = can11 && !uds_hdr && s_ov && s_ov->functional_addr && oil_f->type == OIL_UDS_22;
                         if (uds_hdr) elm327_ble_send_ascii_blocking(uds_hdr);
                         else if (need_phys) elm327_ble_send_ascii_blocking("ATSH7E0\r");
-                        if (oil_formula_build_cmd(oil_f, cmd_buf, sizeof(cmd_buf))) {
+                        if (uds_hdr && s_ov->uds_target && oil_f->type == OIL_UDS_22) send_ext22(s_ov->uds_target, (uint16_t)(oil_f->pid[0] << 8 | oil_f->pid[1]));
+                        else if (oil_formula_build_cmd(oil_f, cmd_buf, sizeof(cmd_buf))) {
                             elm327_ble_send_ascii_blocking(cmd_buf);
                         }
                         if (uds_hdr) send_fixed_header();
@@ -1429,9 +1431,12 @@ static void obd_poll_task(void *arg) {
                         const char *phys_hdr = (ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r";
                         char cmd[16];
                         elm327_ble_send_ascii_blocking(phys_hdr);
-                        snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
-                                 (vp->obd_oil_pressure_did >> 8) & 0xFF, vp->obd_oil_pressure_did & 0xFF);
-                        elm327_ble_send_ascii_blocking(cmd);
+                        if (ov && ov->uds_header_cmd && ov->uds_target) send_ext22(ov->uds_target, vp->obd_oil_pressure_did);
+                        else {
+                            snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
+                                     (vp->obd_oil_pressure_did >> 8) & 0xFF, vp->obd_oil_pressure_did & 0xFF);
+                            elm327_ble_send_ascii_blocking(cmd);
+                        }
                         send_fixed_header();
                     }
                 }
@@ -1676,6 +1681,20 @@ static void gear_publish(void)
         else if (s_tq_gear >= 1 && s_tq_gear <= 8) g = s_tq_gear;                    // automatic: the gear it is in
     }
     obd_data_set_gear(g);
+}
+// A Mode 22 request to an ECU behind extended addressing (BMW: tester 6F1, the target byte first, replies on 0x600 +
+// target with F1 first), as the BMW F/G gear's raw frame: the reply filter, then "12 03 22 HH LL" sent verbatim (ATCAF0).
+// The header (ATSH6F1) is the caller's. Untested on a BMW.
+static void send_ext22(uint8_t ta, uint16_t did)
+{
+    char line[32];
+    snprintf(line, sizeof(line), "ATCRA%03X\r", 0x600 + ta);
+    elm327_ble_send_ascii_blocking(line);
+    elm327_ble_send_ascii_blocking("ATCAF0\r");
+    snprintf(line, sizeof(line), "%02X 03 22 %02X %02X\r", ta, (did >> 8) & 0xFF, did & 0xFF);
+    elm327_ble_send_ascii_blocking(line);
+    elm327_ble_send_ascii_blocking("ATCAF1\r");
+    elm327_ble_send_ascii_blocking("ATCRA\r");
 }
 // Sends the current method's request (header and receive filter around it); false when the profile has no list for it
 static bool mv_query(int sig)
@@ -2048,16 +2067,21 @@ static void relay_serve(void)
         racechrono_ble_diy_obd_reply(r, (size_t)n);
         return;
     }
-    if (!relay_hex(hdr, strlen(hdr), 8) || !relay_hex(rx, strlen(rx), 8) || !relay_allowed(cmd)) { racechrono_ble_diy_obd_reply("?\r>", 3); return; }
+    // "RAW tt 0n <request>": an extended-address request (BMW: the target byte and the length first), sent verbatim (ATCAF0)
+    bool raw = !strncmp(cmd, "RAW ", 4);
+    if (raw && !(strlen(cmd) > 10 && relay_hex(cmd + 4, 2, 2) && cmd[6] == ' ' && cmd[7] == '0' && cmd[8] >= '1' && cmd[8] <= '7' && cmd[9] == ' ')) raw = false, cmd = "";
+    if (!relay_hex(hdr, strlen(hdr), 8) || !relay_hex(rx, strlen(rx), 8) || !relay_allowed(raw ? cmd + 10 : cmd)) { racechrono_ble_diy_obd_reply("?\r>", 3); return; }
     char line[32];
     if (*hdr) { snprintf(line, sizeof(line), "ATSH%s\r", hdr); elm327_ble_send_ascii_blocking(line); }
     if (*rx) { snprintf(line, sizeof(line), "ATCRA%s\r", rx); elm327_ble_send_ascii_blocking(line); }
     elm_wait_ready();
     s_relay_len = 0;
     s_relay_capture = true;
-    snprintf(line, sizeof(line), "%s\r", cmd);
+    if (raw) elm327_ble_send_ascii_blocking("ATCAF0\r");
+    snprintf(line, sizeof(line), "%s\r", raw ? cmd + 4 : cmd);
     elm327_ble_send_ascii_blocking(line);
     elm_wait_ready();                                     // the reply has been read (and captured)
+    if (raw) elm327_ble_send_ascii_blocking("ATCAF1\r");
     bool got = !s_relay_capture;
     s_relay_capture = false;
     if (*rx) elm327_ble_send_ascii_blocking("ATCRA\r");

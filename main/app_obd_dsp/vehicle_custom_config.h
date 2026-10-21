@@ -71,6 +71,7 @@ typedef struct {
     const char          *obd_gear_header_cmd; // ATSH header temporarily switched to before querying the gear DID (e.g. BMW "ATSH6F1\r" for the EGS), restored afterwards; NULL=fall back to uds_header_cmd then 7E0 physical
     const char          *obd_gear_rx_filter_cmd; // receive filter set for the gear query (e.g. BMW EGS replies on 0x618: "ATCRA618\r"), reset with ATCRA afterwards; NULL=ELM327 default filter
     const char          *obd_gear_raw_frame;  // raw CAN payload sent with ATCAF0 instead of "22 HH LL", for extended addressing (BMW: target byte 0x18 + ISO-TP PCI); NULL=normal auto-formatted request
+    uint8_t              uds_target;     // extended addressing for the uds_header_cmd requests (BMW E DME 0x12 behind 6F1): the target byte goes first (ATCAF0 raw frame), the reply comes on 0x600 + target with F1 first; 0 = normal addressing (untested on a BMW)
 } vehicle_override_t;
 
 // ================================================================
@@ -248,6 +249,7 @@ static const vehicle_override_t s_vehicle_overrides[] = {
         .functional_addr = true,
         .obd_timeout     = 0x0A,
         .uds_header_cmd  = "ATSH6F1\r",
+        .uds_target      = 0x12,             // the DME behind 6F1 (extended addressing, replies on 612): untested on a BMW
     },
     {
         .match_name      = "JCW F56",
