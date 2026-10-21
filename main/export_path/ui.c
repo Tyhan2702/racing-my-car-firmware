@@ -377,13 +377,20 @@ void ui_event_theme_gauge_background(lv_event_t * e)
                 ui_theme_gauge_page_index++;
                 theme_page_show();
             } else {
-                // past the last theme page: back to the first (the menu opens only with a swipe up)
+                // past the last theme page: back to the first (the menu opens only with a swipe down)
                 ui_theme_gauge_page_index = 0;
                 theme_page_show();
             }
         }
         else if(dir == LV_DIR_TOP) {
-            // swipe up → the app menu (screens/ui_menu.c)
+            // swipe up → the acceleration TEST page; back from it returns here (owner, 2026-10-21).
+            // A slave can't run a test (TEST only says USE THE MAIN GAUGE): the menu, as before.
+            lv_indev_wait_release(lv_indev_get_act());
+            if (nvs_cfg_get()->device_role == ESPNOW_ROLE_SLAVE) ui_menu_open();
+            else ui_menu_open_test_from_gauge();
+        }
+        else if(dir == LV_DIR_BOTTOM) {
+            // swipe down → the app menu (screens/ui_menu.c)
             lv_indev_wait_release(lv_indev_get_act());
             ui_menu_open();
         }

@@ -95,6 +95,8 @@ bool games_install_json(const char *json)
 // ---------- small helpers ----------
 float gc_rand(void) { return (float)(esp_random() & 0xFFFF) / 65535.0f; }
 
+// the last known speed, fresh or not: a link lost while moving keeps it above PARKED_KMH (no game), while parked, car
+// off or no adapter at all it is 0 (games allowed)
 static bool car_moving(void)
 {
     obd_data_snapshot_t o;
@@ -284,6 +286,9 @@ static lv_obj_t *exit_btn(lv_obj_t *box, const char *text, uint32_t bg, uint32_t
 static void exit_ask(void)
 {
     if (s_exit_box || !gc_scr) return;
+    // the finger is still down (it held for the prompt) and its lift lands on the prompt: a hold-steered game would
+    // otherwise keep climbing / aiming after CANCEL
+    if (s_game && s_game->input && s_game->wants_release) { lv_point_t p = s_hold_at; s_game->input(GC_RELEASE, p); }
     s_exit_box = lv_obj_create(gc_scr);
     lv_obj_remove_style_all(s_exit_box);
     lv_obj_set_size(s_exit_box, LV_PCT(100), LV_PCT(100));
@@ -430,8 +435,8 @@ static void show_pick(void)
     for (int i = 0; i < ICON * ICON; i++) s_icon_buf[i] = lv_color_hex(0x101010);
     g->icon(s_icon_buf, ICON);
     lv_obj_invalidate(s_icon);
-    lv_label_set_text(s_name, g->name);
-    lv_label_set_text(s_hint, g->hint);
+    lv_label_set_text(s_name, TR(g->name));
+    lv_label_set_text(s_hint, TR(g->hint));
     int32_t b = best_of(g);
     if (b) lv_label_set_text_fmt(s_best, TR("BEST %ld%s%s"), (long)b, g->unit[0] ? " " : "", g->unit);
     else lv_label_set_text(s_best, TR("NO RECORD YET"));

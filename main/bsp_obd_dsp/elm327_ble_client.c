@@ -75,8 +75,13 @@ static uint8_t s_oil_query_mode = 0;     // current query mode index (0-2)
 // Called when valid OBD data is parsed: refreshes the "valid data" timestamp and sets the flag.
 // do_elm_init only sets the timestamp and does NOT go through here — just having initialized does not mean "data is flowing". Otherwise heal_attempts
 // would be cleared right after every re-init, and "3 consecutive self-heals escalate to forced reconnect" could never be reached.
+// Key-off evidence (ui_ext.c): the adapter is still there but the car is not, as opposed to a BLE dropout
+static volatile int64_t s_car_frame_us;    // last frame from the car (only real data; re-init does not refresh it)
+static volatile int64_t s_nocar_us;        // last "NO DATA" / "UNABLE TO CONNECT" / bus error from the adapter
+static volatile int64_t s_atrv_us;         // last ATRV reading and its value
+static volatile uint32_t s_atrv_mv;
 static inline void mark_obd_data_valid(void) {
-    s_last_obd_valid_us = esp_timer_get_time();
+    s_last_obd_valid_us = s_car_frame_us = esp_timer_get_time();
     s_got_valid_data = true;
 }
 
@@ -1042,7 +1047,7 @@ static bool zc6_can_monitor_parse_line(const char *line)
     if (channels[CH_RPM] >= 0 && s_cbs.on_parsed_rpm)
         s_cbs.on_parsed_rpm((uint16_t)channels[CH_RPM]);
     if (channels[CH_SPEED] >= 0 && s_cbs.on_parsed_speed_kmh)
-        s_cbs.on_parsed_speed_kmh((uint8_t)channels[CH_SPEED]);
+        s_cbs.on_parsed_speed_kmh(channels[CH_SPEED] > 255 ? 255 : (uint8_t)channels[CH_SPEED]);   // no wrap above 255 km/h
     if (channels[CH_OIL_TEMP] > -40 && channels[CH_OIL_TEMP] <= 215 && s_cbs.on_parsed_oil_temp)
         s_cbs.on_parsed_oil_temp((uint32_t)(int16_t)channels[CH_OIL_TEMP]);
     if (channels[CH_COOLANT] > -40 && channels[CH_COOLANT] <= 215 && s_cbs.on_parsed_coolant_temp)
@@ -2074,10 +2079,10 @@ static void relay_serve(void)
     char line[32];
     if (*hdr) { snprintf(line, sizeof(line), "ATSH%s\r", hdr); elm327_ble_send_ascii_blocking(line); }
     if (*rx) { snprintf(line, sizeof(line), "ATCRA%s\r", rx); elm327_ble_send_ascii_blocking(line); }
-    elm_wait_ready();
+    if (raw) elm327_ble_send_ascii_blocking("ATCAF0\r");
+    elm_wait_ready();                                     // ATCAF0's "OK" is read before capturing starts
     s_relay_len = 0;
     s_relay_capture = true;
-    if (raw) elm327_ble_send_ascii_blocking("ATCAF0\r");
     snprintf(line, sizeof(line), "%s\r", raw ? cmd + 4 : cmd);
     elm327_ble_send_ascii_blocking(line);
     elm_wait_ready();                                     // the reply has been read (and captured)
@@ -2475,9 +2480,20 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         if (memchr(s_accum_buf, '>', s_accum_len) == NULL && memchr(v, '>', (size_t)n) == NULL) break;
 
         char *buf = s_accum_buf;
+        if (strstr(buf, "NO DATA") || strstr(buf, "UNABLE TO CONNECT") || strstr(buf, "CAN ERROR") || strstr(buf, "BUS INIT"))
+            s_nocar_us = esp_timer_get_time();
 
         char *p61 = strstr(buf, "61 01"); // Mode 21 response header (exact match "61 01")
-        char *p41 = strstr(buf, "41 ");
+        // only a real mode-01 reply line: "41 " can also be a data byte of another reply (BMW ATCAF0 "F1 05 62 58 6F 0F 41 FF"),
+        // which used to win over the mode 22 branch below and lose that reply
+        const char *p41 = NULL;
+        for (const char *ln = buf; *ln && !p41; ) {
+            size_t len = strcspn(ln, "\r\n>");
+            p41 = line_reply(ln, len, "41 ");
+            ln += len;
+            if (*ln == '>') break;
+            while (*ln == '\r' || *ln == '\n') ln++;
+        }
         char *p62 = strstr(buf, "62 ");
         // ---- CAN broadcast frame parsing: data-driven ----
         const vehicle_profile_t *vp_can = vehicle_profile_get_active();
@@ -2564,7 +2580,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                 if (channels[CH_RPM] >= 0 && s_cbs.on_parsed_rpm)
                     s_cbs.on_parsed_rpm((uint16_t)channels[CH_RPM]);
                 if (channels[CH_SPEED] >= 0 && s_cbs.on_parsed_speed_kmh)
-                    s_cbs.on_parsed_speed_kmh((uint8_t)channels[CH_SPEED]);
+                    s_cbs.on_parsed_speed_kmh(channels[CH_SPEED] > 255 ? 255 : (uint8_t)channels[CH_SPEED]);   // no wrap above 255 km/h
                 if (channels[CH_OIL_TEMP] > -40 && channels[CH_OIL_TEMP] <= 215 && s_cbs.on_parsed_oil_temp)
                     s_cbs.on_parsed_oil_temp((uint32_t)(int16_t)channels[CH_OIL_TEMP]);
                 if (channels[CH_COOLANT] > -40 && channels[CH_COOLANT] <= 215 && s_cbs.on_parsed_coolant_temp)
@@ -2634,8 +2650,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             const char *q = buf;
             while (*q && !isdigit((unsigned char)*q)) q++;
             float v = 0;
-            if (*q && sscanf(q, "%f", &v) == 1 && v > 6.0f && v < 20.0f && s_cbs.on_parsed_control_module_voltage)
-                s_cbs.on_parsed_control_module_voltage((uint32_t)(v * 1000.0f + 0.5f));
+            if (*q && sscanf(q, "%f", &v) == 1 && v > 6.0f && v < 20.0f) {
+                s_atrv_mv = (uint32_t)(v * 1000.0f + 0.5f);
+                s_atrv_us = esp_timer_get_time();
+                if (s_cbs.on_parsed_control_module_voltage) s_cbs.on_parsed_control_module_voltage(s_atrv_mv);
+            }
         }
 
         if (s_mv_pending >= 0) {
@@ -3167,6 +3186,18 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name) {
 
 bool elm327_ble_is_connected(void) {
     return s_connected;
+}
+
+// The car is off rather than out of reach: the adapter is connected and answering, nothing came from the car for 3 s,
+// and lately the adapter said the car is silent (NO DATA / UNABLE TO CONNECT / bus error) or its voltmeter reads a
+// battery below 13.0 V (no alternator). A BLE dropout is never this (not connected).
+bool elm327_ble_car_seems_off(void)
+{
+    int64_t now = esp_timer_get_time();
+    if (!s_connected || now - s_car_frame_us < 3000000) return false;
+    bool silent = s_nocar_us && now - s_nocar_us < 8000000;
+    bool low_bat = s_atrv_us && now - s_atrv_us < 10000000 && s_atrv_mv < 13000;
+    return silent || low_bat;
 }
 
 void elm327_ble_forget_target(void) {

@@ -20,6 +20,7 @@
 #include "../ui_lang.h"
 
 lv_obj_t *ui_ScreenPageAccel;
+bool ui_accel_from_gauge;
 
 #define C_RED 0xFF4D4D
 #define RUNS 5
@@ -75,14 +76,14 @@ static bool rec_add(int t, const uint16_t times[4])   // true: a new best
 // ---------- speed samples (written by the OBD task, read by the UI timer) ----------
 typedef struct { int64_t us; float v; } sample_t;
 static EXT_RAM_BSS_ATTR sample_t s_ring[128];
-static volatile uint32_t s_head;
+static uint32_t s_head;                // published with release / read with acquire: the sample is written before the UI sees it
 static uint32_t s_tail;
 static void on_speed(float kmh, int64_t us)
 {
-    uint32_t h = s_head;
+    uint32_t h = __atomic_load_n(&s_head, __ATOMIC_RELAXED);   // the only writer
     s_ring[h & 127].us = us;
     s_ring[h & 127].v = kmh;
-    s_head = h + 1;
+    __atomic_store_n(&s_head, h + 1, __ATOMIC_RELEASE);
 }
 
 // ---------- the TEST page ----------
@@ -110,6 +111,7 @@ static void page_refresh(lv_timer_t *t)
     for (int i = 0; i < 2; i++) lv_obj_set_style_border_color(s_card[i], lv_color_hex(!why[0] ? RMC_YELLOW : 0x3A3A3C), 0);
 }
 
+bool ui_accel_ready(void) { return !not_ready()[0]; }
 static void run_start(int test);
 static void on_card(lv_event_t *e)
 {
@@ -129,9 +131,10 @@ static void on_page(lv_event_t *e)
     }
     if (code == LV_EVENT_GESTURE) {
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if (dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT) {         // back to the menu
+        if (dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT || dir == LV_DIR_BOTTOM) {   // back where TEST was opened from
             lv_indev_wait_release(lv_indev_get_act());
-            ui_menu_open();
+            if (ui_accel_from_gauge || dir == LV_DIR_BOTTOM) ui_menu_go_home();   // down: the gauge, as in the menu
+            else ui_menu_open();
         }
     }
 }
@@ -437,7 +440,7 @@ static void run_tick(lv_timer_t *t)
         else hold_show(now - s_hold_us);
     }
     if (s_state >= R_DONE) return;
-    uint32_t head = s_head;
+    uint32_t head = __atomic_load_n(&s_head, __ATOMIC_ACQUIRE);
     if (head - s_tail > 128) s_tail = head - 128;
     while (s_tail != head && s_state < R_DONE) take(&s_ring[s_tail++ & 127]);
     if (s_state >= R_DONE) return;
@@ -525,6 +528,7 @@ static lv_obj_t *run_label(const lv_font_t *f, uint32_t color, int y)
 
 static void run_start(int test)
 {
+    if (s_run) return;                 // a second tap during the fade would start a second run over the first
     s_test = test;
     s_state = R_COUNT;
     s_t_start = esp_timer_get_time();
@@ -534,7 +538,7 @@ static void run_start(int test)
     s_have_prev = s_have_first = false;
     s_vmax = s_v = 0;
     s_last_sample_us = 0;
-    s_tail = s_head;
+    s_tail = __atomic_load_n(&s_head, __ATOMIC_ACQUIRE);
     hold_stop();
     s_exit_box = NULL;
 

@@ -284,6 +284,9 @@ static void rebuild(lv_timer_t *t)
 {
     lv_timer_del(t);
     lv_obj_t *old = ui_ScreenPageMenuSettings;
+    // the old page's DELETE handler skips this (it is no longer the page): a pending "TAP AGAIN" would touch a freed button
+    if (s_confirm_timer) { lv_timer_del(s_confirm_timer); s_confirm_timer = NULL; }
+    s_confirm_btn = NULL;
     s_focus = 2;                                                 // back on the language card
     ui_ScreenPageMenuSettings_screen_init();
     s_focus = 1;

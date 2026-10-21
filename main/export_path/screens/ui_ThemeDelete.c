@@ -115,9 +115,26 @@ void ui_theme_page_touch_through(lv_obj_t *obj)
     }
 }
 
+// Only a real hold opens the prompt: the finger stays within HOLD_SLOP px for HOLD_MS. A slow swipe (too slow
+// for LVGL to call it a gesture) used to reach LONG_PRESSED after 400 ms and pop the delete prompt.
+#define HOLD_SLOP 10
+#define HOLD_MS 800
 void ui_event_theme_gauge_long_press(lv_event_t *e)
 {
-    if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
-        ui_theme_delete_prompt();
+    static lv_point_t s_at;
+    static uint32_t s_tick;
+    static bool s_moved;
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+    if (code == LV_EVENT_PRESSED) { s_at = p; s_tick = lv_tick_get(); s_moved = false; return; }
+    if (code == LV_EVENT_PRESSING || code == LV_EVENT_LONG_PRESSED_REPEAT) {
+        if (LV_ABS(p.x - s_at.x) > HOLD_SLOP || LV_ABS(p.y - s_at.y) > HOLD_SLOP) s_moved = true;
+        if (code == LV_EVENT_LONG_PRESSED_REPEAT && !s_moved && lv_tick_elaps(s_tick) >= HOLD_MS) {
+            s_moved = true;   // once per hold
+            ui_theme_delete_prompt();
+        }
     }
 }

@@ -64,6 +64,14 @@ static volatile bool s_linktest_active = false;
 static int64_t s_linktest_start_us = 0;
 static volatile bool s_rx_linktest = false;   // slave side: last received "linked test in progress" flag from the master
 static volatile bool s_rx_linked_en = false;  // slave side: master's rpm_warn_linked_en (mirrored from broadcast flags bit2)
+// Key-off over the link, in spare flag bits so every older gauge still takes the packet (it ignores them):
+// bit3 = the master's RPM is stale (slaves leave their RPM unset, so its age grows as on the master),
+// bit4 = the master has keyed off (slaves follow). An older master sends neither: its slaves behave as before.
+#define FLAG_RPM_STALE 0x08
+#define FLAG_CAR_OFF   0x10
+#define CAR_OFF_SENDS  20              // the master keeps broadcasting 2 s after key-off, then goes quiet (older slaves key off on the silence)
+static volatile bool s_car_off = false;      // master side
+static volatile bool s_rx_car_off = false;   // slave side: latched until a packet without FLAG_CAR_OFF
 #define LINKTEST_RISE_MS 5000   // 0 -> peak, slow rise
 #define LINKTEST_HOLD_MS 800    // hold at peak (flash)
 #define LINKTEST_FALL_MS 2500   // peak -> 0, fall back
@@ -146,7 +154,9 @@ static void master_pack(espnow_obd_packet_t *p) {
     // bit0 = ELM connected; bit1 = linked test in progress; bit2 = rpm_warn_linked_en (slaves mirror this setting from master)
     p->flags   = (elm327_ble_is_connected() ? 0x01 : 0x00)
                | (s_linktest_active ? 0x02 : 0x00)
-               | (nvs_cfg_get()->rpm_warn_linked_en ? 0x04 : 0x00);
+               | (nvs_cfg_get()->rpm_warn_linked_en ? 0x04 : 0x00)
+               | (!s_linktest_active && obd_data_rpm_age_ms() > 2000 ? FLAG_RPM_STALE : 0)   // UINT32_MAX: never read
+               | (s_car_off ? FLAG_CAR_OFF : 0);
     p->seq     = ++s_tx_seq;
     obd_data_get_snapshot(&snap);
     p->rpm              = snap.rpm;
@@ -197,7 +207,11 @@ static void master_linktest_task(void *arg) {
 
 static void master_task(void *arg) {
     espnow_obd_packet_t pkt;
+    uint8_t off_sends = 0;
     for (;;) {
+        if (!s_car_off) off_sends = 0;
+        else if (off_sends >= CAR_OFF_SENDS) { vTaskDelay(pdMS_TO_TICKS(BROADCAST_INTERVAL_MS)); continue; }
+        else off_sends++;
         master_pack(&pkt);
         esp_err_t r = esp_now_send(s_broadcast_mac, (const uint8_t *)&pkt, sizeof(pkt));
         if (r != ESP_OK) ESP_LOGW(TAG, "esp_now_send err=%d", r);
@@ -236,8 +250,9 @@ void espnow_link_start_master(void) {
 static void apply_packet(const espnow_obd_packet_t *p) {
     s_rx_linktest  = (p->flags & 0x02) != 0;   // master is running a linked test -> slaves take part in rendering during TEST
     s_rx_linked_en = (p->flags & 0x04) != 0;   // master's rpm_warn_linked_en: mirror so slaves render the gradient without manual NVS config
-    obd_data_set_rpm(p->rpm);
-    obd_data_set_speed(p->speed);
+    s_rx_car_off   = (p->flags & FLAG_CAR_OFF) != 0;
+    if (!(p->flags & FLAG_RPM_STALE)) obd_data_set_rpm(p->rpm);   // a stale RPM must not look fresh (key-off on the slave)
+    if (!(p->flags & FLAG_RPM_STALE)) obd_data_set_speed(p->speed);   // the master's reading is stale too: not fresh here
     obd_data_set_coolant_temp(p->coolant_temp);
     obd_data_set_intake_temp(p->intake_temp);
     obd_data_set_oil_temp(p->oil_temp);
@@ -559,3 +574,6 @@ void espnow_link_stop(void) {
     s_is_master = false;
     ESP_LOGI(TAG, "ESP-NOW stopped");
 }
+
+void espnow_link_set_car_off(bool off) { s_car_off = off; }
+bool espnow_link_master_car_off(void) { return s_rx_car_off; }

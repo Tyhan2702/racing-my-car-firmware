@@ -7,7 +7,10 @@
 #include <stdint.h>
 
 #define VC_ADDED_MAX 64                                // cars
-#define VC_ADDED_BYTES 16384                           // the JSON the app sends
+// The JSON the app sends, kept in NVS (24 KB = 6 pages, one kept free: ~630 entries of 32 B). Rewriting a blob keeps
+// the old copy until the new one is written, so 2 x 6 KB (~390 entries) plus the settings, Wi-Fi PHY calibration and
+// BLE bonds still fit. ~40 published cars at ~150 B each.
+#define VC_ADDED_BYTES 6144
 void vc_added_load(void);                              // at start, before the pick is read
 // Replaces the added cars with this JSON list and keeps it; picked = the id of the car picked now (or NULL), found
 // again in the new list (*brand / *model; *brand 0xFF when it is gone). False when the JSON is not a list (nothing changes).

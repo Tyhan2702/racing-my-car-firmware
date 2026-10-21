@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include <string.h>
+#include <stdlib.h>
 #include "export_path/ui.h"
 #include "app_obd_dsp/vehicle_profiles.h"
 #include "espnow_link.h"   // ESPNOW_ROLE_* (device_role default / bounds)
@@ -46,8 +47,9 @@ static esp_err_t save_blob(const char *ns,const char *key,const void *data,size_
 esp_err_t nvs_storage_init(void)
 {
     esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    if (err != ESP_OK)   // any init error (not only no-free-pages / new version): erase and start over, never bootloop
     {
+        ESP_LOGW("nvs", "nvs_flash_init: %s, erasing NVS", esp_err_to_name(err));
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
@@ -57,11 +59,8 @@ esp_err_t nvs_storage_init(void)
 
     // Mileage/trip stats are no longer persisted (see s_stat declaration); stay {0} and start fresh each boot.
     {   // Multi-gauge boot animation settings: load if present else keep defaults.
-        nvs_handle_t h; size_t sz = sizeof(s_mg);
-        if (nvs_open(NS_CFG, NVS_READONLY, &h) == ESP_OK) {
-            nvs_get_blob(h, KEY_MG_EXTRA, &s_mg, &sz);
-            nvs_close(h);
-        }
+        size_t sz = sizeof(s_mg);
+        load_blob(NS_CFG, KEY_MG_EXTRA, &s_mg, sz);   // a longer blob (newer firmware, before a rollback) still loads
         if (s_mg.device_position < 1 || s_mg.device_position > 3) s_mg.device_position = 1;
         if (s_mg.intro_enable > 2) s_mg.intro_enable = 2;   // legacy REI/SHINJI/ASUKA (3/4) map to VIDEO (2)
         if (s_mg.boot_mode > 2) s_mg.boot_mode = 0;
@@ -239,10 +238,15 @@ static esp_err_t load_blob(const char *ns,const char *key,void *out,size_t len)
         size_t stored_len = 0;
         err = nvs_get_blob(h, key, NULL, &stored_len);
         if(err == ESP_OK && stored_len > 0){
-            size_t copy_len = (stored_len < len) ? stored_len : len;
-            // Partial load: copy what exists; new trailing fields keep their static defaults
-            err = nvs_get_blob(h, key, out, &copy_len);
+            // Read the whole stored blob, then copy what fits: an older struct keeps the new trailing fields' static
+            // defaults, a newer one (written before a rollback) loses only the fields this build doesn't know
+            // (nvs_get_blob into a shorter buffer fails outright, which reset every setting).
+            uint8_t *tmp = malloc(stored_len);
+            if (!tmp) { nvs_close(h); return ESP_ERR_NO_MEM; }
+            err = nvs_get_blob(h, key, tmp, &stored_len);
             nvs_close(h);
+            if (err == ESP_OK) memcpy(out, tmp, stored_len < len ? stored_len : len);
+            free(tmp);
             if(err == ESP_OK){
                 if(stored_len < len){
                     // struct grew; rewrite NVS at the new size (loaded old fields + defaulted new fields)
@@ -254,8 +258,7 @@ static esp_err_t load_blob(const char *ns,const char *key,void *out,size_t len)
         }
         nvs_close(h);
     }
-    memset(out,0,len);
-    return save_blob(ns,key,out,len);
+    return save_blob(ns,key,out,len);   // nothing stored yet: keep (and save) the static defaults, e.g. STANDALONE
 }
 
 static esp_err_t save_blob(const char *ns,const char *key,const void *data,size_t len)

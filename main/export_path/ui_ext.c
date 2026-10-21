@@ -17,6 +17,7 @@
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "app_obd_dsp/rmc_inflate.h"
 #include "bsp_obd_dsp/espnow_link.h"
+#include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/obd_data_cache.h"
 #include "app_obd_dsp/vehicle_profiles.h"
@@ -590,7 +591,14 @@ void ui_ext_keyoff_tick(void)
     // never while updating (the app's Wi-Fi / BLE update silences the car on purpose) or before the car was read
     if (age == UINT32_MAX || age < KEYOFF_SILENT_MS) return;
     if (ota_wifi_server_is_busy() || ota_update_ble_is_active() || (ui_ScreenPageOTAMode && lv_scr_act() == ui_ScreenPageOTAMode)) return;
+    // only when the car is really off, never on a dropout mid-drive (that shows NO SIGNAL): a slave follows its master;
+    // otherwise the adapter must still be connected and say the car is silent (or read a battery under 13.0 V), at a standstill
+    bool off = nvs_cfg_get()->device_role == ESPNOW_ROLE_SLAVE ? espnow_link_master_car_off()
+                                                               : elm327_ble_car_seems_off() && obd_data_get_speed() == 0;
+    if (!off) return;
     ESP_LOGI(TAG, "key-off: RPM silent %lu ms", (unsigned long)age);
+    ui_menu_boot_preview_stop();   // the menu's boot animation preview shares the player
+    espnow_link_set_car_off(true);
     bool own = nvs_intro_enable_get() == 2 && boot_media_mount() && boot_media_has_outro();
     if (!(own && keyoff_play(false)) && !keyoff_play(true)) { keyoff_dark(); return; }
     s_ko = KO_PLAYING;

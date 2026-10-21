@@ -85,6 +85,7 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name);
 
 // Query the current connection state.
 bool elm327_ble_is_connected(void);
+bool elm327_ble_car_seems_off(void);   // connected adapter says the car is silent (key-off, not a BLE dropout)
 void elm327_ble_disconnect(void);
 
 // Forget the bound adapter (no more auto-reconnect) and drop the connection if there is one.

@@ -16,7 +16,11 @@ extern lv_obj_t *ui_ScreenPageAccel;          // TEST: 0-100 / 60-160 km/h accel
 void ui_ScreenPageAccel_screen_init(void);
 
 void ui_menu_init(void);              // once, after the UI is built: starts the idle check
-void ui_menu_open(void);              // swipe up on a gauge page
+void ui_menu_open(void);              // swipe down on a gauge page
+void ui_menu_open_test_from_gauge(void); // swipe up on a gauge page: TEST, whose back returns to the gauge
+extern bool ui_accel_from_gauge;
+bool ui_accel_ready(void);             // TEST page shows READY (armed): no idle return       // TEST was opened from the gauge (back goes home, not to the menu)
+void ui_menu_boot_preview_stop(void); // key-off is about to play: stop the boot animation preview
 void ui_menu_go_home(void);           // back to the remembered theme page (or the "no theme" page)
 void ui_menu_go_home_later(uint32_t ms);
 lv_obj_t *ui_menu_home_screen(void);  // that page, built if needed (boot)

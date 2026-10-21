@@ -147,9 +147,10 @@ static void on_none(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_DELETE) { s_none_scr = NULL; return; }
-    bool up = code == LV_EVENT_GESTURE && lv_indev_get_gesture_dir(lv_indev_get_act()) == LV_DIR_TOP;
-    if (up) lv_indev_wait_release(lv_indev_get_act());
-    if (up || code == LV_EVENT_CLICKED) ui_menu_open();   // a swipe up (as on a theme page) or a tap: the menu
+    // no theme, so no TEST shortcut: any swipe or a tap opens the menu; wait_release so a swipe doesn't also CLICK
+    bool swipe = code == LV_EVENT_GESTURE;
+    if (swipe) lv_indev_wait_release(lv_indev_get_act());
+    if (swipe || code == LV_EVENT_CLICKED) ui_menu_open();
 }
 static void none_screen_init(void)
 {
@@ -157,7 +158,7 @@ static void none_screen_init(void)
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_add_event_cb(scr, on_none, LV_EVENT_ALL, NULL);
-    // only the message (owner, 2026-10-17); a tap or a swipe up still opens the menu, as on a theme page.
+    // only the message (owner, 2026-10-17); a tap or any swipe opens the menu, as on a theme page.
     // A centred column, so wrapped English lines push the rest down instead of overlapping.
     lv_obj_t *col = lv_obj_create(scr);
     lv_obj_remove_style_all(col);
@@ -338,7 +339,18 @@ static void open_games(void) { leave_to(&ui_ScreenPageGames, ui_ScreenPageGames_
 static void open_settings(void) { leave_to(&ui_ScreenPageMenuSettings, ui_ScreenPageMenuSettings_screen_init); }
 static void open_obd(void)   { leave_to(&ui_ScreenPageBLEScan, ui_ScreenPageBLEScan_screen_init); }
 static void open_data(void)  { leave_to(&ui_ScreenPageObdData, ui_ScreenPageObdData_screen_init); }
-static void open_test(void)  { leave_to(&ui_ScreenPageAccel, ui_ScreenPageAccel_screen_init); }
+static void open_test(void)  { ui_accel_from_gauge = false; leave_to(&ui_ScreenPageAccel, ui_ScreenPageAccel_screen_init); }
+void ui_menu_open_test_from_gauge(void)
+{
+    if (ui_ScreenPageAccel) return;
+    ui_accel_from_gauge = true;
+    // the theme page is the active screen here: let the load delete it once faded out (as theme_page_show does)
+    lv_obj_t *old = ui_ScreenPageThemeGauge;
+    ui_ScreenPageThemeGauge = NULL;
+    ui_ScreenPageAccel_screen_init();
+    load_screen(ui_ScreenPageAccel, old && lv_scr_act() == old);
+    if (old && lv_scr_act() != old) lv_obj_del(old);
+}
 static void open_ota(void)   { leave_to(&ui_ScreenPageOTAMode, ui_ScreenPageOTAMode_screen_init); }
 static void open_info(void)  { leave_to(&ui_ScreenPageEasterEgg, ui_ScreenPageEasterEgg_screen_init); }
 
@@ -350,6 +362,12 @@ static void boot_stop(void)
 {
     if (s_boot_timer) { lv_timer_del(s_boot_timer); s_boot_timer = NULL; }
     boot_block_player_destroy();
+}
+
+// key-off (ui_ext.c) needs the player: end a running preview first (its screen is left for the key-off screen to replace)
+void ui_menu_boot_preview_stop(void)
+{
+    if (s_boot_timer) boot_stop();
 }
 
 static void boot_tick(lv_timer_t *t)
@@ -402,7 +420,8 @@ static void idle_cb(lv_timer_t *t)
     if (ui_ScreenPageOTAMode && cur == ui_ScreenPageOTAMode) return;   // never in the middle of an update
     bool menu_page = cur == ui_ScreenPageMenu || (gc_scr && cur == gc_scr) || (ui_ScreenPageGames && cur == ui_ScreenPageGames) ||
                      (ui_ScreenPageBLEScan && cur == ui_ScreenPageBLEScan) || (ui_ScreenPageEasterEgg && cur == ui_ScreenPageEasterEgg) ||
-                     (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings);
+                     (s_boot_scr && cur == s_boot_scr) || (ui_ScreenPageMenuSettings && cur == ui_ScreenPageMenuSettings) ||
+                     (ui_ScreenPageAccel && cur == ui_ScreenPageAccel && !ui_accel_ready());   // not while READY; a run has its own screen
     if (!menu_page || !cur) return;
     if (s_boot_scr && cur == s_boot_scr) boot_stop();
     lv_disp_trig_activity(NULL);     // one return per idle minute

@@ -66,6 +66,10 @@ bool espnow_link_linktest_active(void);
 // Slaves use this so the gradient fires without needing manual NVS config on each slave unit.
 bool espnow_link_linked_en(void);
 
+// Key-off over the link: the master announces it (and goes quiet 2 s later); a slave asks whether its master has.
+void espnow_link_set_car_off(bool off);
+bool espnow_link_master_car_off(void);
+
 #ifdef __cplusplus
 }
 #endif

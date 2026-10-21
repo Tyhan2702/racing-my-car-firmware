@@ -22,9 +22,9 @@ void ui_ScreenPageThemeGauge_screen_init(void)
     }
 
     lv_obj_add_event_cb(ui_ScreenPageThemeGauge, ui_event_theme_gauge_background, LV_EVENT_GESTURE, NULL);
-    // long-press anywhere on the page: delete the theme this page belongs to (ui_ThemeDelete.c)
+    // a still hold (0.8 s, within 10 px) anywhere on the page: delete the theme this page belongs to (ui_ThemeDelete.c)
     lv_obj_add_flag(ui_ScreenPageThemeGauge, LV_OBJ_FLAG_CLICKABLE);
     ui_theme_page_touch_through(ui_ScreenPageThemeGauge);
-    lv_obj_add_event_cb(ui_ScreenPageThemeGauge, ui_event_theme_gauge_long_press, LV_EVENT_LONG_PRESSED, NULL);
+    lv_obj_add_event_cb(ui_ScreenPageThemeGauge, ui_event_theme_gauge_long_press, LV_EVENT_ALL, NULL);
     ui_menu_theme_shown();   // staying on this page makes it the one shown at boot
 }

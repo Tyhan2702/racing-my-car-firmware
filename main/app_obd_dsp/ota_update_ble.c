@@ -522,8 +522,12 @@ static esp_err_t ota_begin_firmware(const uint8_t *sha)
     if (!s_state.ota_partition) {
         return ESP_FAIL;
     }
+    if (!s_state.expected_size || s_state.expected_size > s_state.ota_partition->size) {   // esp_ota_begin no longer sees the size
+        return ESP_ERR_INVALID_SIZE;
+    }
 
-    esp_err_t err = esp_ota_begin(s_state.ota_partition, s_state.expected_size, &s_state.ota_handle);
+    // erase sector by sector while writing: erasing the whole 3 MB slot up front blocked the BLE stack for seconds
+    esp_err_t err = esp_ota_begin(s_state.ota_partition, OTA_WITH_SEQUENTIAL_WRITES, &s_state.ota_handle);
     if (err != ESP_OK) {
         return err;
     }
@@ -593,6 +597,11 @@ static esp_err_t ota_begin_transfer(const uint8_t *packet, uint16_t len)
     uint8_t filename_len = packet[44];
     if (command != 1 || 45u + filename_len > len) {
         return ESP_ERR_INVALID_ARG;
+    }
+    // only firmware over BLE: boot animations go over Wi-Fi (/ota/bootmedia, both slots). Target 2 is refused here,
+    // before anything is aborted or erased (it used to delete the installed animation first).
+    if (target != 1) {
+        return ESP_ERR_NOT_SUPPORTED;
     }
 
     char filename[32] = {0};

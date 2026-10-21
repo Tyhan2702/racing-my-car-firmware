@@ -126,7 +126,19 @@ bool vc_added_store(const char *json, size_t n, const char *picked, uint8_t *bra
     if (picked) snprintf(keep, sizeof(keep), "%s", picked);       // the model's id string lives in the block build() frees
     if (!build(json, n)) return false;
     nvs_handle_t h;
-    if (nvs_open("vcars", NVS_READWRITE, &h) == ESP_OK) { nvs_set_blob(h, "json", json, n); nvs_commit(h); nvs_close(h); }
+    esp_err_t err = nvs_open("vcars", NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        err = nvs_set_blob(h, "json", json, n);
+        if (err == ESP_OK) err = nvs_commit(h);
+        nvs_close(h);
+    }
+    if (err != ESP_OK) {   // not kept: back to the stored list and its hash, so the app sends the list again next time
+        ESP_LOGE(TAG, "cars list (%u B) not saved: %s", (unsigned)n, esp_err_to_name(err));
+        s_hash[0] = 0;
+        vc_added_load();
+        if (!s_hash[0]) build("[]", 2);
+        return false;
+    }
     snprintf(s_hash, sizeof(s_hash), "%08lx", (unsigned long)vc_fnv(json, n));
     ESP_LOGI(TAG, "now %d brands (%s)", vc_brand_count, s_hash);
     if (keep[0] && !vc_find(keep, brand, model)) *brand = 0xFF;
