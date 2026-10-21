@@ -97,18 +97,45 @@ static bool build(const char *json, size_t len)
     cJSON_Delete(a);
     void *old = s_mem;
     vc_brands = brands; vc_brand_count = nb; s_mem = mem;
-    free(old);                                        // shortcut: assumes no screen holds a model pointer across a push (pushes come from the app)
+    free(old);                                        // the caller keeps screens off the list meanwhile (the 7": the display lock, car.c)
     return true;
+}
+
+// Where the list is kept: NVS "vcars" here. A firmware with more room elsewhere defines its own two (the 7" dash: the
+// end of its storage partition, car.c). read: the JSON's length (0 none); write: true only once it reads back the same.
+__attribute__((weak)) size_t vc_store_read(char *buf, size_t max)
+{
+    nvs_handle_t h; size_t n = 0;
+    if (nvs_open("vcars", NVS_READONLY, &h) != ESP_OK) return 0;
+    if (nvs_get_blob(h, "json", NULL, &n) != ESP_OK || !n || n > max || nvs_get_blob(h, "json", buf, &n) != ESP_OK) n = 0;
+    nvs_close(h);
+    return n;
+}
+// the most JSON kept in NVS: a 24 KB nvs partition has ~5 usable pages, and a blob rewrite needs room for the old and
+// the new copy beside the gauge's other settings (the 1.85" and 4"; the 7" keeps the list in flash instead)
+#ifndef VC_NVS_MAX
+#define VC_NVS_MAX 6144
+#endif
+__attribute__((weak)) bool vc_store_write(const char *json, size_t n)
+{
+    nvs_handle_t h; bool ok = false;
+    if (n > VC_NVS_MAX) { ESP_LOGW(TAG, "%u bytes: more than NVS keeps (%u)", (unsigned)n, (unsigned)VC_NVS_MAX); return false; }
+    if (nvs_open("vcars", NVS_READWRITE, &h) != ESP_OK) return false;
+    if (nvs_set_blob(h, "json", json, n) == ESP_OK && nvs_commit(h) == ESP_OK) {
+        char *back = malloc(n); size_t m = n;
+        ok = back && nvs_get_blob(h, "json", back, &m) == ESP_OK && m == n && !memcmp(back, json, n);
+        free(back);
+    }
+    nvs_close(h);
+    if (!ok) ESP_LOGW(TAG, "the list did not fit NVS");
+    return ok;
 }
 
 void vc_added_load(void)
 {
-    nvs_handle_t h; size_t n = 0;
-    if (nvs_open("vcars", NVS_READONLY, &h) != ESP_OK) return;
-    char *json = NULL;
-    if (nvs_get_blob(h, "json", NULL, &n) == ESP_OK && n && n <= VC_ADDED_BYTES && (json = malloc(n)) && nvs_get_blob(h, "json", json, &n) == ESP_OK && build(json, n))
-        snprintf(s_hash, sizeof(s_hash), "%08lx", (unsigned long)vc_fnv(json, n));
-    free(json); nvs_close(h);
+    char *json = malloc(VC_ADDED_BYTES); size_t n = json ? vc_store_read(json, VC_ADDED_BYTES) : 0;
+    if (n && build(json, n)) snprintf(s_hash, sizeof(s_hash), "%08lx", (unsigned long)vc_fnv(json, n));
+    free(json);
     ESP_LOGI(TAG, "%d brands (%s)", vc_brand_count, s_hash[0] ? s_hash : "built-in only");
 }
 
@@ -122,23 +149,11 @@ bool vc_find(const char *id, uint8_t *brand, uint8_t *model)
 bool vc_added_store(const char *json, size_t n, const char *picked, uint8_t *brand, uint8_t *model)
 {
     if (n > VC_ADDED_BYTES) return false;
+    cJSON *a = cJSON_ParseWithLength(json, n); bool list = cJSON_IsArray(a); cJSON_Delete(a);
+    if (!list || !vc_store_write(json, n)) return false;           // kept and read back first: the hash only names a list really kept
     char keep[64] = "";
     if (picked) snprintf(keep, sizeof(keep), "%s", picked);       // the model's id string lives in the block build() frees
     if (!build(json, n)) return false;
-    nvs_handle_t h;
-    esp_err_t err = nvs_open("vcars", NVS_READWRITE, &h);
-    if (err == ESP_OK) {
-        err = nvs_set_blob(h, "json", json, n);
-        if (err == ESP_OK) err = nvs_commit(h);
-        nvs_close(h);
-    }
-    if (err != ESP_OK) {   // not kept: back to the stored list and its hash, so the app sends the list again next time
-        ESP_LOGE(TAG, "cars list (%u B) not saved: %s", (unsigned)n, esp_err_to_name(err));
-        s_hash[0] = 0;
-        vc_added_load();
-        if (!s_hash[0]) build("[]", 2);
-        return false;
-    }
     snprintf(s_hash, sizeof(s_hash), "%08lx", (unsigned long)vc_fnv(json, n));
     ESP_LOGI(TAG, "now %d brands (%s)", vc_brand_count, s_hash);
     if (keep[0] && !vc_find(keep, brand, model)) *brand = 0xFF;
