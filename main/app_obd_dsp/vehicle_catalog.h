@@ -25,6 +25,7 @@ static const vc_model_t VC_MODELS_3[] = {
     {"3/4 Series, M3/M4", "3/4 系、M3/M4", "G20/G22/G80/G82", "G20/G22/G80/G82", NULL, NULL, 2019, 2026, "BMW F/G", "BMW G OBD", "bmw-g20-g80"},
     {"F-series", "F 系列", "F30 etc.", "F30 等", NULL, NULL, 2012, 2019, "BMW F/G", NULL, "bmw-f"},
     {"E-series", "E 系列", "E90/E92 M3, E87 130i, E46, E39", "E90/E92 M3、E87 130i、E46、E39", NULL, NULL, 1998, 2013, "BMW E", NULL, "bmw-e"},
+    {"M3 dual-clutch (M-DCT)", "M3 双离合 (M-DCT)", "E90/E92/E93", "E90/E92/E93", NULL, NULL, 2008, 2013, "BMW E M3 DCT", NULL, "bmw-e9x-m3-dct"},
 };
 static const vc_model_t VC_MODELS_4[] = {
     {"John Cooper Works", "John Cooper Works", "F56", "F56", NULL, NULL, 2015, 2026, "JCW F56", NULL, "mini-jcw-f56"},
@@ -51,7 +52,7 @@ static const vc_brand_t VC_BUILTIN[] = {
     {"Toyota", VC_MODELS_0, 5},
     {"Subaru", VC_MODELS_1, 2},
     {"Mazda", VC_MODELS_2, 2},
-    {"BMW", VC_MODELS_3, 3},
+    {"BMW", VC_MODELS_3, 4},
     {"MINI", VC_MODELS_4, 2},
     {"Porsche", VC_MODELS_5, 2},
     {"Alfa Romeo", VC_MODELS_6, 1},

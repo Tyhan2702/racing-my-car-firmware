@@ -252,6 +252,21 @@ static const vehicle_override_t s_vehicle_overrides[] = {
         .uds_target      = 0x12,             // the DME behind 6F1 (extended addressing, replies on 612): untested on a BMW
     },
     {
+        // BMW E-series (E9x M3 S65 / E87 130i N52 / E9x N54 N55): standard PIDs via 7DF functional addressing.
+        // Oil temp uses the N55 Mode 22 DIDs over the 6F1 DME request header (bmw_pid_data/n55_pid_data.h):
+        //   4402 "oil temperature after filter" (°C = raw×0.75 − 48, 2-byte), 5822 "oil temperature" (°C = raw − 60, 1-byte).
+        // The E-series DME answers Mode 22 on 6F1 (physical), so uds_header_cmd="ATSH6F1\r" switches the header for the
+        // query and restores 7DF afterwards. Confirmed on N55; N52/N54 likely share the DIDs, S65/MSS60 may differ.
+        .match_name      = "BMW E M3 DCT",   // the E9x M3 with the M-DCT: the same DME requests as "BMW E"
+        .oil_primary     = &oil_bmw_g_4402,   // 22 44 02: °C = raw×0.75 − 48
+        .oil_secondary   = &oil_mini_5822,    // 22 58 22: °C = raw − 60
+        .forced_protocol = 6,
+        .functional_addr = true,
+        .obd_timeout     = 0x0A,
+        .uds_header_cmd  = "ATSH6F1\r",
+        .uds_target      = 0x12,             // the DME behind 6F1 (extended addressing, replies on 612): untested on a BMW
+    },
+    {
         .match_name      = "JCW F56",
         .oil_primary     = &oil_mini_5822,
         .oil_secondary   = &oil_std_5c,

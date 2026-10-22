@@ -96,6 +96,7 @@ typedef struct {
     bool can_broadcast_mode;             // true=read data by listening to CAN broadcast frames via ATMA (currently ZN/C6 CAN only), replacing standard OBD PID polling
     obd_method_set_t methods[MV_COUNT];  // brand method lists (oil temp, gear, oil pressure); they replace the profile's other ways for that value
     bool cvt;                            // CVT: in D the gear shown is worked out from RPM / speed and gear_ratios (simulated steps)
+    bool ratio_gear;                     // no gear / lever from the car (BMW E9x M3 M-DCT): the gear always worked out from RPM / speed and gear_ratios
     bool auto_29bit_functional;          // standard PIDs on 18DB33F1 when the car turned out to be 29-bit CAN (protocol 7/9), else 7DF
 } vehicle_profile_t;
 

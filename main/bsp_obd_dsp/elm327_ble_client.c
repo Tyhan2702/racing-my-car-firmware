@@ -1670,6 +1670,21 @@ static int8_t cvt_step(const vehicle_profile_t *vp)
     }
     return g;
 }
+// A car that answers no gear (BMW E9x M3 M-DCT, ratio_gear): the gear whose overall ratio is nearest RPM / speed, 1 when
+// (nearly) stopped; while the clutch slips (a shift, a launch) no gear is near enough and the last one stays
+static void ratio_gear_publish(void)
+{
+    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    if (!vp || !vp->ratio_gear) return;
+    float rpm = obd_data_get_rpm(), kmh = obd_data_get_speed(), k = vehicle_profile_calc_constant(vp);
+    if (kmh < 5 || rpm < 300 || k <= 0) { obd_data_set_gear(1); return; }
+    float ratio = rpm / (kmh * k), best = 1e9f; int8_t g = 1;
+    for (uint8_t i = 1; i <= vp->gear_count && i < VEHICLE_MAX_GEARS; i++) {
+        float d = fabsf(logf(ratio / (vp->gear_ratios[i] * vp->final_drive_ratio)));
+        if (d < best) { best = d; g = (int8_t)i; }
+    }
+    if (best <= (vp->gear_tolerance > 0 ? vp->gear_tolerance : 0.12f)) obd_data_set_gear(g);
+}
 // What the gauge shows as the gear: -2 P, -1 R, 0 N, D: the gear (automatic) / simulated step (CVT) or -3, M1-M7
 static void gear_publish(void)
 {
@@ -2729,6 +2744,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                                     // Normal mode
                                     if (s_cbs.on_parsed_rpm)
                                         s_cbs.on_parsed_rpm(rpm_val);
+                                    ratio_gear_publish();       // BMW E9x M3 M-DCT: the gear from RPM / speed
                                 }
                             }
                             break;

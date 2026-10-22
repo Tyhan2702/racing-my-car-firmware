@@ -323,6 +323,34 @@ static const vehicle_profile_t s_profiles[] = {
         .poll_gap_ms = 1,
     },
     {
+        // BMW E9x M3 with the 7-speed M-DCT: as "BMW E" (same DME methods), the gear from RPM / speed and the DCT ratios.
+        // BMW E-series (E9x M3 S65 / E87 130i N52 / E9x N54 N55 / E46 E39). Standard mode 01 PIDs
+        // go through 7DF functional addressing (the E-series DME does not answer physical 7E0 for
+        // mode 01, same behaviour as BMW F/G). RPM/speed/coolant/intake/load/TPS all standard.
+        // Oil temp & oil pressure use the N55 Mode 22 DIDs (bmw_pid_data/n55_pid_data.h) over the
+        // 6F1 DME request header (see the override in vehicle_custom_config.h): 4402 oil temp
+        // (°C = raw×0.75 − 48), 5822 oil temp (°C = raw − 60), 586F oil pressure (hPa, raw×1).
+        // Confirmed on N55; N52/N54 likely share the same DIDs (unverified); S65/MSS60 may differ.
+        .name = "BMW E M3 DCT",
+        .final_drive_ratio = 3.154f,       // E9x M3 M-DCT final drive (BMW press data; the 6MT's is 3.846)
+        .tire_rolling_radius_m = 0.335f,   // rear 265/40R18
+        .gear_count = 7,
+        .gear_ratios = {0, 4.780f, 2.933f, 2.153f, 1.678f, 1.390f, 1.203f, 1.000f},  // Getrag GS7D36SG M-DCT (BMW press data)
+        .gear_tolerance = 0.15f,
+        .oil_temp_strategy = {
+            .primary = OIL_TEMP_MODE_PID_5C,        // ignored when the override formula is present (see above)
+            .secondary = OIL_TEMP_MODE_NONE,
+            .tertiary = OIL_TEMP_MODE_NONE,
+            .quaternary = OIL_TEMP_MODE_NONE,
+        },
+        .forced_protocol = 6,              // ISO 15765-4 CAN 11-bit 500k
+        .obd_functional_addr = true,       // 7DF functional addressing (same as phone apps)
+        .obd_oil_pressure_did = 0x586F,    // N55 oil pressure DID (hPa, raw×1), read over ATSH6F1
+        .obd_timeout = 0x0A,
+        .poll_gap_ms = 1,
+        .ratio_gear = true,                // the S65 / M-DCT answer no gear: worked out from RPM / speed (owner's E93 M3, 2026-10-22)
+    },
+    {
         // MINI John Cooper Works F56 (BMW B48 2.0T, FWD transverse)
         .name = "JCW F56",
         .final_drive_ratio = 3.824f,       // F56 JCW 6MT final drive ratio
