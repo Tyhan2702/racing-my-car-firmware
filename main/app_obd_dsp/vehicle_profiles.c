@@ -345,8 +345,6 @@ static const vehicle_profile_t s_profiles[] = {
         },
         .forced_protocol = 6,              // ISO 15765-4 CAN 11-bit 500k
         .obd_functional_addr = true,       // 7DF functional addressing (same as phone apps)
-        .obd_oil_pressure_did = 0x586F,    // N55 oil pressure DID (hPa, raw×1), read over ATSH6F1
-        .obd_timeout = 0x0A,
         .poll_gap_ms = 1,
         .ratio_gear = true,                // the S65 / M-DCT answer no gear: worked out from RPM / speed (owner's E93 M3, 2026-10-22)
     },

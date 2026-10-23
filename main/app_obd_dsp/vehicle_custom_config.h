@@ -257,14 +257,13 @@ static const vehicle_override_t s_vehicle_overrides[] = {
         //   4402 "oil temperature after filter" (°C = raw×0.75 − 48, 2-byte), 5822 "oil temperature" (°C = raw − 60, 1-byte).
         // The E-series DME answers Mode 22 on 6F1 (physical), so uds_header_cmd="ATSH6F1\r" switches the header for the
         // query and restores 7DF afterwards. Confirmed on N55; N52/N54 likely share the DIDs, S65/MSS60 may differ.
-        .match_name      = "BMW E M3 DCT",   // the E9x M3 with the M-DCT: the same DME requests as "BMW E"
-        .oil_primary     = &oil_bmw_g_4402,   // 22 44 02: °C = raw×0.75 − 48
-        .oil_secondary   = &oil_mini_5822,    // 22 58 22: °C = raw − 60
+        .match_name      = "BMW E M3 DCT",   // the E9x M3 with the M-DCT: standard OBD only, like "OBD2 Generic"
+        // owner 2026-10-23: the N55 DIDs over 6F1 never answered on his E92 M3 (S65 / MSS60) and the raw reads made RPM
+        // lag and stop; oil temperature comes back once the probe finds the S65's own source
+        .oil_primary     = &oil_std_5c,
+        .oil_secondary   = &oil_std_5c,
         .forced_protocol = 6,
         .functional_addr = true,
-        .obd_timeout     = 0x0A,
-        .uds_header_cmd  = "ATSH6F1\r",
-        .uds_target      = 0x12,             // the DME behind 6F1 (extended addressing, replies on 612): untested on a BMW
     },
     {
         .match_name      = "JCW F56",
