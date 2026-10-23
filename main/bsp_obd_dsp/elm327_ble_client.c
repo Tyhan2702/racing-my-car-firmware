@@ -1674,16 +1674,29 @@ static int8_t cvt_step(const vehicle_profile_t *vp)
 // (nearly) stopped; while the clutch slips (a shift, a launch) no gear is near enough and the last one stays
 static void ratio_gear_publish(void)
 {
+    // BMW E9x M3 M-DCT (owner 2026-10-23): N standing; moving, the gear whose gear × final drive is nearest RPM ÷ wheel speed;
+    // none near (a clutch slipping, crawling): the gear the M-DCT in D runs at that speed, the highest still at 1500 rpm.
+    // As web/obd-engine.js ratioGear (the RPM per km/h was missing the final drive: 7th read as 2nd).
     const vehicle_profile_t *vp = vehicle_profile_get_active();
-    if (!vp || !vp->ratio_gear) return;
-    float rpm = obd_data_get_rpm(), kmh = obd_data_get_speed(), k = vehicle_profile_calc_constant(vp);
-    if (kmh < 5 || rpm < 300 || k <= 0) { obd_data_set_gear(1); return; }
-    float ratio = rpm / (kmh * k), best = 1e9f; int8_t g = 1;
-    for (uint8_t i = 1; i <= vp->gear_count && i < VEHICLE_MAX_GEARS; i++) {
-        float d = fabsf(logf(ratio / (vp->gear_ratios[i] * vp->final_drive_ratio)));
-        if (d < best) { best = d; g = (int8_t)i; }
+    if (!vp || !vp->ratio_gear || vp->tire_rolling_radius_m <= 0) return;
+    float rpm = obd_data_get_rpm(), kmh = obd_data_get_speed();
+    if (kmh < 1) { obd_data_set_gear(0); return; }
+    int8_t g = 0;
+    if (kmh >= 5 && rpm >= 300) {
+        float best = 1e9f;
+        for (uint8_t i = 1; i <= vp->gear_count && i < VEHICLE_MAX_GEARS; i++) {
+            float per = vp->gear_ratios[i] * vp->final_drive_ratio / (0.377f * vp->tire_rolling_radius_m);
+            float d = fabsf(logf(rpm / (kmh * per)));
+            if (d < best) { best = d; g = (int8_t)i; }
+        }
+        if (best > (vp->gear_tolerance > 0 ? vp->gear_tolerance : 0.12f)) g = 0;
     }
-    if (best <= (vp->gear_tolerance > 0 ? vp->gear_tolerance : 0.12f)) obd_data_set_gear(g);
+    if (!g) {
+        g = 1;
+        for (uint8_t i = 1; i <= vp->gear_count && i < VEHICLE_MAX_GEARS; i++)
+            if (kmh * vp->gear_ratios[i] * vp->final_drive_ratio / (0.377f * vp->tire_rolling_radius_m) >= 1500.0f) g = (int8_t)i;
+    }
+    obd_data_set_gear(g);
 }
 // What the gauge shows as the gear: -2 P, -1 R, 0 N, D: the gear (automatic) / simulated step (CVT) or -3, M1-M7
 static void gear_publish(void)
