@@ -1698,6 +1698,23 @@ static void ratio_gear_publish(void)
     }
     obd_data_set_gear(g);
 }
+// BMW E9x M3 (owner 2026-10-23): no oil temperature over OBD, estimated as web/obd-engine.js oilEstimate: coolant + 9 °C
+// (his cluster 90 at coolant 81, 97 at 87) + up to 30 °C under load × RPM, followed with a 4 min lag
+static float s_oil_est = -1000.0f;
+static int64_t s_oil_est_us;
+static void oil_estimate_feed(int32_t coolant)
+{
+    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    if (!vp || !vp->oil_estimate) return;
+    float rpm = obd_data_get_rpm(); int16_t load = obd_data_get_load_pct();
+    float heat = (load > 0 ? fminf((float)load, 100.0f) / 100.0f : 0) * fminf(fmaxf(rpm / 8000.0f, 0), 1.0f);
+    float target = (float)coolant + 9.0f + 30.0f * heat;
+    int64_t now = esp_timer_get_time();
+    if (s_oil_est < -500.0f) s_oil_est = coolant >= 70 ? target : (float)coolant;   // a warm restart: the warm value at once
+    else s_oil_est += (target - s_oil_est) * (1.0f - expf(-fminf(60.0f, (now - s_oil_est_us) / 1e6f) / 240.0f));
+    s_oil_est_us = now;
+    obd_data_set_oil_temp((int16_t)lroundf(s_oil_est));
+}
 // What the gauge shows as the gear: -2 P, -1 R, 0 N, D: the gear (automatic) / simulated step (CVT) or -3, M1-M7
 static void gear_publish(void)
 {
@@ -2744,6 +2761,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                         case 0x05: // Coolant temp
                             if (dc >= 1 && s_cbs.on_parsed_coolant_temp && s_protocol_detect_idx < 0)
                                 s_cbs.on_parsed_coolant_temp((uint32_t)((int32_t)d[0] - 40));
+                            if (dc >= 1 && s_protocol_detect_idx < 0) oil_estimate_feed((int32_t)d[0] - 40);
                             break;
                         case 0x0C: // RPM
                             if (dc >= 2) {
