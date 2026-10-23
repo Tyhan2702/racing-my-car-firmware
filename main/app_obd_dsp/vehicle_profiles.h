@@ -85,6 +85,7 @@ typedef struct {
     float gear_tolerance;                // gear detection tolerance (e.g. 0.15 = ±15%)
     oil_temp_strategy_t oil_temp_strategy; // oil temp query strategy
     bool has_boost;                      // whether turbocharged (decides whether to query/display boost pressure)
+    bool oil_estimate;                   // no oil temperature from the car: estimated from coolant, load and RPM (BMW E9x M3, web ObdReader.oilEstimate)
     uint16_t obd_oil_pressure_did;       // 0=off; else Mode 22 DID for OBD oil pressure (4436=B58 hPa, 586F=N55 hPa); supersedes the ADS1115 ADC
     uint16_t obd_gear_did;               // 0=off; else Mode 22 DID for direct gear read (D031=BMW ZF 8HP current gear); supersedes ratio-based gear calc
     uint8_t forced_protocol;             // forced ELM327 protocol number (ATSP), 0=auto-detect; lock to 6 for cars like BMW where auto-detect is unstable

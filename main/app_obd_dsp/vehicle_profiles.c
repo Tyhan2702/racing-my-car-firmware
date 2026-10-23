@@ -347,6 +347,7 @@ static const vehicle_profile_t s_profiles[] = {
         .obd_functional_addr = true,       // 7DF functional addressing (same as phone apps)
         .poll_gap_ms = 1,
         .ratio_gear = true,                // the S65 / M-DCT answer no gear: worked out from RPM / speed (owner's E93 M3, 2026-10-22)
+        .oil_estimate = true,              // nor oil temperature over OBD: estimated from coolant (owner 2026-10-23: cluster 90 °C at coolant 81)
     },
     {
         // MINI John Cooper Works F56 (BMW B48 2.0T, FWD transverse)
