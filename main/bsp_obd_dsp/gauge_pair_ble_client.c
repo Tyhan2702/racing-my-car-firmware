@@ -24,6 +24,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "ble_adv_util.h"
+#include "share_ble.h"
 
 static const char *TAG = "gauge_pair_ble";
 
@@ -139,7 +140,8 @@ static void gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) 
         ble_adv_extract_name(pr->scan_rst.ble_adv, pr->scan_rst.adv_data_len,
                           pr->scan_rst.scan_rsp_len, dev_name, sizeof(dev_name));
         if (strncmp(dev_name, GAUGE_PAIR_NAME_PREFIX, strlen(GAUGE_PAIR_NAME_PREFIX)) != 0 &&
-            strncmp(dev_name, GAUGE_PAIR_OLD_PREFIX, strlen(GAUGE_PAIR_OLD_PREFIX)) != 0) break;
+            strncmp(dev_name, GAUGE_PAIR_OLD_PREFIX, strlen(GAUGE_PAIR_OLD_PREFIX)) != 0 &&
+            !share_ble_is_dash(dev_name)) break;                   // a 7" / 4" dash set to 主仪表 too (share_ble.c)
         if (s_scan_count >= GAUGE_PAIR_SCAN_MAX_DEVICES) break;
 
         bool exists = false;

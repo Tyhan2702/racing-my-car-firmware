@@ -164,6 +164,8 @@ static volatile bool s_expect_mode21 = false; // true=last command was 21 01, wa
 static uint8_t s_active_protocol = 0;          // ATSP protocol of the current link (7/9 = 29-bit CAN)
 static void mv_reset(void);
 static bool mv_query(int sig);
+// n / d rounded halves away from zero, as the phone's toFixed (a plain division truncates: 38.8 % read 38)
+static int32_t rdiv(int32_t n, int32_t d) { return n >= 0 ? (n + d / 2) / d : -((-n + d / 2) / d); }
 static void send_ext22(uint8_t ta, uint16_t did);
 static void fails_forget_now_and_then(void);
 static void relay_serve(void);
@@ -806,13 +808,14 @@ static bool send_first_pid(const uint8_t *pids, size_t n)
 static uint8_t s_ext_next;
 static bool ext_request(obd_ext_t e)
 {
-    static const uint8_t fuel_p[] = {0x0A, 0x23, 0x22, 0x59}, o2[] = {0x14, 0x24, 0x15}, egt[] = {0x78, 0x3C};
+    // fuel_p in the phone's order (obd-dash.js GROUPS fuelP)
+    static const uint8_t fuel_p[] = {0x0A, 0x22, 0x23, 0x59}, o2[] = {0x15, 0x14}, egt[] = {0x78, 0x3C};
     const vehicle_profile_t *vp = vehicle_profile_get_active();
     switch (e) {
     case OBD_EXT_MAP:           return (vp && vp->has_boost) ? true : send_first_pid((const uint8_t[]){0x0B}, 1);  // slot 8 already asks it
-    case OBD_EXT_FUEL_LEVEL:    return send_first_pid((const uint8_t[]){0x2F}, 1) || mv_query(MV_FUEL_LEVEL);
+    case OBD_EXT_FUEL_LEVEL:    return mv_query(MV_FUEL_LEVEL) || send_first_pid((const uint8_t[]){0x2F}, 1);   // the brand method first, as the phone
     case OBD_EXT_IGN_ADV:       return send_first_pid((const uint8_t[]){0x0E}, 1);
-    case OBD_EXT_FUEL_PRESSURE: return send_first_pid(fuel_p, sizeof(fuel_p)) || mv_query(MV_FUEL_PRESSURE);
+    case OBD_EXT_FUEL_PRESSURE: return mv_query(MV_FUEL_PRESSURE) || send_first_pid(fuel_p, sizeof(fuel_p));
     case OBD_EXT_LTFT:          return send_first_pid((const uint8_t[]){0x07}, 1);
     case OBD_EXT_STFT:          return send_first_pid((const uint8_t[]){0x06}, 1);
     case OBD_EXT_MAF:           return send_first_pid((const uint8_t[]){0x10}, 1);
@@ -1400,12 +1403,12 @@ static void obd_poll_task(void *arg) {
                     send_std(0x05);
                 }
                 break;
-            case 4:// Engine load (0x04, 0~100%)
-                send_std(0x04);
+            case 4:// Engine load (0x04, 0~100%); 01 43 absolute load on cars without 04 (the phone's load: 04, 43)
+                if (!pid_ok(0x04) && pid_ok(0x43)) send_pid(0x43); else send_std(0x04);
                 break;
             case 5:// Throttle position TPS (skip when CAN already provides it); 01 45 relative when 01 11 is missing
                 if (!(can_broadcast && can_has_tps)) {
-                    static const uint8_t tps_pids[] = {0x11, 0x45};
+                    static const uint8_t tps_pids[] = {0x11, 0x45, 0x49};   // the phone's tps: 11, 45 relative, 49 the pedal
                     send_first_pid(tps_pids, sizeof(tps_pids));
                 }
                 break;
@@ -1421,9 +1424,9 @@ static void obd_poll_task(void *arg) {
                     }
                 }
                 break;
-            case 9:// Air-fuel ratio AFR: 01 44 commanded λ, else the wide-range O2 sensor 1 (01 34, 01 24: measured λ)
+            case 9:// Air-fuel ratio AFR: the wide-range O2 sensor 1 measured λ (01 34, 01 24), else 01 44 commanded (the phone's afr)
                 {
-                    static const uint8_t afr_pids[] = {0x44, 0x34, 0x24};
+                    static const uint8_t afr_pids[] = {0x34, 0x24, 0x44};
                     send_first_pid(afr_pids, sizeof(afr_pids));
                 }
                 break;
@@ -2756,7 +2759,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                     switch (pid) {
                         case 0x04: // Engine load (0~100%)
                             if (dc >= 1 && s_cbs.on_parsed_load_pct && s_protocol_detect_idx < 0)
-                                s_cbs.on_parsed_load_pct((uint32_t)d[0] * 100 / 255);
+                                s_cbs.on_parsed_load_pct(rdiv((int32_t)d[0] * 100, 255));
+                            break;
+                        case 0x43: // Absolute load (cars without 01 04): (256A+B)*100/255 %
+                            if (dc >= 2 && s_cbs.on_parsed_load_pct && s_protocol_detect_idx < 0)
+                                s_cbs.on_parsed_load_pct(rdiv(((int32_t)d[0] << 8 | d[1]) * 100, 255));
                             break;
                         case 0x05: // Coolant temp
                             if (dc >= 1 && s_cbs.on_parsed_coolant_temp && s_protocol_detect_idx < 0)
@@ -2789,8 +2796,9 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             break;
                         case 0x11: // Throttle position TPS (0~100%)
                         case 0x45: // Relative throttle position (cars without 01 11)
+                        case 0x49: // Accelerator pedal D (cars without 11 / 45)
                             if (dc >= 1 && s_cbs.on_parsed_throttle_position && s_protocol_detect_idx < 0)
-                                s_cbs.on_parsed_throttle_position((uint32_t)d[0] * 100 / 255);
+                                s_cbs.on_parsed_throttle_position(rdiv((int32_t)d[0] * 100, 255));
                             break;
                         case 0x0B: // Intake manifold absolute pressure MAP (kPa) → boost gauge pressure
                             if (dc >= 1 && s_cbs.on_parsed_manifold_pressure && s_protocol_detect_idx < 0)
@@ -2802,13 +2810,13 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                         case 0x06: // short-term fuel trim bank 1: (A-128)*100/128 %
                         case 0x07: // long-term fuel trim bank 1
                             if (dc >= 1 && s_protocol_detect_idx < 0)
-                                obd_data_set_ext(pid == 0x06 ? OBD_EXT_STFT : OBD_EXT_LTFT, ((int32_t)d[0] - 128) * 1000 / 128);
+                                obd_data_set_ext(pid == 0x06 ? OBD_EXT_STFT : OBD_EXT_LTFT, rdiv(((int32_t)d[0] - 128) * 1000, 128));
                             break;
                         case 0x0A: // fuel pressure (gauge): A*3 kPa
                             if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, (int32_t)d[0] * 3);
                             break;
                         case 0x22: // fuel rail pressure relative to manifold: (256A+B)*0.079 kPa
-                            if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, (int32_t)(((d[0] << 8) | d[1]) * 79 / 1000));
+                            if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_PRESSURE, rdiv(((d[0] << 8) | d[1]) * 79, 1000));
                             break;
                         case 0x23: // fuel rail gauge pressure (diesel / direct injection): (256A+B)*10 kPa
                         case 0x59: // fuel rail absolute pressure
@@ -2822,19 +2830,19 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             break;
                         case 0x14: // O2 bank 1 sensor 1 (narrow band): A/200 V
                         case 0x15: // O2 bank 1 sensor 2
-                            if (dc >= 1 && s_protocol_detect_idx < 0 && d[0] != 0xFF) obd_data_set_ext(OBD_EXT_O2, (int32_t)d[0] * 5);
+                            if (dc >= 1 && s_protocol_detect_idx < 0 && d[0] != 0xFF && (pid == 0x15 || !pid_ok(0x15))) obd_data_set_ext(OBD_EXT_O2, (int32_t)d[0] * 5);   // the phone's o2: 15, 14
                             break;
                         case 0x2F: // fuel tank level: A*100/255 %
-                            if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_LEVEL, (int32_t)d[0] * 100 / 255);
+                            if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_FUEL_LEVEL, rdiv((int32_t)d[0] * 100, 255));
                             break;
                         case 0x3C: // catalyst temperature bank 1 sensor 1: (256A+B)/10 - 40 °C
-                            if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_EGT, (int32_t)((d[0] << 8) | d[1]) / 10 - 40);
+                            if (dc >= 2 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_EGT, rdiv((d[0] << 8) | d[1], 10) - 40);
                             break;
                         case 0x52: // ethanol fuel %: A*100/255
-                            if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_ETHANOL, (int32_t)d[0] * 100 / 255);
+                            if (dc >= 1 && s_protocol_detect_idx < 0) obd_data_set_ext(OBD_EXT_ETHANOL, rdiv((int32_t)d[0] * 100, 255));
                             break;
                         case 0x78: // EGT bank 1: A = sensors present, B,C sensor 1: (256B+C)/10 - 40 °C
-                            if (dc >= 3 && s_protocol_detect_idx < 0 && (d[0] & 1)) obd_data_set_ext(OBD_EXT_EGT, (int32_t)((d[1] << 8) | d[2]) / 10 - 40);
+                            if (dc >= 3 && s_protocol_detect_idx < 0 && (d[0] & 1)) obd_data_set_ext(OBD_EXT_EGT, rdiv((d[1] << 8) | d[2], 10) - 40);
                             break;
                         case 0x5C: // Oil temp PID (standard, used for ZD8)
                             if (dc >= 1 && s_cbs.on_parsed_oil_temp && s_protocol_detect_idx < 0) {
@@ -2860,12 +2868,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             if (dc >= 2 && s_cbs.on_parsed_afr && s_protocol_detect_idx < 0) {
                                 uint32_t raw = (d[0] << 8) | d[1];
                                 // λ = raw / 32768, AFR×100 = λ × 1470
-                                uint32_t afr_x100 = (raw * 1470UL) / 32768UL;
-                                if (afr_x100 >= 800 && afr_x100 <= 2200) {
-                                    s_cbs.on_parsed_afr(afr_x100);
-                                }
-                                if (pid == 0x24 && dc >= 4)   // wide-range sensor voltage in C,D: (256C+D)*8/65536 V
-                                    obd_data_set_ext(OBD_EXT_O2, (int32_t)(((d[2] << 8) | d[3]) * 8000UL / 65536UL));
+                                s_cbs.on_parsed_afr((uint32_t)rdiv(raw * 1470, 32768));   // every value, as the phone (no 8-22 filter)
                             }
                             break;
                         default:

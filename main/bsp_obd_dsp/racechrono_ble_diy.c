@@ -22,6 +22,7 @@
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"
+#include "bsp_obd_dsp/share_ble.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"   // GAUGE_PAIR_SERVICE_UUID / GAUGE_PAIR_CHAR_MAC (shared with the slave-gauge pairing client)
 
 #define RC_TAG "racechrono_diy"
@@ -114,6 +115,17 @@ enum {
     IDX_PAIR_NB,
 };
 
+// 多仪表共享 (share_ble.c): the frames to the 7" / 4" dashes set to 副仪表, and their wishes (DATA / TEST, unused here)
+enum {
+    IDX_SH_SVC,
+    IDX_SH_CHAR_FRAMES,
+    IDX_SH_VAL_FRAMES,
+    IDX_SH_CFG_FRAMES,
+    IDX_SH_CHAR_WANT,
+    IDX_SH_VAL_WANT,
+    IDX_SH_NB,
+};
+
 enum {
     IDX_INFO_SVC,
     IDX_INFO_CHAR_MANIFEST,
@@ -157,7 +169,8 @@ static char s_adv_name[32] = RC_DEVICE_NAME;
 
 static uint8_t s_adv_raw[] = {
     0x02, 0x01, 0x06,                    // Flags: LE General Discoverable + BR/EDR not supported
-    0x05, 0x03, 0xF8, 0x1F, 0xF9, 0x1F   // Complete List of 16-bit Service UUIDs: 0x1FF8 (RC), 0x1FF9 (Pair)
+    0x07, 0x03, 0xF8, 0x1F, 0xF9, 0x1F,  // Complete List of 16-bit Service UUIDs: 0x1FF8 (RC), 0x1FF9 (Pair),
+    0xFD, 0x1F                           // 0x1FFD (多仪表共享 for the 7" / 4" dashes, share_ble.c; MASTER only, else cut off below)
 };
 // OTA advert is built at runtime (the name varies by role): Flags + Info/OTA UUIDs +
 // Complete Local Name. The name lives in the MAIN advert packet (not only in the scan
@@ -245,7 +258,9 @@ static void request_adv_config(void)
         adv_len = s_adv_raw_ota_len;
     } else {
         adv_data = s_adv_raw;
-        adv_len = sizeof(s_adv_raw);
+        bool sh = nvs_cfg_get()->device_role == ESPNOW_ROLE_MASTER;
+        s_adv_raw[3] = sh ? 0x07 : 0x05;                                // 0x1FFD listed by a MASTER only
+        adv_len = sizeof(s_adv_raw) - (sh ? 0 : 2);
     }
 
     esp_err_t err_adv = esp_ble_gap_config_adv_data_raw((uint8_t *)adv_data, adv_len);
@@ -321,6 +336,38 @@ static const esp_gatts_attr_db_t s_gatt_db[IDX_NB] = {
 };
 
 // ---- Pairing service (separate attribute table; s_pair_mac is valid only in the MASTER role, read by the slave gauge during BLE pairing) ----
+static uint16_t s_share_service_uuid = SHARE_BLE_UUID, s_char_uuid_sh_frames = 0x0001, s_char_uuid_sh_want = 0x0002;
+static const uint8_t s_char_prop_notify = ESP_GATT_CHAR_PROP_BIT_NOTIFY, s_char_prop_write_nr = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
+static uint8_t s_sh_dummy[4], s_sh_cccd_init[2];
+static uint16_t s_h_sh_frames, s_h_sh_cccd;
+#define SH_MAX 3
+static struct { uint16_t conn; uint16_t mtu; bool on; } s_sh[SH_MAX];      // the 副仪表 subscribed
+static uint16_t s_prev_conn = 0xFFFF;                                     // the phone's link when a 副仪表 links after it
+static const esp_gatts_attr_db_t s_gatt_db_share[IDX_SH_NB] = {
+    [IDX_SH_SVC] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_primary_service, ESP_GATT_PERM_READ, sizeof(uint16_t), sizeof(s_share_service_uuid), (uint8_t *)&s_share_service_uuid}},
+    [IDX_SH_CHAR_FRAMES] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_declare, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&s_char_prop_notify}},
+    [IDX_SH_VAL_FRAMES] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&s_char_uuid_sh_frames, ESP_GATT_PERM_READ, sizeof(s_sh_dummy), sizeof(s_sh_dummy), s_sh_dummy}},
+    [IDX_SH_CFG_FRAMES] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_client_cfg, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint16_t), sizeof(s_sh_cccd_init), s_sh_cccd_init}},
+    [IDX_SH_CHAR_WANT] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_declare, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&s_char_prop_write_nr}},
+    [IDX_SH_VAL_WANT] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&s_char_uuid_sh_want, ESP_GATT_PERM_WRITE, sizeof(s_sh_dummy), sizeof(s_sh_dummy), s_sh_dummy}},
+};
+static void share_task(void *a)
+{
+    static uint8_t b[190];
+    for (unsigned round = 0;; round++) {
+        vTaskDelay(pdMS_TO_TICKS(40));
+        bool any = false; for (int i = 0; i < SH_MAX; i++) any |= s_sh[i].on;
+        if (!any || !s_h_sh_frames) continue;
+        static const char kinds[3] = {'V', 'G', 'S'};
+        for (int k = 0; k < 3; k++) {
+            if (kinds[k] == 'S' && round % 12) continue;                  // the status every 0.5 s
+            int n = share_ble_frame(kinds[k], b, sizeof(b)); if (!n) continue;
+            for (int i = 0; i < SH_MAX; i++) if (s_sh[i].on && s_sh[i].mtu >= n + 3)
+                esp_ble_gatts_send_indicate(s_gatts_if, s_sh[i].conn, s_h_sh_frames, n, b, false);
+        }
+    }
+}
+
 static const esp_gatts_attr_db_t s_gatt_db_pair[IDX_PAIR_NB] = {
     [IDX_PAIR_SVC] =
     {{ESP_GATT_AUTO_RSP},
@@ -725,6 +772,16 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             uint16_t *h = param->add_attr_tab.handles;
             esp_ble_gatts_start_service(h[IDX_PAIR_SVC]);
             ESP_LOGD(RC_TAG, "Pair attr table ready, service handle=0x%04X", h[IDX_PAIR_SVC]);
+            if (nvs_cfg_get()->device_role == ESPNOW_ROLE_MASTER) esp_ble_gatts_create_attr_tab(s_gatt_db_share, gatts_if, IDX_SH_NB, 3);   // 多仪表共享
+            else esp_ble_gatts_create_attr_tab(s_gatt_db_info, gatts_if, IDX_INFO_NB, 2);
+        } else if (param->add_attr_tab.status == ESP_GATT_OK &&
+                   param->add_attr_tab.num_handle == IDX_SH_NB &&
+                   param->add_attr_tab.svc_uuid.uuid.uuid16 == SHARE_BLE_UUID) {
+            uint16_t *h = param->add_attr_tab.handles;
+            s_h_sh_frames = h[IDX_SH_VAL_FRAMES]; s_h_sh_cccd = h[IDX_SH_CFG_FRAMES];
+            esp_ble_gatts_start_service(h[IDX_SH_SVC]);
+            static bool task; if (!task) { task = true; xTaskCreate(share_task, "share_tx", 3072, NULL, 6, NULL); }
+            ESP_LOGI(RC_TAG, "多仪表共享 0x1FFD ready");
             esp_ble_gatts_create_attr_tab(s_gatt_db_info, gatts_if, IDX_INFO_NB, 2);
         } else if (param->add_attr_tab.status == ESP_GATT_OK &&
                    param->add_attr_tab.num_handle == IDX_INFO_NB &&
@@ -745,8 +802,10 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
         break;
 
     case ESP_GATTS_CONNECT_EVT:
+        s_prev_conn = s_connected ? s_conn_id : 0xFFFF;                 // a 副仪表 linking after the phone: the phone's link is kept (share CCCD)
         s_connected = true;
         s_conn_id = param->connect.conn_id;
+        if (nvs_cfg_get()->device_role == ESPNOW_ROLE_MASTER) start_advertising_if_ready();   // room for the next one (the phone, a 副仪表)
         // Start each connection from a safe default, so stale deny-all rules don't block data.
         s_allow_all = true;
         s_allow_all_interval_ms = 100;
@@ -759,7 +818,12 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
                  param->connect.conn_id);
         break;
 
-    case ESP_GATTS_DISCONNECT_EVT:
+    case ESP_GATTS_DISCONNECT_EVT: {
+        bool was_sh = false;
+        for (int i = 0; i < SH_MAX; i++) if (s_sh[i].on && s_sh[i].conn == param->disconnect.conn_id) { s_sh[i].on = false; was_sh = true; }
+        if (s_prev_conn == param->disconnect.conn_id) s_prev_conn = 0xFFFF;
+        if (was_sh || (s_connected && param->disconnect.conn_id != s_conn_id)) { start_advertising_if_ready(); break; }   // not the phone's link
+        }
         s_connected = false;
         s_notify_enabled = false;
         s_obd_notify = false;
@@ -777,6 +841,12 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             ESP_LOGD(RC_TAG, "CAN main cccd=0x%04X stream %s", cccd, s_notify_enabled ? "EN" : "DIS");
         } else if (s_attr_ready && param->write.handle == s_handle_filter) {
             process_filter_write(param->write.value, param->write.len);
+        } else if (s_h_sh_cccd && param->write.handle == s_h_sh_cccd && param->write.len >= 2) {
+            bool on = (param->write.value[0] & 0x01) != 0; uint16_t c = param->write.conn_id;
+            for (int i = 0; i < SH_MAX; i++) if (s_sh[i].conn == c) s_sh[i].on = false;
+            for (int i = 0; on && i < SH_MAX; i++) if (!s_sh[i].on) { s_sh[i].conn = c; s_sh[i].mtu = c == s_conn_id ? s_mtu : 185; s_sh[i].on = true; break; }
+            if (on && c == s_conn_id && s_prev_conn != 0xFFFF) { s_conn_id = s_prev_conn; s_prev_conn = 0xFFFF; }   // the phone's link again for RaceChrono
+            ESP_LOGI(RC_TAG, "副仪表 %s (conn %d)", on ? "linked" : "gone", c);
         } else if (param->write.handle == s_handle_obd_cccd && param->write.len >= 2) {
             s_obd_notify = (param->write.value[0] & 0x03) != 0;
         } else if (s_handle_obd_req && param->write.handle == s_handle_obd_req) {
@@ -785,6 +855,8 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
         break;
 
     case ESP_GATTS_MTU_EVT:
+        for (int i = 0; i < SH_MAX; i++) if (s_sh[i].conn == param->mtu.conn_id) s_sh[i].mtu = param->mtu.mtu;
+        if (param->mtu.conn_id != s_conn_id) break;
         s_mtu = param->mtu.mtu;
         break;
 

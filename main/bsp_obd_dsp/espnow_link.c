@@ -17,6 +17,7 @@
 #include "app_obd_dsp/obd_data_cache.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/nvs_storage.h"
+#include "bsp_obd_dsp/share_ble.h"
 
 // Sweep / boot-animation sync: read from the master (implemented in ui.c to avoid re-including lvgl here)
 extern int  ui_sweep_get_step(void);
@@ -399,11 +400,13 @@ void espnow_link_start_slave(void) {
 }
 
 bool espnow_link_slave_has_data(void) {
+    if (share_ble_has_data()) return true;                 // paired to a 7" / 4" dash: its Bluetooth frames (share_ble.c)
     if (s_last_rx_us == 0) return false;
     return (esp_timer_get_time() - s_last_rx_us) < 2000000; // data within 2s counts as online
 }
 
 const char *espnow_link_get_master_name(void) {
+    if (share_ble_has_data()) return share_ble_master_name();
     return s_master_name;   // empty string = no master data received yet
 }
 
@@ -576,4 +579,4 @@ void espnow_link_stop(void) {
 }
 
 void espnow_link_set_car_off(bool off) { s_car_off = off; }
-bool espnow_link_master_car_off(void) { return s_rx_car_off; }
+bool espnow_link_master_car_off(void) { return s_rx_car_off || share_ble_car_off(); }

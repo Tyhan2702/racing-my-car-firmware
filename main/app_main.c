@@ -32,6 +32,7 @@
 #include "bsp_obd_dsp/bsp_board.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
+#include "bsp_obd_dsp/share_ble.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
 #include "app_obd_dsp/boot_media_mount.h"
 #include "app_obd_dsp/vehicle_added.h"
@@ -346,6 +347,7 @@ void app_main(void)
         }
         /* Slave: start BLE GATTS for pairing immediately after ESP-NOW receive setup */
         racechrono_ble_diy_start(user_cfg->rc_enabled);
+        share_ble_client_start();                       // paired to a 7" / 4" dash: its values over Bluetooth instead (share_ble.c)
     } else {
         /* ---- Master / standalone: both run the full BLE OBD chain; the only difference is whether ESP-NOW (=WiFi) starts ----
            STANDALONE: does not start WiFi/ESP-NOW; existing devices (already set to master/slave) are unaffected. */

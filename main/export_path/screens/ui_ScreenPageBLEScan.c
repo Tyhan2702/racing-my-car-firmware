@@ -5,6 +5,7 @@
 //  - MASTER/STANDALONE: scan and connect to an OBD ELM327 adapter (original logic unchanged)
 //  - SLAVE: scan and pair with the triple-gauge master ("RMC - 1.85 Gauge XXYY" broadcast), see gauge_pair_ble_client.c
 
+#include "bsp_obd_dsp/share_ble.h"
 #include "../ui.h"
 #include "ui_menu.h"
 #include "ui_rmc_style.h"
@@ -44,6 +45,7 @@ static void start_scan(void);
 static void on_device_selected(lv_event_t *e);
 static void on_saved_device_delete(lv_event_t *e);
 static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]);
+static void pair_ok(const char *name, const uint8_t mac[6]);
 
 // A found device: a dark rounded row like the SETTINGS cards, outlined in RMC yellow while pressed
 static void style_item(lv_obj_t *btn)
@@ -154,6 +156,12 @@ static void on_device_selected(lv_event_t *e) {
         gauge_pair_ble_scan_stop();
         s_scanning = false;
 
+        if (share_ble_is_dash(name)) {                           // a 7" / 4" dash: kept by its Bluetooth address, linked now
+            char nm[32]; snprintf(nm, sizeof(nm), "%s", name);
+            pair_ok(nm, mac);
+            share_ble_client_start();
+            return;
+        }
         lv_label_set_text(s_label_status, TR("PAIRING..."));
         if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
         gauge_pair_ble_connect(mac, name, on_pair_result);
@@ -190,10 +198,24 @@ static void on_device_selected(lv_event_t *e) {
 }
 
 // BLE pairing result callback (called in the BT task context, lvgl_lock required)
+// the master kept (the LVGL lock held)
+static void pair_ok(const char *name, const uint8_t mac[6]);
 static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]) {
     if (!lvgl_lock_ui(200)) return;
 
-    if (ok) {
+    if (ok) pair_ok(name, mac);
+    else {
+        ESP_LOGW(TAG_BLE_UI, "Pairing failed, rescanning");
+        lv_label_set_text(s_label_status, TR("Pair failed, retrying..."));
+        // When the native BLE scan window (15s) expires, no callback notifies here, so s_scanning stays true.
+        // This is a place where a forced rescan is intended, so reset it before calling to avoid being blocked by the dedup check in start_scan().
+        s_scanning = false;
+        start_scan();
+    }
+
+    lvgl_unlock_ui();
+}
+static void pair_ok(const char *name, const uint8_t mac[6]) {
         espnow_link_bind_master(mac);
 
         nvs_user_cfg_t cfg = *nvs_cfg_get();
@@ -208,16 +230,6 @@ static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]) {
 
         lv_label_set_text(s_label_status, TR("Paired!"));
         ui_menu_go_home_later(800);
-    } else {
-        ESP_LOGW(TAG_BLE_UI, "Pairing failed, rescanning");
-        lv_label_set_text(s_label_status, TR("Pair failed, retrying..."));
-        // When the native BLE scan window (15s) expires, no callback notifies here, so s_scanning stays true.
-        // This is a place where a forced rescan is intended, so reset it before calling to avoid being blocked by the dedup check in start_scan().
-        s_scanning = false;
-        start_scan();
-    }
-
-    lvgl_unlock_ui();
 }
 
 // Delete the saved device
