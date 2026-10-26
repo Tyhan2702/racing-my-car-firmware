@@ -1,3 +1,4 @@
+#include <math.h>
 #include "theme_interface.h"
 #include "app_obd_dsp/rmc_inflate.h"
 #include "esp_log.h"
@@ -517,6 +518,15 @@ static int32_t page_sweep_value(const theme_binding_t *bind, int32_t value)
 // A gear label shows N (neutral, 0), R (reverse, -1) and "-" (unknown, 127) instead of the raw number, when the
 // label's font has the letter (themes made before Studio added N and R to gear fonts keep the digits; "-" is in
 // every font, it is the placeholder). NULL: show the number.
+// RPM as a number glides between the car's readings (60 ms, as the phone dash and the 7" / 4"), so it runs through every
+// digit instead of jumping in the car's steps (owner 2026-10-27: the last digit only ever 0 or 5)
+static int32_t rpm_glided(int32_t v)
+{
+    static float g = -1; static int64_t t0;
+    int64_t now = esp_timer_get_time(); float dt = t0 ? (now - t0) / 1000.0f : 1000; t0 = now;
+    g = g < 0 || dt > 500 ? v : g + (v - g) * (1 - expf(-dt / 60));
+    return (int32_t)lroundf(g);
+}
 static bool font_has(const lv_font_t *f, uint32_t ch)
 {
     lv_font_glyph_dsc_t g;
@@ -611,6 +621,7 @@ void theme_update_data(const obd_snapshot_t *obd) {
         }
         case BINDING_KIND_LABEL: {
             const char *word = none ? "-" : strcmp(bind->data_source, "obd.gear") == 0 ? gear_word(bind->widget, value) : NULL;
+            if (!word && bind->divisor <= 1 && strcmp(bind->data_source, "obd.rpm") == 0) value = rpm_glided(value);
             if (word) {
                 char text[48];
                 format_with_word(bind->format, word, text, sizeof(text));
