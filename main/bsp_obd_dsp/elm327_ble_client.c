@@ -164,6 +164,7 @@ static volatile bool s_expect_mode21 = false; // true=last command was 21 01, wa
 static uint8_t s_active_protocol = 0;          // ATSP protocol of the current link (7/9 = 29-bit CAN)
 static void mv_reset(void);
 static bool mv_query(int sig);
+static bool racing_query(int which);           // 赛车增强 (Toyota CVT): 0 = four wheel speeds, 1 = post-converter ATF temp
 // n / d rounded halves away from zero, as the phone's toFixed (a plain division truncates: 38.8 % read 38)
 static int32_t rdiv(int32_t n, int32_t d) { return n >= 0 ? (n + d / 2) / d : -((-n + d / 2) / d); }
 static void send_ext22(uint8_t ta, uint16_t did);
@@ -825,6 +826,9 @@ static bool ext_request(obd_ext_t e)
     case OBD_EXT_TRANS_TEMP:    return mv_query(MV_TRANS_TEMP);
     case OBD_EXT_DTC_COUNT:     return send_first_pid((const uint8_t[]){0x01}, 1);
     case OBD_EXT_KNOCK:         return mv_query(MV_KNOCK);
+    case OBD_EXT_WS_FL: case OBD_EXT_WS_FR: case OBD_EXT_WS_RL: case OBD_EXT_WS_RR:
+                                return racing_query(0);   // 赛车增强: one 7B0 21 03 fills all four wheel speeds
+    case OBD_EXT_TRANS2:        return racing_query(1);
     default:                    return false;
     }
 }
@@ -865,7 +869,7 @@ static void scan_step(void)
             return;
         }
     }
-    const int total = 0xE0 + MV_COUNT + 2;
+    const int total = 0xE0 + MV_COUNT + 4;   // + ATRV, VIN, 赛车增强 wheel speeds, ATF2
     for (int tries = 0; tries < total; tries++) {
         int i = s_scan_i++ % total;
         if (i < 0xE0) {
@@ -882,6 +886,8 @@ static void scan_step(void)
         i -= 0xE0;
         if (i < MV_COUNT) { if (mv_query(i)) return; continue; }
         if (i == MV_COUNT) { elm_wait_ready(); s_expect_atrv = true; elm327_ble_send_ascii_blocking("ATRV\r"); return; }
+        if (i == MV_COUNT + 1) { if (racing_query(0)) return; continue; }   // 赛车增强: four wheel speeds
+        if (i == MV_COUNT + 2) { if (racing_query(1)) return; continue; }   // 赛车增强: post-converter ATF temp
         if (!s_vin[0] && s_vin_tries < 3) { s_vin_tries++; elm_wait_ready(); s_expect_vin = true; elm327_ble_send_ascii_blocking("09 02\r"); return; }
     }
 }
@@ -1821,6 +1827,49 @@ static void mv_handle(int sig, const char *buf)
     mv_result(sig, ok);
 }
 
+// 赛车增强 (Toyota CVT): two extras OBDb lists that the 8 brand signals don't carry — the four ABS wheel speeds
+// (7B0 21 03, bytes FR FL RR RL, raw*256/200 km/h) and the post-converter ATF temp (7E0 21 82 bytes 2-3, /256 - 40 °C).
+// which: 0 = wheel speeds, 1 = ATF2. Only on the Toyota CVT profile. The reply is parsed by racing_handle (s_racing_pending).
+static volatile int8_t s_racing_pending = -1;
+static bool racing_query(int which)
+{
+    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    if (!vp || !vp->name || strcmp(vp->name, "Toyota CVT")) return false;
+    static const obd_method_t M[2] = {
+        {"7B0", NULL, 0x21, 0x03, 0, 4, false, 1, 1, 0, MV_LINEAR, false},
+        {"7E0", NULL, 0x21, 0x82, 0, 4, false, 1, 1, 0, MV_LINEAR, false},
+    };
+    const obd_method_t *m = &M[which];
+    char cmd[24];
+    bool switch_hdr = !mv_same_header(m);
+    if (switch_hdr) { snprintf(cmd, sizeof(cmd), "ATSH%s\r", m->hdr); elm327_ble_send_ascii_blocking(cmd); }
+    snprintf(cmd, sizeof(cmd), "%02X %02X\r", m->service, m->pid & 0xFF);
+    elm_wait_ready();                                    // the previous reply is read as its own, not as this one
+    s_racing_pending = (int8_t)which;
+    elm327_ble_send_ascii_blocking(cmd);
+    if (switch_hdr) send_fixed_header();
+    return true;
+}
+static void racing_handle(int which, const char *buf)
+{
+    const char *echo = which == 0 ? "61 03" : "61 82";
+    const char *p = strstr(buf, echo);
+    if (!p) return;
+    uint8_t d[16];
+    int n = parse_reply_data(p + strlen(echo), d, (int)sizeof(d));
+    if (n < 4) return;
+    if (which == 0) {                                    // FR FL RR RL, raw*256/200 km/h
+        obd_data_set_ext(OBD_EXT_WS_FR, rdiv((int32_t)d[0] * 256, 200));
+        obd_data_set_ext(OBD_EXT_WS_FL, rdiv((int32_t)d[1] * 256, 200));
+        obd_data_set_ext(OBD_EXT_WS_RR, rdiv((int32_t)d[2] * 256, 200));
+        obd_data_set_ext(OBD_EXT_WS_RL, rdiv((int32_t)d[3] * 256, 200));
+        mark_obd_data_valid();
+    } else {                                             // bytes 2-3 / 256 - 40 °C
+        int32_t c = rdiv((int32_t)(d[2] << 8 | d[3]), 256) - 40;
+        if (c > -40 && c <= 180) { obd_data_set_ext(OBD_EXT_TRANS2, c); mark_obd_data_valid(); }
+    }
+}
+
 static int parse_mode21_data(const char *buf, uint32_t *out, int max_out) {
     const char *p = strstr(buf, "61 01");
     if (!p) return 0;
@@ -2705,7 +2754,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             }
         }
 
-        if (s_mv_pending >= 0) {
+        if (s_racing_pending >= 0) {        // 赛车增强 (Toyota CVT): wheel speeds / ATF2 reply
+            int8_t which = s_racing_pending;
+            s_racing_pending = -1;
+            racing_handle(which, buf);
+        } else if (s_mv_pending >= 0) {
             int8_t sig = s_mv_pending;
             s_mv_pending = -1;
             mv_handle(sig, buf);            // a brand method's reply (or its NO DATA)

@@ -17,10 +17,11 @@
 lv_obj_t *ui_ScreenPageObdData;
 
 enum { D_VEHICLE = 0, D_PROTOCOL, D_VIN, D_BATTERY, D_AFR, D_OIL_T, D_OIL_P, D_GEAR, D_TRANS, D_KNOCK, D_FUEL_L, D_FUEL_P,
-       D_DOORS, D_COUNT };
+       D_DOORS, D_WS_FL, D_WS_FR, D_WS_RL, D_WS_RR, D_TRANS2, D_COUNT };   // 赛车增强 (Toyota CVT): wheel speeds + ATF2
 static const char *const s_dname[D_COUNT] = {"VEHICLE", "PROTOCOL", "VIN", "BATTERY", "AFR", "OIL TEMP",
                                              "OIL PRESSURE", "GEAR", "TRANS TEMP", "KNOCK RETARD", "FUEL LEVEL",
-                                             "FUEL PRESSURE", "DOORS"};
+                                             "FUEL PRESSURE", "DOORS",
+                                             "WHEEL FL", "WHEEL FR", "WHEEL RL", "WHEEL RR", "ATF CONV"};
 #define MAX_ROWS 240
 static int16_t s_row[MAX_ROWS];          // < 0: derived value -(id+1); else a mode 01 PID
 static EXT_RAM_BSS_ATTR char s_name[MAX_ROWS][20], s_val[MAX_ROWS][40];
@@ -64,6 +65,11 @@ static void derived(int id, char *o, size_t ol)
         else if (v > 0) snprintf(o, ol, TR("OPEN%s%s%s%s%s"), v & 16 ? " D" : "", v & 8 ? " P" : "", v & 4 ? " RR" : "",
                                  v & 2 ? " RL" : "", v & 1 ? " T" : "");
         break;
+    case D_WS_FL: if ((v = obd_data_get_ext(OBD_EXT_WS_FL)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld KM/H", (long)v); break;
+    case D_WS_FR: if ((v = obd_data_get_ext(OBD_EXT_WS_FR)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld KM/H", (long)v); break;
+    case D_WS_RL: if ((v = obd_data_get_ext(OBD_EXT_WS_RL)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld KM/H", (long)v); break;
+    case D_WS_RR: if ((v = obd_data_get_ext(OBD_EXT_WS_RR)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld KM/H", (long)v); break;
+    case D_TRANS2: if ((v = obd_data_get_ext(OBD_EXT_TRANS2)) != OBD_EXT_INVALID) snprintf(o, ol, "%ld C", (long)v); break;
     }
 }
 

@@ -80,6 +80,11 @@ typedef enum {
     OBD_EXT_TRANS_TEMP,     // transmission fluid, °C (brand)
     OBD_EXT_DTC_COUNT,      // stored trouble codes (01 01)
     OBD_EXT_KNOCK,          // knock ignition retard, 0.1° (brand)
+    OBD_EXT_WS_FL,          // 赛车增强 (Toyota CVT): left-front wheel speed, km/h (ABS 7B0 21 03)
+    OBD_EXT_WS_FR,          // right-front wheel speed, km/h
+    OBD_EXT_WS_RL,          // left-rear wheel speed, km/h
+    OBD_EXT_WS_RR,          // right-rear wheel speed, km/h
+    OBD_EXT_TRANS2,         // post-converter ATF temp, °C (Toyota 7E0 21 82 bytes 2-3)
     OBD_EXT_COUNT
 } obd_ext_t;
 #define OBD_EXT_INVALID INT32_MIN
