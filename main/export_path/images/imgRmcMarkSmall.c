@@ -1,7 +1,17 @@
 // imgRmcMarkSmall: the Racing My Car mark (web/brand-logo.png, yellow part), 84x30, RGB565 + alpha, LV_COLOR_16_SWAP.
 #include "../ui.h"
+#include "sdkconfig.h"
 
-const LV_ATTRIBUTE_MEM_ALIGN uint8_t imgRmcMarkSmall_data[] = {
+// The bytes below are baked for LV_COLOR_16_SWAP=1 (1.85" QSPI panel). The 2.1" RGB panel runs
+// LV_COLOR_16_SWAP=0, so on V4 the two colour bytes of each pixel are swapped back in place at boot
+// (imgRmcMarkSmall_fix_byteorder, called once from app_main). That needs the data array non-const.
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+#define IMG_RMC_CONST
+#else
+#define IMG_RMC_CONST const
+#endif
+
+IMG_RMC_CONST LV_ATTRIBUTE_MEM_ALIGN uint8_t imgRmcMarkSmall_data[] = {
   0xff,0x00,0x11,0xff,0x60,0x6b,0xff,0x60,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,
   0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,
   0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,0xff,0x40,0x70,
@@ -319,7 +329,7 @@ const LV_ATTRIBUTE_MEM_ALIGN uint8_t imgRmcMarkSmall_data[] = {
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-const lv_img_dsc_t imgRmcMarkSmall = {
+const lv_img_dsc_t imgRmcMarkSmall = {   // struct stays const (LV_IMG_DECLARE forces extern const); only the data array is mutable on V4
   .header.always_zero = 0,
   .header.w = 84,
   .header.h = 30,
@@ -327,3 +337,18 @@ const lv_img_dsc_t imgRmcMarkSmall = {
   .header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA,
   .data = imgRmcMarkSmall_data
 };
+
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+// Swap the 2 colour bytes of every RGB565+alpha pixel (3 bytes/px) once, for the no-swap RGB panel.
+void imgRmcMarkSmall_fix_byteorder(void)
+{
+    static bool done = false;
+    if (done) return;
+    done = true;
+    for (size_t i = 0; i + 3 <= sizeof(imgRmcMarkSmall_data); i += 3) {
+        uint8_t t = imgRmcMarkSmall_data[i];
+        imgRmcMarkSmall_data[i]     = imgRmcMarkSmall_data[i + 1];
+        imgRmcMarkSmall_data[i + 1] = t;
+    }
+}
+#endif

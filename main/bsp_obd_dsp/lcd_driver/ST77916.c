@@ -1,3 +1,6 @@
+// On the 2.1" (V4) board the ST7701 RGB driver (ST7701.c) is used instead; this whole file is then empty.
+#include "sdkconfig.h"
+#if !CONFIG_OBD_HW_VERSION_V4_WS21
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 
 
@@ -806,3 +809,4 @@ void Set_Backlight(uint8_t Light)
     ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
 }
 // end Backlight program
+#endif // !CONFIG_OBD_HW_VERSION_V4_WS21

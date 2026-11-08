@@ -9,3 +9,6 @@ dependencies:
   lvgl/lvgl:
     public: true
     version: "^8"
+  espressif/esp_lcd_st7701: "^2"
+  espressif/esp_lcd_panel_io_additions: "^1"
+  espressif/esp_io_expander_tca9554: "^2"

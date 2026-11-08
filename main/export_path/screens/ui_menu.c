@@ -275,10 +275,15 @@ static void ui_ScreenPageMenu_screen_init(void)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_add_event_cb(scr, on_menu, LV_EVENT_ALL, NULL);
 
+    // The ring layout is designed for a 360 px round screen; scale it by the real width so it fills a
+    // bigger panel too (360 on the 1.85"/4", 480 on the 2.1"). At 360 every term below is unchanged.
+    int scr_w = lv_disp_get_hor_res(NULL);
+    int cx = scr_w / 2;
+
     lv_obj_t *logo = lv_img_create(scr);
     lv_img_set_src(logo, &imgRmcMarkSmall);
-    lv_img_set_zoom(logo, 300);                      // 117 %
-    lv_obj_align(logo, LV_ALIGN_CENTER, 0, MARK_Y - 180);
+    lv_img_set_zoom(logo, 300 * scr_w / 360);        // 117 % at 360 px, scaled up on a wider screen
+    lv_obj_align(logo, LV_ALIGN_CENTER, 0, MARK_Y * scr_w / 360 - cx);
     lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_ext_click_area(logo, 12);
     lv_obj_add_event_cb(logo, on_logo, LV_EVENT_CLICKED, NULL);
@@ -287,7 +292,8 @@ static void ui_ScreenPageMenu_screen_init(void)
     if (s_last < 0 && s_btn_n) s_last = s_order[0];
     for (int b = 0; b < s_btn_n; b++) {
         float a = (-90.0f + b * 360.0f / s_btn_n) * 3.14159265f / 180.0f;
-        int x = 180 + (int)lroundf(RING_R * cosf(a)), y = RING_Y + (int)lroundf(RING_R * sinf(a)), bs = BTN;
+        int rr = RING_R * scr_w / 360, ry = RING_Y * scr_w / 360, bs = BTN * scr_w / 360;
+        int x = cx + (int)lroundf(rr * cosf(a)), y = ry + (int)lroundf(rr * sinf(a));
         int item = s_btn_item[b] = s_order[b];
         lv_obj_t *btn = s_btn[b] = lv_obj_create(scr);
         lv_obj_remove_style_all(btn);

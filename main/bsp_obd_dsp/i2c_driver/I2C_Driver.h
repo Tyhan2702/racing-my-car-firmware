@@ -8,7 +8,10 @@
 
 
 /********************* I2C *********************/
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+#define I2C_SCL_IO                  7          /*!< 2.1" board: shared I2C (TCA9554 + CST820 + QMI8658 + PCF85063) */
+#define I2C_SDA_IO                  15
+#elif CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
 #define I2C_SCL_IO                  8          /*!< GPIO number used for I2C master clock (new boards) */
 #define I2C_SDA_IO                  7          /*!< GPIO number used for I2C master data  (new boards) */
 #else

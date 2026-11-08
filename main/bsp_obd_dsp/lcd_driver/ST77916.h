@@ -1,4 +1,9 @@
 #pragma once
+#include "sdkconfig.h"
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+// 2.1" board: this header name is kept for every includer, but the board uses the ST7701 RGB driver.
+#include "bsp_obd_dsp/lcd_driver/ST7701.h"
+#else
 #include "esp_err.h"
 #include "esp_log.h"
 #include <stdio.h>
@@ -96,3 +101,5 @@ void LCD_Init(void);                     // Call this function to initialize the
 
 void Backlight_Init(void);                             // Initialize the LCD backlight, which has been called in the LCD_Init function, ignore it                                                         
 void Set_Backlight(uint8_t Light);                   // Call this function to adjust the brightness of the backlight. The value of the parameter Light ranges from 0 to 100
+
+#endif // CONFIG_OBD_HW_VERSION_V4_WS21

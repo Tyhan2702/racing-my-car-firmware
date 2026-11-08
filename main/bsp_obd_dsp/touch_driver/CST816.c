@@ -168,12 +168,19 @@ static esp_err_t del(esp_lcd_touch_handle_t tp)
 
 static esp_err_t reset(esp_lcd_touch_handle_t tp)
 {
-
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+    // 2.1": TP_RST is TCA9554 P1 on the shared expander the LCD created — don't open a 2nd owner of the chip.
+    esp_io_expander_handle_t exp = LCD_GetIoExpander();
+    esp_io_expander_set_level(exp, IO_EXPANDER_PIN_NUM_1, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    esp_io_expander_set_level(exp, IO_EXPANDER_PIN_NUM_1, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+#else
     Set_EXIO(TCA9554_EXIO1,false);
     vTaskDelay(pdMS_TO_TICKS(10));
     Set_EXIO(TCA9554_EXIO1,true);
     vTaskDelay(pdMS_TO_TICKS(50));
-
+#endif
     return ESP_OK;
 }
 
@@ -233,7 +240,11 @@ static esp_err_t Touch_I2C_Init(void)
 
 void Touch_Init(void)
 {
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+    s_touch_i2c_bus = I2C_GetBusHandle();   // 2.1": reuse the shared bus (SCL=7 SDA=15), already up from I2C_Init()
+#else
     ESP_ERROR_CHECK(Touch_I2C_Init());
+#endif
     ESP_LOGD(TAG, "I2C initialized successfully");
 
     esp_lcd_touch_config_t tp_cfg = {

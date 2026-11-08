@@ -21,6 +21,9 @@ menu "OBD DSP Configuration"
 
         config OBD_HW_VERSION_V3_NEW
             bool "V3: New board B (ST77916 v2 init, direct GPIO, no TCA9554/ADS1115)"
+
+        config OBD_HW_VERSION_V4_WS21
+            bool "V4: Waveshare ESP32-S3-Touch-LCD-2.1 (ST7701 RGB 480x480 + TCA9554 + CST820)"
     endchoice
 
     config OBD_RS485_TX_GPIO

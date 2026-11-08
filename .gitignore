@@ -12,3 +12,4 @@ __pycache__/
 .mimosa
 .zcode
 build-local/
+build-ws21/

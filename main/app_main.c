@@ -110,6 +110,9 @@ static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t 
     esp_lcd_panel_handle_t panel = (esp_lcd_panel_handle_t)drv->user_data;
     esp_lcd_panel_draw_bitmap(panel, area->x1, area->y1,
                               area->x2 + 1, area->y2 + 1, color_map);
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+    lv_disp_flush_ready(drv);   // 2.1" RGB panel copies into its PSRAM framebuffer synchronously — no async trans-done IRQ
+#endif
 }
 
 /* Coordinate alignment (even boundaries) */
@@ -316,6 +319,11 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG, "Starting theme load");
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+    // 2.1" RGB panel runs LV_COLOR_16_SWAP=0; the baked menu-mark bytes are swap=1 — fix them before the menu is built.
+    extern void imgRmcMarkSmall_fix_byteorder(void);
+    imgRmcMarkSmall_fix_byteorder();
+#endif
     // Step 2: Load theme and create other UI elements (logo already visible)
     if (lvgl_lock(-1)) {
         ui_init();  // Now loads theme with logo already displayed

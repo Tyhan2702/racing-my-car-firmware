@@ -1,0 +1,5 @@
+# Waveshare ESP32-S3-Touch-LCD-2.1 (V4) build overrides
+CONFIG_OBD_HW_VERSION_V4_WS21=y
+# RGB parallel panel reads the 16-bit word natively — no byte swap.
+# (The 1.85" ST77916 is QSPI and needs =y; swapping on the RGB panel turns yellow into magenta.)
+CONFIG_LV_COLOR_16_SWAP=n

@@ -169,13 +169,13 @@ static void picker(int step)
     if (s_pick) lv_obj_del(s_pick);
     s_pick = lv_obj_create(ui_ScreenPageMenuSettings);
     lv_obj_remove_style_all(s_pick);
-    lv_obj_set_size(s_pick, 360, 360);
+    lv_obj_set_size(s_pick, lv_pct(100), lv_pct(100));   // fill the screen (360 on 1.85"/4", 480 on 2.1")
     lv_obj_set_style_bg_color(s_pick, lv_color_hex(0x000000), 0); lv_obj_set_style_bg_opa(s_pick, LV_OPA_COVER, 0);
     lv_obj_clear_flag(s_pick, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(s_pick, on_pick_gesture, LV_EVENT_GESTURE, NULL);
     lv_obj_t *list = lv_obj_create(s_pick);
     lv_obj_remove_style_all(list);
-    lv_obj_set_size(list, 360, 360);
+    lv_obj_set_size(list, lv_pct(100), lv_pct(100));
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(list, 10, 0); lv_obj_set_style_pad_ver(list, 70, 0);
@@ -431,7 +431,7 @@ void ui_ScreenPageMenuSettings_screen_init(void)
 
     s_list = lv_obj_create(scr);
     lv_obj_remove_style_all(s_list);
-    lv_obj_set_size(s_list, 360, 360);
+    lv_obj_set_size(s_list, lv_pct(100), lv_pct(100));   // fill the screen (360 on 1.85"/4", 480 on 2.1")
     lv_obj_set_flex_flow(s_list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(s_list, 12, 0);
