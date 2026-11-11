@@ -218,6 +218,13 @@ static EXT_RAM_BSS_ATTR int64_t s_scan_us[0xE1];
 static volatile bool s_scan_active;
 static uint8_t s_scan_bitmaps;           // bit r: still to ask 01 (r*0x20)
 static uint16_t s_scan_i;
+// A CAN-broadcast value stored in the scan buffer as its standard mode-01 PID byte, so the LIVE DATA page row
+// (elm327_scan_get → obd_pid_format) and its "read N" count include it — not just the live gauge value/needle.
+static void bc_scan_put(uint8_t pid, float byte0)
+{
+    long b = lroundf(byte0); if (b < 0) b = 0; else if (b > 255) b = 255;
+    s_scan_d[pid][0] = (uint8_t)b; s_scan_n[pid] = 1; s_scan_us[pid] = esp_timer_get_time();
+}
 static char s_vin[18];
 static uint8_t s_vin_tries;
 static volatile bool s_expect_vin;
@@ -1059,10 +1066,14 @@ static bool zc6_can_monitor_parse_line(const char *line)
         s_cbs.on_parsed_speed_kmh(channels[CH_SPEED] > 255 ? 255 : (uint8_t)channels[CH_SPEED]);   // no wrap above 255 km/h
     if (channels[CH_OIL_TEMP] > -40 && channels[CH_OIL_TEMP] <= 215 && s_cbs.on_parsed_oil_temp)
         s_cbs.on_parsed_oil_temp((uint32_t)(int16_t)channels[CH_OIL_TEMP]);
-    if (channels[CH_COOLANT] > -40 && channels[CH_COOLANT] <= 215 && s_cbs.on_parsed_coolant_temp)
+    if (channels[CH_COOLANT] > -40 && channels[CH_COOLANT] <= 215 && s_cbs.on_parsed_coolant_temp) {
         s_cbs.on_parsed_coolant_temp((uint32_t)(int16_t)channels[CH_COOLANT]);
-    if (channels[CH_TPS] >= 0 && s_cbs.on_parsed_throttle_position)
+        bc_scan_put(0x05, channels[CH_COOLANT] + 40);           // also → LIVE DATA page (PID 05 水温 row)
+    }
+    if (channels[CH_TPS] >= 0 && s_cbs.on_parsed_throttle_position) {
         s_cbs.on_parsed_throttle_position((uint32_t)channels[CH_TPS]);
+        bc_scan_put(0x11, channels[CH_TPS] * 255.0f / 100.0f);  // also → LIVE DATA page (PID 11 节气门 row)
+    }
     if (channels[CH_GEAR] > 0 && channels[CH_GEAR] < 127 && s_cbs.on_parsed_gear)
         s_cbs.on_parsed_gear((int8_t)channels[CH_GEAR]);
     if (channels[CH_DOORS] >= 0) { obd_data_set_doors((uint8_t)channels[CH_DOORS]); s_can_side_seen = true; }
