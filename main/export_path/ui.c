@@ -15,6 +15,7 @@
 #include <driver/gpio.h>
 #include "bsp_obd_dsp/bsp_board.h"
 #include "bsp_obd_dsp/nvs_storage.h"
+#include "bsp_obd_dsp/sun.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
@@ -240,7 +241,7 @@ void my_timerMain(lv_timer_t * timer)
     }
 
     /* ---- Data source: sweep or real OBD (sweep state machine moved to ui_ext.c) ---- */
-    float sweep_ratio = ui_ext_sweep_tick(is_slave, user_cfg->brightness_day);
+    float sweep_ratio = ui_ext_sweep_tick(is_slave, ui_bright_now());   // 自动亮度: 夜间亮度 at night, else 屏幕亮度
     if (sweep_ratio >= 0.0f) {
         usRpm   = (uint16_t)(SWEEP_RPM_PEAK * sweep_ratio);
         ucSpeed = (uint16_t)(SWEEP_SPEED_PEAK * sweep_ratio); // uint16_t so it can hold 999

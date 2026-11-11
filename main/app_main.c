@@ -34,6 +34,8 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/share_ble.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
+#include "bsp_obd_dsp/rtc.h"
+#include "bsp_obd_dsp/sun.h"
 #include "app_obd_dsp/boot_media_mount.h"
 #include "app_obd_dsp/vehicle_added.h"
 #include "app_obd_dsp/usb_mailbox.h"
@@ -421,8 +423,19 @@ void app_main(void)
         vMileageDataStatisticTask();
     }
 
-    BaseType_t valid_task_started = xTaskCreate(mark_app_valid_task, "ota_valid", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
+    BaseType_t valid_task_started = xTaskCreate(mark_app_valid_task, "ota_valid", 3072, NULL, tskIDLE_PRIORITY + 1, NULL);
     if (valid_task_started != pdPASS) {
-        ESP_LOGW(TAG, "Failed to create OTA validity task");
+        // Internal RAM too tight for the task. Rollback is enabled (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE), so a
+        // pending-verify app that is never marked valid rolls back to the other slot on the next reboot (→ black
+        // screen / old firmware). Mark valid inline as a fallback: we lose the 15 s crash check, but we got this far.
+        ESP_LOGW(TAG, "Failed to create OTA validity task; marking valid inline to avoid rollback");
+        esp_ota_mark_app_valid_cancel_rollback();
     }
+
+    /* clock + 自动亮度 LAST: the sun task uses internal RAM, and the BT stack above is started first on purpose to
+       claim its (tight) internal RAM before anything else. Starting sun earlier starved BT init (fixed_queue assert
+       → boot loop). rtc_start before sun_start. A PCF85063 RTC on the shared I2C (2.1"), else time from the phone
+       (0x000C) / 主仪表 ('T'). Harmless no-op on boards without the chip. */
+    rtc_start();
+    sun_start();
 }

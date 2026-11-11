@@ -9,6 +9,7 @@
 #include <strings.h>
 #include "cJSON.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "nvs.h"
 #include "vehicle_catalog.h"
 #include "vehicle_added.h"
@@ -54,12 +55,16 @@ static bool build(const char *json, size_t len)
     size_t sz = (VC_BUILTIN_COUNT + rows) * sizeof(vc_brand_t), msz = 0;
     for (int b = 0; b < VC_BUILTIN_COUNT; b++) msz += VC_BUILTIN[b].count;
     msz = (msz + rows) * sizeof(vc_model_t);
-    uint8_t *mem = calloc(1, sz + msz + strs);
-    if (!mem) { cJSON_Delete(a); return false; }
+    // Up to ~900 cars: the block is ~640 KB (585 KB of strings) and the scratch arrays ~16 KB, far past internal RAM and
+    // the task stack, so everything goes in PSRAM.
+    uint8_t *mem = heap_caps_calloc(1, sz + msz + strs, MALLOC_CAP_SPIRAM);
+    int *extra = heap_caps_calloc(VC_BUILTIN_COUNT + VC_ADDED_MAX, sizeof(int), MALLOC_CAP_SPIRAM);
+    int *where = heap_caps_malloc(VC_ADDED_MAX * sizeof(int), MALLOC_CAP_SPIRAM);
+    const char **bname = heap_caps_malloc(VC_ADDED_MAX * sizeof(const char *), MALLOC_CAP_SPIRAM);
+    if (!mem || !extra || !where || !bname) { free(mem); free(extra); free(where); free(bname); cJSON_Delete(a); return false; }
     vc_brand_t *brands = (vc_brand_t *)mem; vc_model_t *models = (vc_model_t *)(mem + sz); char *sp = (char *)(mem + sz + msz);
     // each brand's models are kept together: count the added ones per brand first
-    int nb = VC_BUILTIN_COUNT, extra[VC_BUILTIN_COUNT + VC_ADDED_MAX] = {0}, where[VC_ADDED_MAX];
-    const char *bname[VC_ADDED_MAX];
+    int nb = VC_BUILTIN_COUNT;
     for (int i = 0; i < rows; i++) {
         const cJSON *r = cJSON_GetArrayItem(a, i);
         const char *id = str(r, "id", 61), *brand = str(r, "brand", 40);
@@ -94,6 +99,7 @@ static bool build(const char *json, size_t len)
             mp++;
         }
     }
+    free(extra); free(where); free(bname);            // scratch only; the merged list lives in `mem`
     cJSON_Delete(a);
     void *old = s_mem;
     vc_brands = brands; vc_brand_count = nb; s_mem = mem;
@@ -133,7 +139,7 @@ __attribute__((weak)) bool vc_store_write(const char *json, size_t n)
 
 void vc_added_load(void)
 {
-    char *json = malloc(VC_ADDED_BYTES); size_t n = json ? vc_store_read(json, VC_ADDED_BYTES) : 0;
+    char *json = heap_caps_malloc(VC_ADDED_BYTES, MALLOC_CAP_SPIRAM); size_t n = json ? vc_store_read(json, VC_ADDED_BYTES) : 0;
     if (n && build(json, n)) snprintf(s_hash, sizeof(s_hash), "%08lx", (unsigned long)vc_fnv(json, n));
     free(json);
     ESP_LOGI(TAG, "%d brands (%s)", vc_brand_count, s_hash[0] ? s_hash : "built-in only");
@@ -150,7 +156,8 @@ bool vc_added_store(const char *json, size_t n, const char *picked, uint8_t *bra
 {
     if (n > VC_ADDED_BYTES) return false;
     cJSON *a = cJSON_ParseWithLength(json, n); bool list = cJSON_IsArray(a); cJSON_Delete(a);
-    if (!list || !vc_store_write(json, n)) return false;           // kept and read back first: the hash only names a list really kept
+    if (!list) return false;
+    vc_store_write(json, n);  // best-effort: a list past VC_NVS_MAX (the ~900-car catalog) stays RAM-only and is re-synced on the next connect
     char keep[64] = "";
     if (picked) snprintf(keep, sizeof(keep), "%s", picked);       // the model's id string lives in the block build() frees
     if (!build(json, n)) return false;

@@ -617,7 +617,7 @@ static esp_err_t cars_handler(httpd_req_t *req)
     if (!validate_token(req)) return send_err(req, "unauthorized");
     if (req->method == HTTP_POST) {
         if (req->content_len <= 0 || req->content_len > VC_ADDED_BYTES) return send_err(req, "bad body");
-        char *body = malloc(req->content_len);
+        char *body = heap_caps_malloc(req->content_len, MALLOC_CAP_SPIRAM);   // ~150 KB for the ~900-car catalog: PSRAM, not internal
         if (!body) return send_err(req, "no memory");
         int got = 0;
         while (got < req->content_len) {

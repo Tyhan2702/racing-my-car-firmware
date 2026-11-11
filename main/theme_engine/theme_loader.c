@@ -76,6 +76,7 @@ typedef struct {
     uint8_t *ram;              // zipped: the inflated picture (PSRAM) while a page uses it
     uint32_t gen;              // the page build that last used it
     bool zipped;
+    bool swap16;               // rgb565 picture: byte-swap into RAM on the 2.1 (no-LV_COLOR_16_SWAP RGB panel)
 } theme_named_asset_t;
 static uint32_t s_page_gen;
 
@@ -171,6 +172,7 @@ static const char* theme_json_str(cJSON *obj, const char *key, const char *fallb
 static void theme_font_fs_register(void);
 static const theme_named_font_t* theme_find_named_font(const char *name);
 static const lv_font_t* theme_load_custom_font(const char *font_asset);
+static int theme_sc(int v);   // 360→panel scale (defined below, used earlier in theme_add_binding)
 
 // ============================================================
 //  Memory-backed lv_fs_drv_t for lv_font_load()
@@ -679,6 +681,14 @@ const lv_img_dsc_t* theme_get_asset(const char *asset_name) {
 // Looks up a named asset by its exact packer-assigned name (as opposed to
 // theme_get_asset()'s fixed "dial"/"ring" aliases). Used by layout.json
 // "image" elements, which reference arbitrary imported images by name.
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+// Theme pictures are packed big-endian RGB565 (the 1.85"/4"/7" run LV_COLOR_16_SWAP=1). The 2.1" RGB panel
+// runs LV_COLOR_16_SWAP=0, so swap each pixel's two bytes. n = byte count (even).
+static void theme_swap16(uint8_t *p, size_t n) {
+    for (size_t i = 0; i + 1 < n; i += 2) { uint8_t t = p[i]; p[i] = p[i + 1]; p[i + 1] = t; }
+}
+#endif
+
 static const lv_img_dsc_t* theme_find_named_asset(const char *name) {
     for (int i = 0; i < s_ctx.named_asset_count; i++) {
         theme_named_asset_t *a = &s_ctx.named_assets[i];
@@ -689,7 +699,18 @@ static const lv_img_dsc_t* theme_find_named_asset(const char *name) {
             if (!a->ram) { ESP_LOGW(TAG, "Asset '%s': cannot inflate %u bytes", a->name, (unsigned)a->raw_size); return NULL; }
             a->img.data = a->ram;
             a->img.data_size = a->raw_size;
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+            if (a->swap16) theme_swap16(a->ram, a->raw_size);
+#endif
         }
+#if CONFIG_OBD_HW_VERSION_V4_WS21
+        else if (a->swap16 && !a->ram) {
+            // non-zipped rgb565 lives in read-only flash (mmap) — make a byte-swapped copy in PSRAM.
+            a->ram = heap_caps_malloc(a->img.data_size, MALLOC_CAP_SPIRAM);
+            if (a->ram) { memcpy(a->ram, a->data, a->img.data_size); theme_swap16(a->ram, a->img.data_size); a->img.data = a->ram; }
+            else ESP_LOGW(TAG, "Asset '%s': no PSRAM for colour-swap copy, showing as-is", a->name);
+        }
+#endif
         return &a->img;
     }
     return NULL;
@@ -1026,6 +1047,7 @@ static esp_err_t theme_load_assets(void) {
         slot->img.header.cf = theme_asset_color_format(format);
         size_t fl = format ? strlen(format) : 0;
         slot->zipped = fl > 2 && strcmp(format + fl - 2, "_z") == 0;
+        slot->swap16 = format && strncmp(format, "rgb565", 6) == 0;   // 2.1" only: swapped at first use (theme_find_named_asset)
         slot->ram = NULL;
         slot->gen = 0;
         if (slot->zipped) {
@@ -1164,12 +1186,19 @@ static void theme_add_binding(cJSON *elem, lv_obj_t *widget, theme_binding_kind_
     }
     bind->format[sizeof(bind->format) - 1] = '\0';
 
-    bind->anchor_x = theme_json_int(elem, "x", 0);
+    // Scale the re-align anchor to the panel, same as the build-time placement (theme_build_label_element uses
+    // theme_sc(x)). Without this, a live label (rpm/speed) jumps back to its unscaled 360 x on the first value
+    // update — the 2.1" "position wrong" bug: center/right labels visibly shifted after the first OBD tick.
+    bind->anchor_x = theme_sc(theme_json_int(elem, "x", 0));
     const char *align_str = theme_json_str(elem, "align", "left");
     if (strcmp(align_str, "center") == 0) bind->align = 1;
     else if (strcmp(align_str, "right") == 0) bind->align = 2;
     else bind->align = 0;
 }
+
+// Themes are authored for a 360 px round screen. On the 2.1" (480) every size/position is scaled up by the
+// real width / 360 so a 1.85"/4"/7" theme fills it; on a 360 panel this is an identity (v*360/360 = v).
+static int theme_sc(int v) { return v * lv_disp_get_hor_res(NULL) / 360; }
 
 static void theme_build_arc_element(lv_obj_t *parent, cJSON *elem) {
     lv_obj_t *arc = lv_arc_create(parent);
@@ -1177,10 +1206,10 @@ static void theme_build_arc_element(lv_obj_t *parent, cJSON *elem) {
     // Enable manual positioning - ignore parent's layout management
     lv_obj_add_flag(arc, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
-    int32_t x = theme_json_int(elem, "x", 0);
-    int32_t y = theme_json_int(elem, "y", 0);
-    int32_t width = theme_json_int(elem, "width", 100);
-    int32_t height = theme_json_int(elem, "height", 100);
+    int32_t x = theme_sc(theme_json_int(elem, "x", 0));
+    int32_t y = theme_sc(theme_json_int(elem, "y", 0));
+    int32_t width = theme_sc(theme_json_int(elem, "width", 100));
+    int32_t height = theme_sc(theme_json_int(elem, "height", 100));
 
     lv_obj_set_size(arc, width, height);
     lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
@@ -1194,7 +1223,7 @@ static void theme_build_arc_element(lv_obj_t *parent, cJSON *elem) {
 
     lv_color_t bg_color = theme_json_color(elem, "bg_color", theme_get_color(UI_COLOR_ARC_TRACK));
     lv_color_t fg_color = theme_json_color(elem, "color", theme_get_color(UI_COLOR_ARC_INDICATOR));
-    int32_t line_width = theme_json_int(elem, "line_width", 10);
+    int32_t line_width = theme_sc(theme_json_int(elem, "line_width", 10));
 
     lv_obj_set_style_arc_color(arc, bg_color, LV_PART_MAIN);
     lv_obj_set_style_arc_width(arc, line_width, LV_PART_MAIN);
@@ -1222,8 +1251,8 @@ static void theme_build_bar_element(lv_obj_t *parent, cJSON *elem) {
     // Enable manual positioning - ignore parent's layout management
     lv_obj_add_flag(bar, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
-    lv_obj_set_pos(bar, theme_json_int(elem, "x", 0), theme_json_int(elem, "y", 0));
-    lv_obj_set_size(bar, theme_json_int(elem, "width", 100), theme_json_int(elem, "height", 20));
+    lv_obj_set_pos(bar, theme_sc(theme_json_int(elem, "x", 0)), theme_sc(theme_json_int(elem, "y", 0)));
+    lv_obj_set_size(bar, theme_sc(theme_json_int(elem, "width", 100)), theme_sc(theme_json_int(elem, "height", 20)));
 
     int32_t range_min = theme_json_int(elem, "range_min", 0);
     int32_t range_max = theme_json_int(elem, "range_max", 100);
@@ -1238,7 +1267,7 @@ static void theme_build_bar_element(lv_obj_t *parent, cJSON *elem) {
     // LVGL's default theme gives lv_bar a pill-shaped radius on both parts;
     // the designer's bars default to square corners, so this must be set
     // explicitly (0 unless the layout requests one) or the two diverge.
-    int32_t radius = theme_json_int(elem, "radius", 0);
+    int32_t radius = theme_sc(theme_json_int(elem, "radius", 0));
     lv_obj_set_style_radius(bar, radius, LV_PART_MAIN);
     lv_obj_set_style_radius(bar, radius, LV_PART_INDICATOR);
 
@@ -1260,7 +1289,9 @@ static void theme_build_label_element(lv_obj_t *parent, cJSON *elem) {
     lv_color_t color = theme_json_color(elem, "color", theme_get_color(UI_COLOR_TEXT_PRIMARY));
     lv_obj_set_style_text_color(label, color, LV_PART_MAIN);
 
-    int32_t font_size = theme_json_int(elem, "font_size", 16);
+    // Scale only the built-in-font fallback: a custom font_asset is a fixed-size baked bitmap we can't enlarge,
+    // so those labels stay their authored size on the 2.1" (shortcut: upscale would need the packer to bake 480 fonts).
+    int32_t font_size = theme_sc(theme_json_int(elem, "font_size", 16));
     const char *font_asset = theme_json_str(elem, "font_asset", NULL);
     const lv_font_t *font = font_asset ? theme_load_custom_font(font_asset) : NULL;
     if (!font) {
@@ -1292,8 +1323,8 @@ static void theme_build_label_element(lv_obj_t *parent, cJSON *elem) {
     // left edge. Needs the label's rendered width, so force a layout pass
     // now rather than relying on lazy layout (which wouldn't be resolved
     // yet at this point in page construction).
-    int32_t x = theme_json_int(elem, "x", 0);
-    int32_t y = theme_json_int(elem, "y", 0);
+    int32_t x = theme_sc(theme_json_int(elem, "x", 0));
+    int32_t y = theme_sc(theme_json_int(elem, "y", 0));
     const char *align = theme_json_str(elem, "align", "left");
 
     // Remove any padding on the Label itself
@@ -1333,22 +1364,39 @@ static void theme_build_image_element(lv_obj_t *parent, cJSON *elem) {
     // Enable manual positioning - ignore parent's layout management
     lv_obj_add_flag(img_obj, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
-    int32_t x = theme_json_int(elem, "x", 0);
-    int32_t y = theme_json_int(elem, "y", 0);
-    int32_t width = theme_json_int(elem, "width", img->header.w);
-    int32_t height = theme_json_int(elem, "height", img->header.h);
+    int32_t x = theme_sc(theme_json_int(elem, "x", 0));
+    int32_t y = theme_sc(theme_json_int(elem, "y", 0));
+    // Intended on-screen size (360-space scaled to the panel). DON'T lv_obj_set_size on a zoomed lv_img: in LVGL v8
+    // the zoom transform anchors to the image's SOURCE size, so forcing a larger box fights the zoom and the raster
+    // renders clipped in the top-left corner (a 360 bg left a black band on a 480 panel). Instead pick the zoom that
+    // makes the raster's displayed size equal the intended size, and let lv_img keep its source size + ext_draw.
+    int32_t disp_w = theme_sc(theme_json_int(elem, "width", img->header.w));
     int32_t rotation = theme_json_int(elem, "rotation", 0);
+    int32_t zoom = img->header.w ? (256 * disp_w / img->header.w) : 256;   // 256 = 1:1; identity on a 360 panel
 
-    // Set size and position directly - avoid lv_img_set_zoom which resets position
-    lv_obj_set_size(img_obj, width, height);
-    lv_obj_set_pos(img_obj, x, y);
+    // A (0,0) background should COVER the (square) panel and sit centered. Cover = zoom by the larger of the two
+    // panel/image ratios. Use a CENTER pivot: with a top-left pivot LVGL only reserves ext_draw_size for a centered
+    // transform, so the half of the zoom overflow past ~panel/2+src/2 gets clipped (a 360->480 bg stopped at ~418).
+    // Centering the pivot makes the reserved area symmetric, so the scaled raster fills edge to edge.
+    bool bg = (x == 0 && y == 0 && img->header.w && img->header.h);
+    if (bg) {
+        int32_t panel_w = lv_disp_get_hor_res(NULL), panel_h = lv_disp_get_ver_res(NULL);
+        int32_t zw = 256 * panel_w / img->header.w, zh = 256 * panel_h / img->header.h;
+        zoom = zw > zh ? zw : zh;
+        x = (panel_w - img->header.w) / 2;   // put the (unscaled) center pivot on the panel centre
+        y = (panel_h - img->header.h) / 2;
+    }
 
-    // Apply rotation if needed
+    // Pivot: centre for a cover background, top-left otherwise; set_pos last (zoom/angle can reset position).
+    if (zoom != 256) {
+        if (bg) lv_img_set_pivot(img_obj, img->header.w / 2, img->header.h / 2);
+        else    lv_img_set_pivot(img_obj, 0, 0);
+        lv_img_set_zoom(img_obj, zoom);
+    }
     if (rotation != 0) {
         lv_img_set_angle(img_obj, rotation * 10);
     }
-
-    (void)height;  // zoom is uniform (single scale factor), height is derived from width's ratio
+    lv_obj_set_pos(img_obj, x, y);
 
     // Optional value-driven frames: "data_source" + "frames": ["asset", ...] + range_min/range_max.
     cJSON *frames = cJSON_GetObjectItem(elem, "frames");
@@ -1388,7 +1436,7 @@ static lv_obj_t* theme_create_custom_page(const char *page_id) {
     s_page_sweep_start_us = esp_timer_get_time();   // every page shown starts with a sweep
 
     lv_obj_t *page = lv_obj_create(NULL);
-    lv_obj_set_size(page, 360, 360);
+    lv_obj_set_size(page, theme_sc(360), theme_sc(360));   // 360 on 1.85"/4"/7", 480 on the 2.1"
     lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
 
     // Apply theme background color

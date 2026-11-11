@@ -6,8 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define VC_ADDED_MAX 64                                // cars
-#define VC_ADDED_BYTES 16384                           // the JSON the app sends
+#define VC_ADDED_MAX 1024                              // cars (the whole Sky Gauge community catalog, ~900)
+#define VC_ADDED_BYTES 262144                          // the JSON the app sends (PSRAM-backed; ~150 KB for 900 cars)
 void vc_added_load(void);                              // at start, before the pick is read
 // Replaces the added cars with this JSON list and keeps it; picked = the id of the car picked now (or NULL), found
 // again in the new list (*brand / *model; *brand 0xFF when it is gone). False when the JSON is not a list or could not be
