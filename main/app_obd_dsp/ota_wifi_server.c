@@ -1865,16 +1865,13 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     // 设置 AP 空闲超时时间为 600 秒，防止手机因网络检测而断开连接
     esp_wifi_set_inactive_time(WIFI_IF_AP, 600);
 
-    // Modem sleep costs airtime on a link that is about to carry several MB.
-    // The default is WIFI_PS_MIN_MODEM; only espnow_link_start() ever disabled
-    // it, so the OTA path was running with power save on.
-    esp_err_t ps_err = esp_wifi_set_ps(WIFI_PS_NONE);
-    if (ps_err != ESP_OK) {
-        ESP_LOGW(TAG, "disable power save failed: %s", esp_err_to_name(ps_err));
-    }
-    // Max legal TX power (unit is 0.25 dBm) — fewer PHY errors means fewer
-    // retransmits, and every retransmit costs an RTO on this link.
-    esp_wifi_set_max_tx_power(80);
+    // Keep the default WIFI_PS_MIN_MODEM: WIFI_PS_NONE holds the radio on full
+    // time, and the current spike at SoftAP bring-up browned the 1.85" gauge out
+    // (black screen, had to re-plug) on marginal supplies. Modem sleep costs a
+    // little OTA airtime but keeps the update from collapsing the supply.
+    // The phone is held right next to the gauge for the update, so cap TX power
+    // low (13 dBm) to shave the peak current further — plenty for a few cm.
+    esp_wifi_set_max_tx_power(52);   // 0.25 dBm units → 13 dBm
 
     // 启动 HTTP 服务器
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
